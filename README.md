@@ -9,6 +9,10 @@ __WARNING!__ This code is nor finished, nor tested yet! There is no even
 slightest warranty that resulting code is even near to the original. Use it at
 your own risk of the wasted time.
 
+__SECOND WARNING!__ And, BTW, this all is a one huge prototype. Because the
+"release" version should be written into lua itself. Because it's cool to
+decompile the decompiler - a great test too!
+
 How to use it
 ---
 
