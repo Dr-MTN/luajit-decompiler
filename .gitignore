@@ -1,3 +1,4 @@
+*.lua[co]
 *.py[cod]
 
 # C extensions
