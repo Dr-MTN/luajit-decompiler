@@ -28,6 +28,7 @@ import sys
 import ljd.rawdump.parser
 import ljd.pseudoasm.writer
 import ljd.ast.builder
+import ljd.ast.validator
 import ljd.lua.writer
 
 
@@ -80,6 +81,8 @@ def main():
 	ast = ljd.ast.builder.build(prototype)
 
 	assert ast is not None
+
+	ljd.ast.validator.validate(ast)
 
 	# dump("AST", ast)
 
