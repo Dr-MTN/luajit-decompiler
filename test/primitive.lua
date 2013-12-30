@@ -195,22 +195,22 @@ function loops()
 
 	print("iterator for with another iterator")
 
-	for key, value, x, y, z in iterate_over(t) do
-		print(key, value, x, y, z)
+	local z = false
+	for key, value in ipairs(t) do
+		print(key, value)
 	end
 
 	print("iterator for with crazy custom iterator")
 
-	a, b, c = pairs(t)
-
-	for key, value in a, b, c do
-		print(key, value)
+	for key, value, x, y, z in iterate_over(t) do
+		print(key, value, x, y, z)
 	end
 
 	print("iterator for with dissected iterator")
 
-	local z = false
-	for key, value in ipairs(t) do
+	a, b, c = pairs(t)
+
+	for key, value in a, b, c do
 		print(key, value)
 	end
 
