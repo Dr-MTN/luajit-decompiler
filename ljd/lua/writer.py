@@ -434,9 +434,11 @@ class Visitor(traverse.Visitor):
 
 
 def write(fd, ast):
+	assert isinstance(ast, nodes.FunctionDefinition)
+
 	visitor = Visitor()
 
-	traverse.traverse(visitor, ast)
+	traverse.traverse(visitor, ast.block)
 
 	_process_queue(fd, visitor.print_queue)
 
