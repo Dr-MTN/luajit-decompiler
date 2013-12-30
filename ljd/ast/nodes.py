@@ -9,10 +9,21 @@ class FunctionDefinition():
 		self.name = None
 		self.block = StatementsList()
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_function_definition, self)
+
+		visitor._visit(self.arguments)
+		visitor._visit(self.block)
+
 
 class TableConstructor():
 	def __init__(self):
 		self.records = RecordsList()
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_table_constructor, self)
+
+		visitor._visit(self.records)
 
 
 class TableRecord():
@@ -20,7 +31,11 @@ class TableRecord():
 		self.key = None
 		self.value = None
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_table_record, self)
 
+		visitor._visit(self.key)
+		visitor._visit(self.value)
 
 
 class Assignment():
@@ -31,6 +46,12 @@ class Assignment():
 		self.destinations = VariablesList()
 		self.expressions = ExpressionsList()
 		self.type = -1
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_assignment, self)
+
+		visitor._visit(self.destinations)
+		visitor._visit(self.expressions)
 
 
 class BinaryOperator():
@@ -61,6 +82,12 @@ class BinaryOperator():
 		self.left = None
 		self.right = None
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_binary_operator, self)
+
+		visitor._visit(self.left)
+		visitor._visit(self.right)
+
 
 class UnaryOperator():
 	T_NOT = 60  # not operand
@@ -71,23 +98,40 @@ class UnaryOperator():
 		self.type = -1
 		self.operand = None
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_unary_operator, self)
+
+		visitor._visit(self.operand)
 
 
 class StatementsList():
 	def __init__(self):
 		self.contents = []
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_statements_list, self)
+
+		visitor._visit_list(self.contents)
 
 
 class IdentifiersList():
 	def __init__(self):
 		self.contents = []
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_identifiers_list, self)
+
+		visitor._visit_list(self.contents)
 
 
 class RecordsList():
 	def __init__(self):
 		self.contents = []
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_records_list, self)
+
+		visitor._visit_list(self.contents)
 
 
 class VariablesList():
@@ -123,11 +167,15 @@ class Identifier():
 		self.slot = -1
 		self._varinfo = None  # from debuginfo
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_identifier, self)
+
 
 # helper vararg/varreturn
 
 class MULTRES():
-	pass
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_multres, self)
 
 
 class TableElement():
@@ -135,15 +183,28 @@ class TableElement():
 		self.table = None
 		self.key = None
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_table_element, self)
+
+		visitor._visit(self.key)
+		visitor._visit(self.table)
+
 
 class Vararg():
-	pass
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_vararg, self)
 
 
 class FunctionCall():
 	def __init__(self):
 		self.function = None
 		self.arguments = ExpressionsList()
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_function_call, self)
+
+		visitor._visit(self.function)
+		visitor._visit(self.arguments)
 
 
 class If():
@@ -153,20 +214,42 @@ class If():
 		self.elseifs = []
 		self.else_block = StatementsList()
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_if, self)
+
+		visitor._visit(self.expression)
+		visitor._visit(self.then_block)
+
+		visitor._visit_list(self.elseifs)
+
+		visitor._visit(self.else_block)
+
 
 class ElseIf():
 	def __init__(self):
 		self.expression = None
 		self.then_block = StatementsList()
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_elseif, self)
+
+		visitor._visit(self.expression)
+		visitor._visit(self.then_block)
+
 
 class Return():
 	def __init__(self):
 		self.returns = ExpressionsList()
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_return, self)
+
+		visitor._visit(self.returns)
+
 
 class Break():
-	pass
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_break, self)
 
 
 class While():
@@ -174,11 +257,23 @@ class While():
 		self.expression = None
 		self.block = StatementsList()
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_while, self)
+
+		visitor._visit(self.expression)
+		visitor._visit(self.block)
+
 
 class RepeatUntil():
 	def __init__(self):
 		self.expression = None
 		self.block = StatementsList()
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_repeat_until, self)
+
+		visitor._visit(self.expression)
+		visitor._visit(self.block)
 
 
 class NumericFor():
@@ -187,12 +282,26 @@ class NumericFor():
 		self.expressions = ExpressionsList()
 		self.block = StatementsList()
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_numeric_for, self)
+
+		visitor._visit(self.variable)
+		visitor._visit(self.expressions)
+		visitor._visit(self.block)
+
 
 class IteratorFor():
 	def __init__(self):
 		self.expressions = ExpressionsList()
 		self.identifiers = IdentifiersList()
 		self.block = StatementsList()
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_iterator_for, self)
+
+		visitor._visit(self.expressions)
+		visitor._visit(self.identifiers)
+		visitor._visit(self.block)
 
 
 class Constant():
@@ -205,6 +314,9 @@ class Constant():
 		self.type = -1
 		self.value = None
 
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_constant, self)
+
 
 class Primitive():
 	T_NIL = 0
@@ -213,3 +325,6 @@ class Primitive():
 
 	def __init__(self):
 		self.type = -1
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_primitive, self)
