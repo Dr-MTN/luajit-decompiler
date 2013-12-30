@@ -2,16 +2,17 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+
 class FunctionDefinition():
 	def __init__(self):
-		self.arguments = List()
+		self.arguments = IdentifiersList()
 		self.name = None
-		self.block = CodeBlock()
+		self.block = StatementsList()
 
 
 class TableConstructor():
 	def __init__(self):
-		self.records = List()
+		self.records = RecordsList()
 
 
 class TableRecord():
@@ -20,9 +21,6 @@ class TableRecord():
 		self.value = None
 
 
-class CodeBlock():
-	def __init__(self):
-		self.statements = []
 
 
 class Assignment():
@@ -30,8 +28,8 @@ class Assignment():
 	T_NORMAL = 1
 
 	def __init__(self):
-		self.destinations = List()
-		self.expressions = List()
+		self.destinations = VariablesList()
+		self.expressions = ExpressionsList()
 		self.type = -1
 
 
@@ -59,7 +57,7 @@ class BinaryOperator():
 	T_POW = 70  # left ^ right
 
 	def __init__(self):
-		self.operator = -1
+		self.type = -1
 		self.left = None
 		self.right = None
 
@@ -70,36 +68,60 @@ class UnaryOperator():
 	T_MINUS = 62  # -operand
 
 	def __init__(self):
-		self.operator = -1
+		self.type = -1
 		self.operand = None
 
 
-# Comma separated stuff
-class List():
+
+class StatementsList():
 	def __init__(self):
 		self.contents = []
 
 
-class Variable():
-	T_LOCAL = 0
-	T_UPVALUE = 1
-	T_GLOBAL = 2
+
+class IdentifiersList():
+	def __init__(self):
+		self.contents = []
+
+
+
+class RecordsList():
+	def __init__(self):
+		self.contents = []
+
+
+class VariablesList():
+	def __init__(self):
+		self.contents = []
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_variables_list, self)
+
+		visitor._visit_list(self.contents)
+
+
+class ExpressionsList():
+	def __init__(self):
+		self.contents = []
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_expressions_list, self)
+
+		visitor._visit_list(self.contents)
+
+
+# Called Name in the Lua 5.1 reference
+class Identifier():
+	T_SLOT = 0
+	T_LOCAL = 1
+	T_UPVALUE = 2
+	T_BUILTIN = 3
 
 	def __init__(self):
 		self.name = None
 		self.type = -1
+		self.slot = -1
 		self._varinfo = None  # from debuginfo
-
-
-# temporary Variable
-class Slot():
-	T_LOCAL = 0
-	T_UPVALUE = 1
-
-	def __init__(self):
-		self.number = 0
-		self.type = -1
-		self._varinfo = None  # to be compatible with Variable
 
 
 # helper vararg/varreturn
@@ -121,26 +143,26 @@ class Vararg():
 class FunctionCall():
 	def __init__(self):
 		self.function = None
-		self.arguments = List()
+		self.arguments = ExpressionsList()
 
 
 class If():
 	def __init__(self):
 		self.expression = None
-		self.then_block = CodeBlock()
+		self.then_block = StatementsList()
 		self.elseifs = []
-		self.else_block = CodeBlock()
+		self.else_block = StatementsList()
 
 
 class ElseIf():
 	def __init__(self):
 		self.expression = None
-		self.then_block = CodeBlock()
+		self.then_block = StatementsList()
 
 
 class Return():
 	def __init__(self):
-		self.returns = List()
+		self.returns = ExpressionsList()
 
 
 class Break():
@@ -150,27 +172,27 @@ class Break():
 class While():
 	def __init__(self):
 		self.expression = None
-		self.block = CodeBlock()
+		self.block = StatementsList()
 
 
 class RepeatUntil():
 	def __init__(self):
 		self.expression = None
-		self.block = CodeBlock()
+		self.block = StatementsList()
 
 
 class NumericFor():
 	def __init__(self):
 		self.variable = None
-		self.expressions = List()
-		self.block = CodeBlock()
+		self.expressions = ExpressionsList()
+		self.block = StatementsList()
 
 
 class IteratorFor():
 	def __init__(self):
-		self.expressions = List()
-		self.variables = List()
-		self.block = CodeBlock()
+		self.expressions = ExpressionsList()
+		self.identifiers = IdentifiersList()
+		self.block = StatementsList()
 
 
 class Constant():

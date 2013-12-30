@@ -55,7 +55,7 @@ def _build_function_definition(prototype):
 	if prototype.flags.is_variadic:
 		node.arguments.contents.append(nodes.Vararg())
 
-	layer = _Layer(node, node.block.statements, 1, len(prototype.instructions))
+	layer = _Layer(node, node.block.contents, 1, len(prototype.instructions))
 	state.layers.append(layer)
 
 	_process_function_body(state, prototype.instructions)
@@ -229,7 +229,7 @@ def _process_if_statement(state, addr, expression):
 
 	node.expression = expression
 
-	layer = _Layer(node, node.then_block.statements, addr, -1)
+	layer = _Layer(node, node.then_block.contents, addr, -1)
 
 	state.layers[-1].block.append(node)
 	state.layers.append(layer)
@@ -253,7 +253,7 @@ def _process_if_body(state, addr, instruction):
 
 		block_end = _get_jump_destination(addr, instruction)
 
-		layer = _Layer(layer.node, layer.node.else_block.statements,
+		layer = _Layer(layer.node, layer.node.else_block.contents,
 								addr, block_end)
 
 		state.layers.append(layer)
@@ -330,7 +330,7 @@ def _process_var_assignment(state, addr, instruction):
 	elif opcode <= ins.POW.opcode:
 		expression = _build_binary_expression(state, addr, instruction)
 
-	# Concat assignment operator (A = B .. B + 1 .. ... .. C - 1 .. C)
+	# Concat assignment type (A = B .. B + 1 .. ... .. C - 1 .. C)
 	elif opcode == ins.CAT.opcode:
 		expression = _build_concat_expression(state, addr, instruction)
 
@@ -443,7 +443,7 @@ def _process_iterator_for(state, addr, instruction):
 	# JMP points to the ITERC, but there is the ITERL instruction next to
 	# it
 	block_end = _get_jump_destination(addr, instruction) + 2
-	layer = _Layer(node, node.block.statements, addr, block_end)
+	layer = _Layer(node, node.block.contents, addr, block_end)
 
 	state.layers[-1].block.append(node)
 	state.layers.append(layer)
@@ -463,9 +463,9 @@ def _process_iterator_for_body(state, addr, instruction):
 		# Ignore the names - we will squash them later at
 		# the optimization phase
 		node.expressions.contents = [
-			_build_slot(state, base - 3),  # generator
-			_build_slot(state, base - 2),  # state
-			_build_slot(state, base - 1)  # control
+			_build_slot(state, addr, base - 3),  # generator
+			_build_slot(state, addr, base - 2),  # state
+			_build_slot(state, addr, base - 1)  # control
 		]
 
 		last_slot = base + instruction.B - 2
@@ -474,7 +474,7 @@ def _process_iterator_for_body(state, addr, instruction):
 		while slot <= last_slot:
 			# variables scope is up to this instruction
 			variable = _build_variable(state, addr - 1, slot)
-			node.variables.contents.append(variable)
+			node.identifiers.contents.append(variable)
 			slot += 1
 
 		return OP_NEXT, OP_KEEP_STATE
@@ -496,6 +496,7 @@ def _process_call(state, addr, instruction):
 			node = nodes.Assignment()
 			node.destinations.contents.append(nodes.MULTRES())
 			node.expressions.contents.append(call)
+			node.type = nodes.Assignment.T_NORMAL
 		elif instruction.B == 1:
 			node = call
 		else:
@@ -573,7 +574,7 @@ def _process_numeric_for(state, addr, instruction):
 	state.layers[-1].block.append(node)
 
 	block_end = _get_jump_destination(addr, instruction)
-	layer = _Layer(node, node.block.statements, addr, block_end)
+	layer = _Layer(node, node.block.contents, addr, block_end)
 
 	state.layers.append(layer)
 
@@ -604,7 +605,7 @@ def _process_repeat_until(state, addr, instruction):
 	# We will have to use the lookahead to detect any comparison instruction
 	# with the following jump back to the block end
 	#
-	layer = _Layer(node, node.block.statements, addr, -1)
+	layer = _Layer(node, node.block.contents, addr, -1)
 	state.layers.append(layer)
 
 	return OP_NEXT, (OP_PUSH_STATE, _process_repeat_until_body)
@@ -670,7 +671,7 @@ def _process_while(state, addr, instruction):
 	# Lookahead JMP instruction
 	block_end = _get_jump_destination(addr + 1, state._lookahead(1))
 
-	layer = _Layer(node, node.block.statements, addr, block_end)
+	layer = _Layer(node, node.block.contents, addr, block_end)
 
 	state.layers.append(layer)
 
@@ -767,12 +768,12 @@ def _build_binary_expression(state, addr, instruction):
 	map_index %= 5
 	map_index += ins.ADDVN.opcode
 
-	operator.operator = _BINARY_OPERATOR_MAP[map_index]
+	operator.type = _BINARY_OPERATOR_MAP[map_index]
 
-	if operator.operator is None:
+	if operator.type is None:
 		assert opcode == ins.POW.opcode
 
-		operator.operator = nodes.BinaryOperator.T_POW
+		operator.type = nodes.BinaryOperator.T_POW
 
 	if instruction.B_type == ins.T_VAR and instruction.CD_type == ins.T_VAR:
 		operator.left = _build_variable(state, addr, instruction.B)
@@ -791,7 +792,7 @@ def _build_binary_expression(state, addr, instruction):
 
 def _build_concat_expression(state, addr, instruction):
 	operator = nodes.BinaryOperator()
-	operator.operator = nodes.BinaryOperator.T_CONCAT
+	operator.type = nodes.BinaryOperator.T_CONCAT
 
 	slot = instruction.B
 
@@ -804,7 +805,7 @@ def _build_concat_expression(state, addr, instruction):
 		upper_operator = nodes.BinaryOperator()
 		upper_operator.left = operator
 		upper_operator.right = _build_variable(state, addr, slot)
-		upper_operator.operator = nodes.BinaryOperator.T_CONCAT
+		upper_operator.type = nodes.BinaryOperator.T_CONCAT
 
 		operator = upper_operator
 
@@ -944,8 +945,8 @@ def _build_comparison_expression(state, addr, instruction):
 	else:
 		operator.right = _build_variable(state, addr, instruction.CD)
 
-	operator.operator = _COMPARISON_MAP[instruction.opcode]
-	assert operator.operator is not None
+	operator.type = _COMPARISON_MAP[instruction.opcode]
+	assert operator.type is not None
 
 	return operator
 
@@ -959,7 +960,7 @@ def _build_primitive_to_bool_expression(state, addr, instruction):
 		return variable
 
 	node = nodes.UnaryOperator()
-	node.operator = nodes.UnaryOperator.T_NOT
+	node.type = nodes.UnaryOperator.T_NOT
 	node.operand = variable
 
 	return node
@@ -996,46 +997,46 @@ def _build_destination(state, addr, slot):
 
 
 def _build_variable(state, addr, slot):
-	info = state.debuginfo.lookup_local_name(addr, slot)
-
-	if info is None or info.type == info.T_INTERNAL:
-		node = nodes.Slot()
-		node.number = slot
-		node.type = nodes.Slot.T_LOCAL
-		return node
-	else:
-		node = nodes.Variable()
-		node.name = info.name
-		node.type = nodes.Variable.T_LOCAL
-		node._varinfo = info
-		return node
+	return _build_identifier(state, addr, slot, nodes.Identifier.T_LOCAL)
 
 
 def _build_upvalue(state, addr, slot):
-	name = state.debuginfo.lookup_upvalue_name(slot)
-
-	if name is None:
-		node = nodes.Slot()
-		node.number = slot
-		node.type = nodes.Slot.T_UPVALUE
-		return node
-	else:
-		node = nodes.Variable()
-		node.type = nodes.Variable.T_UPVALUE
-		return node
+	return _build_identifier(state, addr, slot, nodes.Identifier.T_UPVALUE)
 
 
-def _build_slot(state, slot):
-	node = nodes.Slot()
-	node.number = slot
-	node.type = nodes.Slot.T_LOCAL
+def _build_slot(state, addr, slot):
+	return _build_identifier(state, addr, slot, nodes.Identifier.T_SLOT)
+
+
+def _build_identifier(state, addr, slot, want_type):
+	node = nodes.Identifier()
+	node.slot = slot
+	node.type = nodes.Identifier.T_SLOT
+
+	if want_type == nodes.Identifier.T_LOCAL:
+		info = state.debuginfo.lookup_local_name(addr, slot)
+		node._varinfo = info
+
+		if info is not None and info.type != info.T_INTERNAL:
+			node.type = want_type
+			node.name = info.name
+	elif want_type == nodes.Identifier.T_UPVALUE:
+		name = state.debuginfo.lookup_upvalue_name(slot)
+
+		if name is not None:
+			node.name = info.name
+			node.type = want_type
+
 	return node
 
 
 def _build_global_variable(state, addr, slot):
-	node = nodes.Variable()
-	node.type = nodes.Variable.T_GLOBAL
-	node.name = state.constants.complex_constants[slot]
+	node = nodes.TableElement()
+	node.table = nodes.Identifier()
+	node.table.type = nodes.Identifier.T_BUILTIN
+	node.table.name = "_env"
+
+	node.key = _build_string_constant(state, slot)
 
 	return node
 
