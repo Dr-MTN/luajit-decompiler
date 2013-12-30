@@ -100,8 +100,113 @@ class Visitor():
 	def visit_primitive(self, node):
 		pass
 
+	# ##
+
+	def leave_function_definition(self, node):
+		pass
+
+	# ##
+
+	def leave_table_constructor(self, node):
+		pass
+
+	def leave_table_record(self, node):
+		pass
+
+	# ##
+
+	def leave_assignment(self, node):
+		pass
+
+	# ##
+
+	def leave_binary_operator(self, node):
+		pass
+
+	def leave_unary_operator(self, node):
+		pass
+
+	# ##
+
+	def leave_statements_list(self, node):
+		pass
+
+	def leave_identifiers_list(self, node):
+		pass
+
+	def leave_records_list(self, node):
+		pass
+
+	def leave_variables_list(self, node):
+		pass
+
+	def leave_expressions_list(self, node):
+		pass
+
+	# ##
+
+	def leave_identifier(self, node):
+		pass
+
+	def leave_multres(self, node):
+		pass
+
+	def leave_table_element(self, node):
+		pass
+
+	def leave_vararg(self, node):
+		pass
+
+	def leave_function_call(self, node):
+		pass
+
+	# ##
+
+	def leave_if(self, node):
+		pass
+
+	def leave_elseif(self, node):
+		pass
+
+	# ##
+
+	def leave_return(self, node):
+		pass
+
+	def leave_break(self, node):
+		pass
+
+	# ##
+
+	def leave_while(self, node):
+		pass
+
+	def leave_repeat_until(self, node):
+		pass
+
+	def leave_numeric_for(self, node):
+		pass
+
+	def leave_iterator_for(self, node):
+		pass
+
+	# ##
+
+	def leave_constant(self, node):
+		pass
+
+	def leave_primitive(self, node):
+		pass
+
+	# ##
+
 	def _visit_node(self, handler, node):
 		handler(node)
+
+	def _leave_node(self, handler, node):
+		handler(node)
+
+	# ##
 
 	def _visit(self, node):
 		assert node is not None

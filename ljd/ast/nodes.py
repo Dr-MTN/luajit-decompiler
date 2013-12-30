@@ -15,6 +15,8 @@ class FunctionDefinition():
 		visitor._visit(self.arguments)
 		visitor._visit(self.block)
 
+		visitor._leave_node(visitor.leave_function_definition, self)
+
 
 class TableConstructor():
 	def __init__(self):
@@ -24,6 +26,8 @@ class TableConstructor():
 		visitor._visit_node(visitor.visit_table_constructor, self)
 
 		visitor._visit(self.records)
+
+		visitor._leave_node(visitor.leave_table_constructor, self)
 
 
 class TableRecord():
@@ -36,6 +40,8 @@ class TableRecord():
 
 		visitor._visit(self.key)
 		visitor._visit(self.value)
+
+		visitor._leave_node(visitor.leave_table_record, self)
 
 
 class Assignment():
@@ -52,6 +58,8 @@ class Assignment():
 
 		visitor._visit(self.destinations)
 		visitor._visit(self.expressions)
+
+		visitor._leave_node(visitor.leave_assignment, self)
 
 
 class BinaryOperator():
@@ -88,6 +96,8 @@ class BinaryOperator():
 		visitor._visit(self.left)
 		visitor._visit(self.right)
 
+		visitor._leave_node(visitor.leave_binary_operator, self)
+
 
 class UnaryOperator():
 	T_NOT = 60  # not operand
@@ -103,6 +113,8 @@ class UnaryOperator():
 
 		visitor._visit(self.operand)
 
+		visitor._leave_node(visitor.leave_unary_operator, self)
+
 
 class StatementsList():
 	def __init__(self):
@@ -112,6 +124,8 @@ class StatementsList():
 		visitor._visit_node(visitor.visit_statements_list, self)
 
 		visitor._visit_list(self.contents)
+
+		visitor._leave_node(visitor.leave_statements_list, self)
 
 
 class IdentifiersList():
@@ -123,6 +137,8 @@ class IdentifiersList():
 
 		visitor._visit_list(self.contents)
 
+		visitor._leave_node(visitor.leave_identifiers_list, self)
+
 
 class RecordsList():
 	def __init__(self):
@@ -132,6 +148,8 @@ class RecordsList():
 		visitor._visit_node(visitor.visit_records_list, self)
 
 		visitor._visit_list(self.contents)
+
+		visitor._leave_node(visitor.leave_records_list, self)
 
 
 class VariablesList():
@@ -143,6 +161,8 @@ class VariablesList():
 
 		visitor._visit_list(self.contents)
 
+		visitor._leave_node(visitor.leave_variables_list, self)
+
 
 class ExpressionsList():
 	def __init__(self):
@@ -152,6 +172,8 @@ class ExpressionsList():
 		visitor._visit_node(visitor.visit_expressions_list, self)
 
 		visitor._visit_list(self.contents)
+
+		visitor._leave_node(visitor.leave_expressions_list, self)
 
 
 # Called Name in the Lua 5.1 reference
@@ -169,6 +191,7 @@ class Identifier():
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_identifier, self)
+		visitor._leave_node(visitor.leave_identifier, self)
 
 
 # helper vararg/varreturn
@@ -176,6 +199,7 @@ class Identifier():
 class MULTRES():
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_multres, self)
+		visitor._leave_node(visitor.leave_multres, self)
 
 
 class TableElement():
@@ -189,10 +213,13 @@ class TableElement():
 		visitor._visit(self.key)
 		visitor._visit(self.table)
 
+		visitor._leave_node(visitor.leave_table_element, self)
+
 
 class Vararg():
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_vararg, self)
+		visitor._leave_node(visitor.leave_vararg, self)
 
 
 class FunctionCall():
@@ -205,6 +232,8 @@ class FunctionCall():
 
 		visitor._visit(self.function)
 		visitor._visit(self.arguments)
+
+		visitor._leave_node(visitor.leave_function_call, self)
 
 
 class If():
@@ -224,6 +253,8 @@ class If():
 
 		visitor._visit(self.else_block)
 
+		visitor._leave_node(visitor.leave_if, self)
+
 
 class ElseIf():
 	def __init__(self):
@@ -236,6 +267,8 @@ class ElseIf():
 		visitor._visit(self.expression)
 		visitor._visit(self.then_block)
 
+		visitor._leave_node(visitor.leave_elseif, self)
+
 
 class Return():
 	def __init__(self):
@@ -246,10 +279,13 @@ class Return():
 
 		visitor._visit(self.returns)
 
+		visitor._leave_node(visitor.leave_return, self)
+
 
 class Break():
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_break, self)
+		visitor._leave_node(visitor.leave_break, self)
 
 
 class While():
@@ -263,6 +299,8 @@ class While():
 		visitor._visit(self.expression)
 		visitor._visit(self.block)
 
+		visitor._leave_node(visitor.leave_while, self)
+
 
 class RepeatUntil():
 	def __init__(self):
@@ -274,6 +312,8 @@ class RepeatUntil():
 
 		visitor._visit(self.expression)
 		visitor._visit(self.block)
+
+		visitor._leave_node(visitor.leave_repeat_until, self)
 
 
 class NumericFor():
@@ -289,6 +329,8 @@ class NumericFor():
 		visitor._visit(self.expressions)
 		visitor._visit(self.block)
 
+		visitor._leave_node(visitor.leave_numeric_for, self)
+
 
 class IteratorFor():
 	def __init__(self):
@@ -303,6 +345,8 @@ class IteratorFor():
 		visitor._visit(self.identifiers)
 		visitor._visit(self.block)
 
+		visitor._leave_node(visitor.leave_iterator_for, self)
+
 
 class Constant():
 	T_INTEGER = 0
@@ -316,6 +360,7 @@ class Constant():
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_constant, self)
+		visitor._leave_node(visitor.leave_constant, self)
 
 
 class Primitive():
@@ -328,3 +373,4 @@ class Primitive():
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_primitive, self)
+		visitor._leave_node(visitor.leave_primitive, self)
