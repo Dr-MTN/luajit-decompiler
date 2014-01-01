@@ -537,6 +537,9 @@ def _process_return(state, addr, instruction):
 	base = instruction.A
 	last_slot = base + instruction.CD - 1
 
+	if instruction.opcode != ins.RETM.opcode:
+		last_slot -= 1
+
 	slot = base
 
 	# Negative count for the RETM is OK
