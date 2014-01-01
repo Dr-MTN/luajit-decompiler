@@ -150,7 +150,13 @@ class Visitor(traverse.Visitor):
 		self._set_restrictions((nodes.Identifier, nodes.Vararg))
 
 	def visit_records_list(self, node):
-		self._set_restrictions(nodes.TableRecord)
+		self._set_restrictions((nodes.TableRecord,
+					nodes.FunctionCall,
+					nodes.Vararg))
+
+		for i, x in enumerate(node.contents):
+			if not isinstance(x, nodes.TableRecord):
+				assert i == (len(node.contents) - 1)
 
 	def visit_variables_list(self, node):
 		self._set_restrictions(VARIABLE_TYPES)
