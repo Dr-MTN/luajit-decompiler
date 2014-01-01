@@ -3,6 +3,9 @@
 #
 
 
+# We should visit stuff in it's execution order. That's important
+
+
 class FunctionDefinition():
 	def __init__(self):
 		self.arguments = IdentifiersList()
@@ -310,8 +313,8 @@ class RepeatUntil():
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_repeat_until, self)
 
-		visitor._visit(self.expression)
 		visitor._visit(self.block)
+		visitor._visit(self.expression)
 
 		visitor._leave_node(visitor.leave_repeat_until, self)
 
