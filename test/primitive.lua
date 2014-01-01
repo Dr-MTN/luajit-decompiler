@@ -1,8 +1,14 @@
 function assignment()
+	function generator()
+		return 1, 2, 3
+	end
+
 	a = 1
 	b, c, d = nil
 	e, f, g = 1, 2, 3
-	local i, k, l = 3, 2, 1
+	local i, k, l = 3, 2, g + 1
+	
+	local m, n, o, p = 1, generator()
 
 	print (a, b, c, d, e, f, g, i, k, l)
 end
@@ -19,11 +25,11 @@ function vararg(...)
 
 	assignment(...)
 
-	if true then
+	if t.x == 3 then
+		return a, t, s, ...
+	else
 		return a, t, s, ...
 	end
-
-	return ...
 end
 
 function tables()
@@ -87,7 +93,7 @@ function logical()
 
 	print ("normal logical expression")
 
-	b = (x and y) or y
+	b = (x and y) or ((y > 3) and (((x/2) < 1) or (y > 100))) and (x ~= 2)
 
 	print ("precalculated true expression")
 
@@ -242,6 +248,48 @@ function loops()
 	repeat
 		x = y
 	until not x
+
+	print ("While with break")
+
+	while x > 5 do
+		break
+	end
+
+	print ("Repeat until with break")
+
+	repeat
+		break
+	until x < 3
+
+	print ("Numeric for with break")
+
+	for i=0,1,2 do
+		break
+	end
+
+	print ("Iterator for with break")
+
+	for key,value in pairs(t) do
+		break
+	end
+
+	print ("Loop with break and function inside")
+
+	t = {}
+
+	for i=0,100 do
+		y = 3
+		t[i] = function ()
+			return i + y
+		end
+
+		if i == 5 then
+			print ("then")
+			break
+		else
+			print ("else")
+		end
+	end
 end
 
 function upvalues()

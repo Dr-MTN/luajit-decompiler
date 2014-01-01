@@ -12,22 +12,17 @@ class _State():
 	def __init__(self):
 		self.constants = None
 		self.debuginfo = None
-		self.lookahead = []
+		self.instructions = []
 		self.layers = []
 
-	def _is_opcode_ahead(self, step, opcode):
+	def _is_opcode_at_addr(self, addr, opcode):
 		try:
-			instruction = self.lookahead[step]
+			return self.instructions[addr].opcode == opcode
 		except IndexError:
 			return False
 
-		return instruction.opcode == opcode
-
-	def _lookahead(self, step):
-		try:
-			return self.lookahead[step]
-		except IndexError:
-			return None
+	def _get_addr(self, addr):
+		return self.instructions[addr]
 
 
 class _Layer():
@@ -97,9 +92,9 @@ def _process_function_body(state, instructions):
 	funcs = [_process_code_block]
 
 	addr = 1
+	state.instructions = instructions
 
 	while addr < len(instructions):
-		state.lookahead = instructions[addr:addr + _MAX_LOOKAHEAD + 1]
 		op, func = funcs[-1](state, addr, instructions[addr])
 
 		assert func is not None
@@ -145,7 +140,8 @@ def _process_code_block(state, addr, instruction):
 
 	# internal opcodes are stable, so we may freely assume their order
 
-	if opcode <= ins.ISF.opcode and state._is_opcode_ahead(2, ins.LOOP.opcode):
+	if opcode <= ins.ISF.opcode	\
+			and state._is_opcode_at_addr(addr + 2, ins.LOOP.opcode):
 		return _process_while(state, addr, instruction)
 
 	# Comparison operators (if something)
@@ -167,7 +163,8 @@ def _process_code_block(state, addr, instruction):
 	elif opcode == ins.ISTC.opcode			\
 			or opcode == ins.ISFC.opcode	\
 			or (opcode == ins.KPRI.opcode	\
-				and state._is_opcode_ahead(1, ins.JMP.opcode)):
+				and state._is_opcode_at_addr(addr + 1,
+								ins.JMP.opcode)):
 		return _process_copy_if_statement(state, addr, instruction)
 
 	# Generic assignments - handle ASSIGNMENT stuff
@@ -181,8 +178,7 @@ def _process_code_block(state, addr, instruction):
 
 	# ASSIGNMENT starting from KSTR and ending at USETP
 
-	elif opcode == ins.UCLO.opcode:  # Auxillary stuff?
-		return OP_NEXT, OP_KEEP_STATE
+	# SKIP UCL0 is handled below
 
 	# ASSIGNMENT starting from FNEW and ending at GGET
 
@@ -191,13 +187,13 @@ def _process_code_block(state, addr, instruction):
 
 	# ASSIGNMENT starting from TGETV and ending at TGETB
 
-	elif opcode <= ins.TSETB.opcode:
+	elif opcode >= ins.TSETV.opcode and opcode <= ins.TSETB.opcode:
 		return _process_table_assignment(state, addr, instruction)
 
 	elif opcode == ins.TSETM.opcode:
 		return _process_table_mass_assignment(state, addr, instruction)
 
-	elif opcode <= ins.CALLT.opcode:
+	elif opcode >= ins.CALLM.opcode and opcode <= ins.CALLT.opcode:
 		return _process_call(state, addr, instruction)
 
 	# SKIP ITERC and ITERN - handle at iterator_for
@@ -205,9 +201,7 @@ def _process_code_block(state, addr, instruction):
 	elif opcode == ins.VARG.opcode:
 		return _process_vararg(state, addr, instruction)
 
-	# DANGEROUS - most of fails were here - it could catch something wrong
-	# if you aren't extremely careful
-	elif opcode == ins.JMP.opcode or opcode == ins.ISNEXT.opcode:
+	elif opcode == ins.ISNEXT.opcode:
 		return _process_iterator_for(state, addr, instruction)
 
 	elif opcode >= ins.RETM.opcode and opcode <= ins.RET1.opcode:
@@ -216,12 +210,12 @@ def _process_code_block(state, addr, instruction):
 	elif opcode == ins.FORI.opcode or opcode == ins.FORL.opcode:
 		return _process_numeric_for(state, addr, instruction)
 
-	else:
-		assert opcode >= ins.LOOP.opcode and opcode <= ins.JLOOP.opcode
-
+	elif opcode >= ins.LOOP.opcode and opcode <= ins.JLOOP.opcode:
 		return _process_repeat_until(state, addr, instruction)
 
-	# JMP is handled above
+	else:
+		assert opcode == ins.UCLO.opcode or opcode == ins.JMP.opcode
+		return _process_jump(state, addr, instruction)
 
 
 def _process_if_statement(state, addr, expression):
@@ -612,7 +606,7 @@ def _process_repeat_until(state, addr, instruction):
 
 
 def _process_repeat_until_body(state, addr, instruction):
-	next_instruction = state._lookahead(1)
+	next_instruction = state._get_addr(addr + 1)
 	node = state.layers[-1].node
 
 	if next_instruction.opcode != ins.JMP.opcode:
@@ -669,7 +663,7 @@ def _process_while(state, addr, instruction):
 	state.layers[-1].block.append(node)
 
 	# Lookahead JMP instruction
-	block_end = _get_jump_destination(addr + 1, state._lookahead(1))
+	block_end = _get_jump_destination(addr + 1, state._get_addr(addr + 1))
 
 	layer = _Layer(node, node.block.contents, addr, block_end)
 
@@ -694,6 +688,34 @@ def _process_while_body(state, addr, instruction):
 		return OP_NEXT, OP_POP_STATE
 
 	return _process_code_block(state, addr, instruction)
+
+
+def _process_jump(state, addr, instruction):
+	destination = _get_jump_destination(addr, instruction)
+
+	if instruction.opcode == ins.UCLO.opcode and instruction.CD == 0:
+		return OP_NEXT, OP_KEEP_STATE
+
+	target_opcode = state._get_addr(destination).opcode
+
+	if target_opcode == ins.ITERN.opcode or target_opcode == ins.ITERC.opcode:
+		return _process_iterator_for(state, addr, instruction)
+
+	pre_target = state._get_addr(destination - 1)
+
+	assert pre_target.opcode in (
+			ins.IFORL.opcode,
+			ins.JFORL.opcode,
+			ins.FORL.opcode,
+			ins.ITERL.opcode,
+			ins.JITERL.opcode,
+			ins.IITERL.opcode
+	) or (pre_target.opcode == ins.JMP.opcode and pre_target.CD < 0), 	\
+		"GOTO statements are not supported (yet)"
+
+	state.layers[-1].block.append(nodes.Break())
+
+	return OP_NEXT, OP_KEEP_STATE
 
 
 def _build_call_arguments(state, addr, instruction):
