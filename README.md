@@ -25,21 +25,7 @@ TODO
 There is a lot of work to do, in the order of priority
 
 1. AST Optimizations - currently the resulting code is not even compilable.
-	1. Slots elimination - in case of debug information present it should
-	   be possible to eliminate all the slots in the resulting code,
-	   drastically reducing it's size and improving readability.
-
-	   (and after that this will be really _decompiler_ and not a just
-	   and improved disassembler).
-
-	   In case of debug information NOT present (which is not supported
-	   right now) some slots for local variables may remain.
-
-	2. MULTRES elimination - pretty much straightforward after the slots
-	   elimination. The last thing to be done before the resulting code
-	   will be compilable.
-
-	3. If statements recomposition
+	1. If statements recomposition
 	   ```lua
 	   if something then
 	   	...
@@ -61,14 +47,14 @@ There is a lot of work to do, in the order of priority
 
 	   *This should be fixed for code readability*
 
-	4. Logical expressions recomposition - logical expressions are not
+	2. Logical expressions recomposition - logical expressions are not
 	   broken into dozen small if's. *This should be fixed for code
 	   readability*
 	
-	5. Use the line information (or common sense if there is no line
+	3. Use the line information (or common sense if there is no line
 	   information) to squash similar expressions into a single expression.
-	
-	6. Function names as _function name ()_ instead of _name = function()_
+
+	4. Function names as _function name ()_ instead of _name = function()_
 
 2. Formatting improvements
 	1. Use operator priority information for arithmetic expressions to omit
@@ -81,11 +67,8 @@ There is a lot of work to do, in the order of priority
 	3. Use method-style calls and definitions for tables.
 
 3. Features not supported:
-	1. GOTO statement (from lua 5.2) - it isn't hard to add the goto
-	   statement support into the AST builder, but this will require random
-	   look-aheads to distinguish between GOTO and loop statements. And
-	   that's not cool, so I guess I'll wait until 5.2 will be released and
-	   fully supported by LuaJIT.
+	1. GOTO statement (from lua 5.2). All the required functionality is
+		now in place, but that's rather a low-priority task right now
 
 	2. Local sub-blocks:
 	```lua
@@ -97,3 +80,6 @@ There is a lot of work to do, in the order of priority
 	   The only way to guess them is to watch local variable scopes, which
 	   is simple enough in case of non-stripped bytecode and a bit
 	   harder otherwise.
+
+	   P.S. After a bit more research - it could be hard after all and
+	   I don't see much profit.,, An ultra-low priority
