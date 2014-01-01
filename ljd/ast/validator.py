@@ -95,9 +95,17 @@ class Visitor(traverse.Visitor):
 			node.expressions: nodes.ExpressionsList
 		})
 
-		assert	node.type == nodes.Assignment.T_LOCAL_DEFINITION 	\
-			or node.type == nodes.Assignment.T_NORMAL
+		if not isinstance(node.destinations.contents[0], nodes.Identifier):
+			return
 
+		if node.destinations.contents[0].type != nodes.Identifier.T_LOCAL:
+			return
+
+		for destination in node.destinations.contents:
+			# It's either all or none
+			assert destination.type == nodes.Identifier.T_LOCAL
+
+		# Don't test type flag here
 	# ##
 
 	def visit_binary_operator(self, node):
@@ -155,6 +163,7 @@ class Visitor(traverse.Visitor):
 	def visit_identifier(self, node):
 		assert node.type == nodes.Identifier.T_SLOT		\
 			or node.type == nodes.Identifier.T_BUILTIN	\
+			or node.type == nodes.Identifier.T_UPVALUE	\
 			or (node.name is not None			\
 				and node._varinfo is not None)
 

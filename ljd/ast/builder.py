@@ -38,6 +38,10 @@ def build(prototype):
 
 
 def _build_function_definition(prototype):
+	global _PENDING_MAYBE_LOCALS_STACK
+
+	_PENDING_MAYBE_LOCALS_STACK.append([[]] * 255)
+
 	node = nodes.FunctionDefinition()
 
 	state = _State()
@@ -58,6 +62,8 @@ def _build_function_definition(prototype):
 	state.layers.pop()
 
 	assert state.layers == []
+
+	_PENDING_MAYBE_LOCALS_STACK.pop()
 
 	return node
 
@@ -272,13 +278,6 @@ def _process_copy_if_statement(state, addr, instruction):
 	assignment.destinations.contents.append(destination)
 	assignment.expressions.contents.append(expression)
 
-	varinfo = destination._varinfo
-
-	if varinfo is not None and varinfo.start_addr == addr:
-		assignment.type = nodes.Assignment.T_LOCAL_DEFINITION
-	else:
-		assignment.type = nodes.Assignment.T_NORMAL
-
 	state.layers[-1].block.append(assignment)
 
 	if instruction.opcode == ins.KPRI.opcode:
@@ -294,22 +293,6 @@ def _process_var_assignment(state, addr, instruction):
 	opcode = instruction.opcode
 
 	assignment = nodes.Assignment()
-
-	if instruction.A_type == ins.T_DST:
-		destination = _build_destination(state, addr, instruction.A)
-	else:
-		assert instruction.A_type == ins.T_UV
-
-		destination = _build_upvalue(state, addr, instruction.A)
-
-	assignment.destinations.contents.append(destination)
-
-	varinfo = destination._varinfo
-
-	if varinfo is not None and varinfo.start_addr == addr + 1:
-		assignment.type = nodes.Assignment.T_LOCAL_DEFINITION
-	else:
-		assignment.type = nodes.Assignment.T_NORMAL
 
 	state.layers[-1].block.append(assignment)
 
@@ -359,6 +342,15 @@ def _process_var_assignment(state, addr, instruction):
 
 	assignment.expressions.contents.append(expression)
 
+	if instruction.A_type == ins.T_DST:
+		destination = _build_destination(state, addr, instruction.A)
+	else:
+		assert instruction.A_type == ins.T_UV
+
+		destination = _build_upvalue(state, addr, instruction.A)
+
+	assignment.destinations.contents.append(destination)
+
 	return OP_NEXT, OP_KEEP_STATE
 
 
@@ -380,7 +372,6 @@ def _process_global_assignment(state, addr, instruction):
 
 	assignment.destinations.contents.append(variable)
 	assignment.expressions.contents.append(expression)
-	assignment.type = nodes.Assignment.T_NORMAL
 
 	state.layers[-1].block.append(assignment)
 
@@ -395,8 +386,6 @@ def _process_table_assignment(state, addr, instruction):
 
 	assignment.destinations.contents.append(destination)
 	assignment.expressions.contents.append(expression)
-
-	assignment.type = nodes.Assignment.T_NORMAL
 
 	state.layers[-1].block.append(assignment)
 
@@ -423,8 +412,6 @@ def _process_table_mass_assignment(state, addr, instruction):
 		_build_variable(state, addr, base),
 		nodes.MULTRES()
 	]
-
-	assignment.type = nodes.Assignment.T_NORMAL
 
 	state.layers[-1].block.append(assignment)
 
@@ -490,7 +477,6 @@ def _process_call(state, addr, instruction):
 			node = nodes.Assignment()
 			node.destinations.contents.append(nodes.MULTRES())
 			node.expressions.contents.append(call)
-			node.type = nodes.Assignment.T_NORMAL
 		elif instruction.B == 1:
 			node = call
 		else:
@@ -519,7 +505,6 @@ def _process_vararg(state, addr, instruction):
 
 	if last_slot < base:
 		node = nodes.Assignment()
-		node.type = nodes.Assignment.T_NORMAL
 		node.destinations.contents.append(nodes.MULTRES())
 		node.expressions.contents.append(nodes.Vararg())
 	else:
@@ -751,27 +736,14 @@ def _build_range_assignment(state, addr, from_slot, to_slot):
 
 	slot = from_slot
 
-	is_local = True
-
 	assert from_slot <= to_slot
 
 	while slot <= to_slot:
 		destination = _build_destination(state, addr, slot)
 
-		varinfo = destination._varinfo
-
-		if is_local and (varinfo is None or			\
-					varinfo.start_addr != addr + 1):
-			is_local = False
-
 		assignment.destinations.contents.append(destination)
 
 		slot += 1
-
-	if is_local:
-		assignment.type = nodes.Assignment.T_LOCAL_DEFINITION
-	else:
-		assignment.type = nodes.Assignment.T_NORMAL
 
 	return assignment
 
@@ -1017,8 +989,13 @@ def _build_unary_expression(state, addr, instruction):
 	return operator
 
 
+_PENDING_MAYBE_LOCALS_STACK = []
+
+
 def _build_destination(state, addr, slot):
-	return _build_variable(state, addr + 1, slot)
+	global _PENDING_MAYBE_LOCALS_STACK
+	_PENDING_MAYBE_LOCALS_STACK[-1][slot] = []
+	return _build_variable(state, addr, slot)
 
 
 def _build_variable(state, addr, slot):
@@ -1034,6 +1011,8 @@ def _build_slot(state, addr, slot):
 
 
 def _build_identifier(state, addr, slot, want_type):
+	global _PENDING_MAYBE_LOCALS_STACK
+
 	node = nodes.Identifier()
 	node.slot = slot
 	node.type = nodes.Identifier.T_SLOT
@@ -1045,11 +1024,20 @@ def _build_identifier(state, addr, slot, want_type):
 		if info is not None and info.type != info.T_INTERNAL:
 			node.type = want_type
 			node.name = info.name
+
+			for i in _PENDING_MAYBE_LOCALS_STACK[-1][slot]:
+				i.type = want_type
+				i.name = info.name
+				i._varinfo = info
+
+			_PENDING_MAYBE_LOCALS_STACK[-1][slot] = []
+		else:
+			_PENDING_MAYBE_LOCALS_STACK[-1][slot].append(node)
 	elif want_type == nodes.Identifier.T_UPVALUE:
 		name = state.debuginfo.lookup_upvalue_name(slot)
 
 		if name is not None:
-			node.name = info.name
+			node.name = name
 			node.type = want_type
 
 	return node
