@@ -44,7 +44,7 @@ def write(writer, prototype):
 def _write_instruction(writer, addr, line, instruction):
 	description = _translate_description(writer, addr, line, instruction)
 
-	writer.stream.write_line(_FORMAT,
+	writer.stream.write_multiline(_FORMAT,
 		addr=addr,
 		line=line,
 		name=instruction.name,
