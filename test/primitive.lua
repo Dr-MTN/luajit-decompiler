@@ -62,6 +62,12 @@ end
 function logical()
 	x = 3
 
+	print ("Ordinary if")
+
+	if x == 123 then
+		print ("Good number")
+	end
+
 	print ("No then, only else")
 
 	if x == 1 then
@@ -77,6 +83,7 @@ function logical()
 		print("is five!")
 	elseif x == 8 then
 		print("is eight!")
+		return
 	else
 		print("is something else!")
 	end
@@ -87,6 +94,28 @@ function logical()
 		print("Is six!")
 	else
 		print("Whatever else!")
+	end	
+
+	print ("The same if as expression")
+
+	a = ((x == 6) and print("Is six!")) or print("Whatever else!")
+
+	print ("Nested if")
+
+	if x == 666 then
+		print("Hellish X!")
+
+		if x > 321 then
+			print ("X > 321 - Isn't that obvious already?")
+		else
+			print ("Seriously???")
+		end
+	else
+		print("Not bad enough!")
+
+		if x ~= 42 then
+			print ("And it doesn't answer anything")
+		end
 	end
 
 	y = 4
@@ -94,6 +123,73 @@ function logical()
 	print ("normal logical expression")
 
 	b = (x and y) or ((y > 3) and (((x/2) < 1) or (y > 100))) and (x ~= 2)
+
+	print ("If interpretation of the expression above")
+
+	local t = x
+
+	if t then
+		t = y
+
+		if t then
+		else
+			-- BLOCKREF 1
+			if y > 3 then
+				if x/2 < 1 then
+					if x ~= 2 then
+						t = true
+					else
+						t = false
+					end
+				else
+					if y > 100 then
+						if x ~= 2 then
+							t = true
+						else
+							t = false
+						end
+					else
+						t = false
+					end
+				end
+			else
+				t = false
+			end
+			-- BLOCKREF 1
+		end
+	else
+		-- BLOCK 1
+		if y > 3 then
+			if x/2 < 1 then
+				if x ~= 2 then
+					t = true
+				else
+					t = false
+				end
+			else
+				if y > 100 then
+					if x ~= 2 then
+						t = true
+					else
+						t = false
+					end
+				else
+					--BLOCKREF 2
+					t = false
+					--BLOCKREF 2
+				end
+			end
+		else
+			--BLOCK 2
+			t = false
+			--BLOCK 2
+		end
+		-- BLOCK 1
+	end
+
+	b = t
+
+	--[[
 
 	print ("precalculated true expression")
 
@@ -118,6 +214,7 @@ function logical()
 	f = nil and ((x and y) or true)
 
 	print(x, y, b, c, d, e, f)
+	]]--
 end
 
 function functions()
@@ -308,6 +405,8 @@ end
 
 
 function subblock()
+	print ("Subblock with locals")
+
 	x = 3
 
 	do
