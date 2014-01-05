@@ -3,6 +3,8 @@
 #
 
 import ljd.bytecode.instructions as ins
+
+from ljd.bytecode.helpers import get_jump_destination
 from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
 
 import ljd.ast.nodes as nodes
@@ -898,10 +900,6 @@ def _build_table_record_item(value):
 		item.type = nodes.Constant.T_STRING
 
 	return item
-
-
-def _get_jump_destination(addr, instruction):
-	return addr + instruction.CD + 1
 
 
 _COMPARISON_MAP = [None] * 255
