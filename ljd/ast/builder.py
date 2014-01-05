@@ -1085,9 +1085,9 @@ def _build_numeric_constant(state, index):
 def _build_primitive(state, value):
 	node = nodes.Primitive()
 
-	if value == True or value == T_TRUE:
+	if value is True or value == T_TRUE:
 		node.type = nodes.Primitive.T_TRUE
-	elif value == False or value == T_FALSE:
+	elif value is False or value == T_FALSE:
 		node.type = nodes.Primitive.T_FALSE
 	else:
 		assert value is None or value == T_NIL
