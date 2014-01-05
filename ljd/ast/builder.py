@@ -2,6 +2,7 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+import ljd.bytecode.patches
 import ljd.bytecode.instructions as ins
 
 from ljd.bytecode.helpers import get_jump_destination
@@ -14,25 +15,14 @@ class _State():
 	def __init__(self):
 		self.constants = None
 		self.debuginfo = None
-		self.instructions = []
-		self.layers = []
+		self.block = None
+		self.blocks = []
+		self.block_starts = {}
 
-	def _is_opcode_at_addr(self, addr, opcode):
-		try:
-			return self.instructions[addr].opcode == opcode
-		except IndexError:
-			return False
-
-	def _get_addr(self, addr):
-		return self.instructions[addr]
-
-
-class _Layer():
-	def __init__(self, node, block, block_start, block_end):
-		self.node = node
-		self.block = block
-		self.block_start = block_start
-		self.block_end = block_end
+	def _warp_in_block(self, addr):
+		block = self.block_starts[addr]
+		block.warpsin_count += 1
+		return block
 
 
 def build(prototype):
@@ -56,14 +46,7 @@ def _build_function_definition(prototype):
 	if prototype.flags.is_variadic:
 		node.arguments.contents.append(nodes.Vararg())
 
-	layer = _Layer(node, node.block.contents, 1, len(prototype.instructions))
-	state.layers.append(layer)
-
-	_process_function_body(state, prototype.instructions)
-
-	state.layers.pop()
-
-	assert state.layers == []
+	node.blocks = _build_function_blocks(state, prototype.instructions)
 
 	_PENDING_MAYBE_LOCALS_STACK.pop()
 
@@ -85,218 +68,218 @@ def _build_function_arguments(state, prototype):
 	return arguments
 
 
-OP_NEXT = 0
-OP_KEEP = 1
+def _build_function_blocks(state, instructions):
+	instructions = ljd.bytecode.patches.apply(instructions)
+	_blockenize(state, instructions)
 
-OP_PUSH_STATE = 0
-OP_POP_STATE = 1
-OP_KEEP_STATE = 2
+	state.blocks[0].warpsin_count = 1
+
+	for block in state.blocks:
+		addr = block.first_address
+		state.block = block
+
+		while addr <= block.last_address:
+			instruction = instructions[addr]
+
+			statement = _build_statement(state, addr, instruction)
+
+			if statement is not None:
+				line = state.debuginfo.lookup_line_number(addr)
+
+				setattr(statement, "_addr", addr)
+				setattr(statement, "_line", line)
+
+				block.statements.contents.append(statement)
+
+			addr += 1
+
+		if block != state.blocks[-1] and block.warp is None:
+			block.warp = nodes.UnconditionalWarp()
+			block.warp.type = nodes.UnconditionalWarp.T_FLOW
+			block.warp.target = state._warp_in_block(block.last_address + 1)
+
+	state.blocks[-1].warp = nodes.EndWarp()
+
+	# Blocks are linked with warps
+	return state.blocks
 
 
-_MAX_LOOKAHEAD = 2
+_JUMP_WARP_INSTRUCTIONS = set((
+	ins.UCLO.opcode,
+	ins.ISNEXT.opcode,
+	ins.JMP.opcode
+))
 
 
-def _process_function_body(state, instructions):
-	funcs = [_process_code_block]
+_WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | set((
+	ins.FORI.opcode, ins.JFORI.opcode,
+	# FORL instructions are patched out
+	ins.ITERL.opcode, ins.IITERL.opcode, ins.JITERL.opcode
+))
 
+
+def _blockenize(state, instructions):
 	addr = 1
-	state.instructions = instructions
+
+	# Duplicates are possible and ok, but we need to sort them out
+	last_addresses = set()
 
 	while addr < len(instructions):
-		op, func = funcs[-1](state, addr, instructions[addr])
+		instruction = instructions[addr]
+		opcode = instruction.opcode
 
-		assert func is not None
+		if opcode not in _WARP_INSTRUCTIONS:
+			addr += 1
+			continue
 
-		if func == OP_KEEP_STATE:
-			pass
-		elif isinstance(func, tuple):
-			assert func[0] == OP_PUSH_STATE
-			funcs.append(func[1])
-		elif func == OP_POP_STATE:
-			funcs.pop()
+		# We can't process the warp instructions here because of the
+		# copy-ifs - they need to emit a statement into the block
+		# before creating a warp into another
+
+		if opcode in _JUMP_WARP_INSTRUCTIONS:
+			destination = get_jump_destination(addr, instruction)
+
+			if opcode != ins.UCLO.opcode or destination != addr + 1:
+				last_addresses.add(destination - 1)
+				last_addresses.add(addr)
 		else:
-			funcs[-1] = func
+			last_addresses.add(addr)
 
-		if isinstance(op, tuple):
-			assert op[0] == OP_NEXT
-			step = op[1]
-			op = op[0]
-		else:
-			step = 1
+		addr += 1
 
-		if op == OP_NEXT:
-			line = state.debuginfo.lookup_line_number(addr)
+	last_addresses = sorted(list(last_addresses))
+	last_addresses.append(len(instructions) - 1)
 
-			block = state.layers[-1].block
+	previous_last_address = 0
 
-			if block == []:
-				block = state.layers[-2].block
+	for last_address in last_addresses:
+		block = nodes.Block()
+		block.first_address = previous_last_address + 1
+		block.last_address = last_address
 
-			setattr(block[-1], "_line", line)
+		state.blocks.append(block)
+		state.block_starts[block.first_address] = block
 
-			assert state.layers[-1].block_end < 0		\
-					or addr < state.layers[-1].block_end
-
-			addr += step
-		else:
-			assert op == OP_KEEP
+		previous_last_address = last_address
 
 
-def _process_code_block(state, addr, instruction):
+def _build_statement(state, addr, instruction):
 	opcode = instruction.opcode
 	A_type = instruction.A_type
 
-	# internal opcodes are stable, so we may freely assume their order
+	# Internal opcodes are stable, so we may freely assume their order
+	if opcode == ins.ISTC.opcode or opcode == ins.ISFC.opcode:
+		return _build_copy_if_statement(state, addr, instruction)
 
-	if opcode <= ins.ISF.opcode	\
-			and state._is_opcode_at_addr(addr + 2, ins.LOOP.opcode):
-		return _process_while(state, addr, instruction)
+	elif opcode <= ins.ISF.opcode:
+		return _prepare_conditional_warp(state, addr, instruction)
 
-	# Comparison operators (if something)
-	elif opcode <= ins.ISNEP.opcode:
-		expression = _build_comparison_expression(state, addr, instruction)
-		return _process_if_statement(state, addr, expression)
-
-	# Unary test and copy operators ([A = D;] if D)
-	elif opcode == ins.IST.opcode			\
-			or opcode == ins.ISF.opcode:
-		expression = _build_unary_expression(state, addr, instruction)
-		return _process_if_statement(state, addr, expression)
-
-	#
-	# The copy-if operators plus obfuscated if true/if false:
-	# it's replaced with a single JMP without a condition
-	# Hopefully it's always preceeded by KPRI
-	#
-	elif opcode == ins.ISTC.opcode			\
-			or opcode == ins.ISFC.opcode	\
-			or (opcode == ins.KPRI.opcode	\
-				and state._is_opcode_at_addr(addr + 1,
-								ins.JMP.opcode)):
-		return _process_copy_if_statement(state, addr, instruction)
-
-	# Generic assignments - handle ASSIGNMENT stuff
+	# Generic assignments - handle the ASSIGNMENT stuff below
 	elif A_type == ins.T_DST or A_type == ins.T_UV:
-		return _process_var_assignment(state, addr, instruction)
+		return _build_var_assignment(state, addr, instruction)
 
 	# ASSIGNMENT starting from MOV and ending at KPRI
 
 	elif opcode == ins.KNIL.opcode:
-		return _process_knil(state, addr, instruction)
+		return _build_knil(state, addr, instruction)
 
-	# ASSIGNMENT starting from KSTR and ending at USETP
+	# ASSIGNMENT starting from UGET and ending at USETP
 
 	# SKIP UCL0 is handled below
 
 	# ASSIGNMENT starting from FNEW and ending at GGET
 
 	elif opcode == ins.GSET.opcode:
-		return _process_global_assignment(state, addr, instruction)
+		return _build_global_assignment(state, addr, instruction)
 
 	# ASSIGNMENT starting from TGETV and ending at TGETB
 
 	elif opcode >= ins.TSETV.opcode and opcode <= ins.TSETB.opcode:
-		return _process_table_assignment(state, addr, instruction)
+		return _build_table_assignment(state, addr, instruction)
 
 	elif opcode == ins.TSETM.opcode:
-		return _process_table_mass_assignment(state, addr, instruction)
+		return _build_table_mass_assignment(state, addr, instruction)
 
 	elif opcode >= ins.CALLM.opcode and opcode <= ins.CALLT.opcode:
-		return _process_call(state, addr, instruction)
+		return _build_call(state, addr, instruction)
 
-	# SKIP ITERC and ITERN - handle at iterator_for
+	elif opcode == ins.ITERC.opcode or opcode == ins.ITERN.opcode:
+		return _prepare_iterator_warp(state, addr, instruction)
 
 	elif opcode == ins.VARG.opcode:
-		return _process_vararg(state, addr, instruction)
+		return _build_vararg(state, addr, instruction)
 
 	elif opcode == ins.ISNEXT.opcode:
-		return _process_iterator_for(state, addr, instruction)
+		return _build_unconditional_warp(state, addr, instruction)
 
 	elif opcode >= ins.RETM.opcode and opcode <= ins.RET1.opcode:
-		return _process_return(state, addr, instruction)
+		return _build_return(state, addr, instruction)
 
-	elif opcode == ins.FORI.opcode or opcode == ins.FORL.opcode:
-		return _process_numeric_for(state, addr, instruction)
+	elif opcode == ins.FORI.opcode:
+		return _build_numeric_loop_warp(state, addr, instruction)
+
+	elif opcode >= ins.ITERL.opcode and opcode <= ins.JITERL.opcode:
+		return _finalize_iterator_warp(state, addr, instruction)
 
 	elif opcode >= ins.LOOP.opcode and opcode <= ins.JLOOP.opcode:
-		return _process_repeat_until(state, addr, instruction)
+		# Noop
+		return None
 
 	else:
 		assert opcode == ins.UCLO.opcode or opcode == ins.JMP.opcode
-		return _process_jump(state, addr, instruction)
+		return _build_jump_warp(state, addr, instruction)
 
 
-def _process_if_statement(state, addr, expression):
-	node = nodes.If()
+def _prepare_conditional_warp(state, addr, instruction):
+	if instruction.opcode >= ins.IST.opcode:
+		expression = _build_unary_expression(state, addr, instruction)
+	else:
+		expression = _build_comparison_expression(state, addr, instruction)
 
-	node.expression = expression
+	warp = nodes.ConditionalWarp()
+	warp.condition = expression
 
-	layer = _Layer(node, node.then_block.contents, addr, -1)
-
-	state.layers[-1].block.append(node)
-	state.layers.append(layer)
-
-	return OP_NEXT, (OP_PUSH_STATE, _process_if_body_start)
-
-
-def _process_if_body_start(state, addr, instruction):
-	assert instruction.opcode == ins.JMP.opcode
-
-	state.layers[-1].block_end = _get_jump_destination(addr, instruction)
-
-	return OP_NEXT, _process_if_body
+	assert state.block.warp is None
+	state.block.warp = warp
 
 
-def _process_if_body(state, addr, instruction):
-	# jump outside of the if - block end and start of else block
-	if instruction.opcode == ins.JMP.opcode			\
-			and addr == state.layers[-1].block_end - 1:
-		layer = state.layers.pop()
+def _finalize_conditional_warp(state, addr, instruction):
+	warp = state.block.warp
+	assert isinstance(warp, nodes.ConditionalWarp)
 
-		block_end = _get_jump_destination(addr, instruction)
+	destination = get_jump_destination(addr, instruction)
 
-		layer = _Layer(layer.node, layer.node.else_block.contents,
-								addr, block_end)
+	if destination < addr:
+		warp.type = nodes.ConditionalWarp.T_NEGATIVE_JUMP
+	else:
+		warp.type = nodes.ConditionalWarp.T_POSITIVE_JUMP
 
-		state.layers.append(layer)
-		return OP_NEXT, _process_if_body
-
-	if addr < state.layers[-1].block_end:
-		return _process_code_block(state, addr, instruction)
-
-	state.layers.pop()
-	return OP_KEEP, OP_POP_STATE
+	warp.true_target = state._warp_in_block(destination)
+	warp.false_target = state._warp_in_block(addr + 1)
 
 
-def _process_copy_if_statement(state, addr, instruction):
+def _build_copy_if_statement(state, addr, instruction):
 	assignment = nodes.Assignment()
 	destination = _build_destination(state, addr, instruction.A)
 
-	if instruction.opcode == ins.KPRI.opcode:
-		expression = _build_primitive(state, instruction.CD)
-	else:
-		expression = _build_variable(state, addr, instruction.CD)
+	expression = _build_variable(state, addr, instruction.CD)
 
 	assignment.destinations.contents.append(destination)
 	assignment.expressions.contents.append(expression)
 
-	state.layers[-1].block.append(assignment)
+	warp = nodes.ConditionalWarp()
+	warp.condition = _build_unary_expression(state, addr, instruction)
 
-	if instruction.opcode == ins.KPRI.opcode:
-		expression = _build_primitive_to_bool_expression(state, addr,
-								instruction)
-	else:
-		expression = _build_unary_expression(state, addr, instruction)
+	assert state.block.warp is None
+	state.block.warp = warp
 
-	return _process_if_statement(state, addr, expression)
+	return assignment
 
 
-def _process_var_assignment(state, addr, instruction):
+def _build_var_assignment(state, addr, instruction):
 	opcode = instruction.opcode
 
 	assignment = nodes.Assignment()
-
-	state.layers[-1].block.append(assignment)
 
 	# Unary assignment operators (A = op D)
 	if opcode == ins.MOV.opcode			\
@@ -353,20 +336,18 @@ def _process_var_assignment(state, addr, instruction):
 
 	assignment.destinations.contents.append(destination)
 
-	return OP_NEXT, OP_KEEP_STATE
+	return assignment
 
 
-def _process_knil(state, addr, instruction):
+def _build_knil(state, addr, instruction):
 	node = _build_range_assignment(state, addr, instruction.A, instruction.CD)
 
 	node.expressions.contents = [_build_primitive(state, None)]
 
-	state.layers[-1].block.append(node)
-
-	return OP_NEXT, OP_KEEP_STATE
+	return node
 
 
-def _process_global_assignment(state, addr, instruction):
+def _build_global_assignment(state, addr, instruction):
 	assignment = nodes.Assignment()
 
 	variable = _build_global_variable(state, addr, instruction.CD)
@@ -375,12 +356,10 @@ def _process_global_assignment(state, addr, instruction):
 	assignment.destinations.contents.append(variable)
 	assignment.expressions.contents.append(expression)
 
-	state.layers[-1].block.append(assignment)
-
-	return OP_NEXT, OP_KEEP_STATE
+	return assignment
 
 
-def _process_table_assignment(state, addr, instruction):
+def _build_table_assignment(state, addr, instruction):
 	assignment = nodes.Assignment()
 
 	destination = _build_table_element(state, addr, instruction)
@@ -389,12 +368,10 @@ def _process_table_assignment(state, addr, instruction):
 	assignment.destinations.contents.append(destination)
 	assignment.expressions.contents.append(expression)
 
-	state.layers[-1].block.append(assignment)
-
-	return OP_NEXT, OP_KEEP_STATE
+	return assignment
 
 
-def _process_table_mass_assignment(state, addr, instruction):
+def _build_table_mass_assignment(state, addr, instruction):
 	assignment = nodes.Assignment()
 
 	base = instruction.A
@@ -415,63 +392,44 @@ def _process_table_mass_assignment(state, addr, instruction):
 		nodes.MULTRES()
 	]
 
-	state.layers[-1].block.append(assignment)
-
-	return OP_NEXT, OP_KEEP_STATE
+	return assignment
 
 
-def _process_iterator_for(state, addr, instruction):
-	node = nodes.IteratorFor()
+def _prepare_iterator_warp(state, addr, instruction):
+	warp = nodes.IteratorWarp()
 
-	# JMP points to the ITERC, but there is the ITERL instruction next to
-	# it
-	block_end = _get_jump_destination(addr, instruction) + 2
-	layer = _Layer(node, node.block.contents, addr, block_end)
+	base = instruction.A
 
-	state.layers[-1].block.append(node)
-	state.layers.append(layer)
+	warp.controls.contents = [
+		_build_slot(state, addr, base - 3),  # generator
+		_build_slot(state, addr, base - 2),  # state
+		_build_slot(state, addr, base - 1)  # control
+	]
 
-	return OP_NEXT, (OP_PUSH_STATE, _process_iterator_for_body)
+	last_slot = base + instruction.B - 2
 
+	slot = base
 
-def _process_iterator_for_body(state, addr, instruction):
-	opcode = instruction.opcode
+	while slot <= last_slot:
+		# Fix the scope as instructions are patched
+		variable = _build_destination(state, addr + 1, slot)
+		warp.variables.contents.append(variable)
+		slot += 1
 
-	if opcode == ins.ITERC.opcode or opcode == ins.ITERN.opcode:
-		node = state.layers[-1].node
-
-		base = instruction.A
-
-		# These are the temporary slots with weird local names
-		# Ignore the names - we will squash them later at
-		# the optimization phase
-		node.expressions.contents = [
-			_build_slot(state, addr, base - 3),  # generator
-			_build_slot(state, addr, base - 2),  # state
-			_build_slot(state, addr, base - 1)  # control
-		]
-
-		last_slot = base + instruction.B - 2
-
-		slot = base
-		while slot <= last_slot:
-			# variables scope is up to this instruction
-			variable = _build_variable(state, addr - 1, slot)
-			node.identifiers.contents.append(variable)
-			slot += 1
-
-		return OP_NEXT, OP_KEEP_STATE
-
-	elif opcode == ins.ITERL.opcode			\
-			or opcode == ins.IITERL.opcode	\
-			or opcode == ins.JITERL.opcode:
-		state.layers.pop()
-		return OP_NEXT, OP_POP_STATE
-
-	return _process_code_block(state, addr, instruction)
+	assert state.block.warp is None
+	state.block.warp = warp
 
 
-def _process_call(state, addr, instruction):
+def _finalize_iterator_warp(state, addr, instruction):
+	warp = state.block.warp
+	assert isinstance(warp, nodes.IteratorWarp)
+
+	destination = get_jump_destination(addr, instruction)
+	warp.body = state._warp_in_block(destination)
+	warp.way_out = state._warp_in_block(addr + 1)
+
+
+def _build_call(state, addr, instruction):
 	call = nodes.FunctionCall()
 
 	if instruction.opcode <= ins.CALL.opcode:
@@ -496,12 +454,10 @@ def _process_call(state, addr, instruction):
 
 	call.arguments.contents = _build_call_arguments(state, addr, instruction)
 
-	state.layers[-1].block.append(node)
-
-	return OP_NEXT, OP_KEEP_STATE
+	return node
 
 
-def _process_vararg(state, addr, instruction):
+def _build_vararg(state, addr, instruction):
 	base = instruction.A
 	last_slot = base + instruction.B - 2
 
@@ -513,12 +469,10 @@ def _process_vararg(state, addr, instruction):
 		node = _build_range_assignment(state, addr, base, last_slot)
 		node.expressions.contents.append(nodes.Vararg())
 
-	state.layers[-1].block.append(node)
-
-	return OP_NEXT, OP_KEEP_STATE
+	return node
 
 
-def _process_return(state, addr, instruction):
+def _build_return(state, addr, instruction):
 	node = nodes.Return()
 
 	base = instruction.A
@@ -538,174 +492,51 @@ def _process_return(state, addr, instruction):
 	if instruction.opcode == ins.RETM.opcode:
 		node.returns.contents.append(nodes.MULTRES())
 
-	state.layers[-1].block.append(node)
-
-	return OP_NEXT, OP_KEEP_STATE
+	return node
 
 
-def _process_numeric_for(state, addr, instruction):
-	node = nodes.NumericFor()
+def _build_numeric_loop_warp(state, addr, instruction):
+	warp = nodes.NumericLoopWarp()
 
 	base = instruction.A
 
-	node.variable = _build_variable(state, addr, base + 3)
-	node.expressions.contents = [
+	warp.index = _build_destination(state, addr, base + 3)
+	warp.controls.contents = [
 		_build_variable(state, addr, base + 2),
 		_build_variable(state, addr, base + 1),
 		_build_variable(state, addr, base + 0)
 	]
 
-	state.layers[-1].block.append(node)
+	destination = get_jump_destination(addr, instruction)
+	warp.body = state._warp_in_block(addr + 1)
+	warp.way_out = state._warp_in_block(destination)
 
-	block_end = _get_jump_destination(addr, instruction)
-	layer = _Layer(node, node.block.contents, addr, block_end)
-
-	state.layers.append(layer)
-
-	return OP_NEXT, (OP_PUSH_STATE, _process_numeric_for_body)
+	assert state.block.warp is None
+	state.block.warp = warp
 
 
-def _process_numeric_for_body(state, addr, instruction):
-	opcode = instruction.opcode
-
-	if opcode == ins.FORL.opcode 			\
-			or opcode == ins.JFORL.opcode	\
-			or opcode == ins.IFORL.opcode:
-		state.layers.pop()
-		return OP_NEXT, OP_POP_STATE
-
-	return _process_code_block(state, addr, instruction)
-
-
-def _process_repeat_until(state, addr, instruction):
-	node = nodes.RepeatUntil()
-
-	state.layers[-1].block.append(node)
-
-	#
-	# In case of the LJOOP the D operand is a JIT trace, not a jump
-	# destination - so we can't use it to detect the block end
-	#
-	# We will have to use the lookahead to detect any comparison instruction
-	# with the following jump back to the block end
-	#
-	layer = _Layer(node, node.block.contents, addr, -1)
-	state.layers.append(layer)
-
-	return OP_NEXT, (OP_PUSH_STATE, _process_repeat_until_body)
-
-
-def _process_repeat_until_body(state, addr, instruction):
-	next_instruction = state._get_addr(addr + 1)
-	node = state.layers[-1].node
-
-	if next_instruction.opcode != ins.JMP.opcode:
-		return _process_code_block(state, addr, instruction)
-
-	# This is the next instruction, so addr should be incremented as well
-	destination = _get_jump_destination(addr + 1, next_instruction)
-
-	if destination != state.layers[-1].block_start:
-		return _process_code_block(state, addr, instruction)
-
-	node.block_end = addr + 1
-	opcode = instruction.opcode
-
-	assert opcode <= ins.ISF.opcode
-
-	#
-	# Not supported. Shouldn't actually happen, but who knows...
-	#
-	# It's easy to support the assignment if as well, but the code is
-	# already complex enough and there is no solid evidence that such
-	# a thing may ever happen
-	#
-	assert opcode != ins.ISTC.opcode and opcode != ins.ISFC.opcode
-
-	if opcode >= ins.IST.opcode:
-		expression = _build_unary_expression(state, addr, instruction)
+def _build_jump_warp(state, addr, instruction):
+	if state.block.warp is not None:
+		return _finalize_conditional_warp(state, addr, instruction)
 	else:
-		expression = _build_comparison_expression(state, addr, instruction)
-
-	node.expression = expression
-
-	state.layers.pop()
-
-	# See the commentary within the _process_while_body function
-	return (OP_NEXT, 2), OP_POP_STATE
+		return _build_unconditional_warp(state, addr, instruction)
 
 
-def _process_while(state, addr, instruction):
-	node = nodes.While()
+def _build_unconditional_warp(state, addr, instruction):
+	warp = nodes.UnconditionalWarp()
 
 	opcode = instruction.opcode
 
-	# Not supported. Same as above
-	assert opcode != ins.ISTC.opcode and opcode != ins.ISFC.opcode
-
-	if opcode >= ins.IST.opcode:
-		expression = _build_unary_expression(state, addr, instruction)
+	if opcode == ins.UCLO.opcode and instruction.CD == 0:
+		# Not a jump
+		return
 	else:
-		expression = _build_comparison_expression(state, addr, instruction)
+		warp.type = nodes.UnconditionalWarp.T_JUMP
+		destination = get_jump_destination(addr, instruction)
+		warp.target = state._warp_in_block(destination)
 
-	node.expression = expression
-
-	state.layers[-1].block.append(node)
-
-	# Lookahead JMP instruction
-	block_end = _get_jump_destination(addr + 1, state._get_addr(addr + 1))
-
-	layer = _Layer(node, node.block.contents, addr, block_end)
-
-	state.layers.append(layer)
-
-	#
-	# We could use an another statement to skip the first two instruction,
-	# but...
-	#
-	# That's not real FSM anyway, so who cares if we will make a tiny
-	# shortcut here? =)
-	#
-	return (OP_NEXT, 3), (OP_PUSH_STATE, _process_while_body)
-
-
-def _process_while_body(state, addr, instruction):
-	block_end = state.layers[-1].block_end
-
-	# Jump to the while condition start
-	if instruction.opcode == ins.JMP.opcode and addr == block_end - 1:
-		state.layers.pop()
-		return OP_NEXT, OP_POP_STATE
-
-	return _process_code_block(state, addr, instruction)
-
-
-def _process_jump(state, addr, instruction):
-	destination = _get_jump_destination(addr, instruction)
-
-	if instruction.opcode == ins.UCLO.opcode and instruction.CD == 0:
-		return OP_NEXT, OP_KEEP_STATE
-
-	target_opcode = state._get_addr(destination).opcode
-
-	if target_opcode == ins.ITERN.opcode or target_opcode == ins.ITERC.opcode:
-		return _process_iterator_for(state, addr, instruction)
-
-	pre_target = state._get_addr(destination - 1)
-
-	assert pre_target.opcode in (
-			ins.IFORL.opcode,
-			ins.JFORL.opcode,
-			ins.FORL.opcode,
-			ins.ITERL.opcode,
-			ins.JITERL.opcode,
-			ins.IITERL.opcode
-	) or (pre_target.opcode == ins.JMP.opcode and pre_target.CD < 0), 	\
-		"GOTO statements are not supported (yet)"
-
-	state.layers[-1].block.append(nodes.Break())
-
-	return OP_NEXT, OP_KEEP_STATE
+	assert state.block.warp is None
+	state.block.warp = warp
 
 
 def _build_call_arguments(state, addr, instruction):
@@ -946,21 +777,6 @@ def _build_comparison_expression(state, addr, instruction):
 	return operator
 
 
-def _build_primitive_to_bool_expression(state, addr, instruction):
-	value = instruction.CD
-
-	variable = _build_variable(state, addr, instruction.A)
-
-	if value == T_TRUE:
-		return variable
-
-	node = nodes.UnaryOperator()
-	node.type = nodes.UnaryOperator.T_NOT
-	node.operand = variable
-
-	return node
-
-
 def _build_unary_expression(state, addr, instruction):
 	opcode = instruction.opcode
 
@@ -1012,6 +828,8 @@ def _build_identifier(state, addr, slot, want_type):
 	global _PENDING_MAYBE_LOCALS_STACK
 
 	node = nodes.Identifier()
+	setattr(node, "_addr", addr)
+
 	node.slot = slot
 	node.type = nodes.Identifier.T_SLOT
 
