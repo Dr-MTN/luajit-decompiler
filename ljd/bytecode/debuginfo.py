@@ -2,6 +2,7 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+
 class VariableInfo():
 	T_VISIBILE = 0
 	T_INTERNAL = 1
