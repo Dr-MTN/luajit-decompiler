@@ -14,13 +14,17 @@ CMD_END_BLOCK = 5
 CMD_WRITE = 6
 
 
+OPERATOR_TYPES = (nodes.BinaryOperator, nodes.UnaryOperator)
+
+
 class Visitor(traverse.Visitor):
-	def __init__(self):
+	def __init__(self, warped):
 		traverse.Visitor.__init__(self)
 
 		self.visited_nodes_stack = [set()]
 
 		self.print_queue = []
+		self.warped = True
 
 	# ##
 
@@ -60,7 +64,10 @@ class Visitor(traverse.Visitor):
 
 		self._start_block()
 
-		self._visit(node.block)
+		if self.warped:
+			self._visit_list(node.blocks)
+		else:
+			self._visit(node.statements)
 
 		self._end_block()
 
@@ -116,11 +123,21 @@ class Visitor(traverse.Visitor):
 	# ##
 
 	def visit_binary_operator(self, node):
-		self._write("(")
+		is_left_op = isinstance(node.left, OPERATOR_TYPES)
+		is_right_op = isinstance(node.right, OPERATOR_TYPES)
+
+		# If the subexpressions are less in order then this expression,
+		# they should go with parentheses
+		left_parentheses = is_left_op and node.left.type < node.type
+		right_parentheses = is_right_op and node.right.type < node.type
+
+		if left_parentheses:
+			self._write("(")
 
 		self._visit(node.left)
 
-		self._write(")")
+		if left_parentheses:
+			self._write(")")
 
 		if node.type == nodes.BinaryOperator.T_LOGICAL_OR:
 			self._write(" or ")
@@ -161,11 +178,13 @@ class Visitor(traverse.Visitor):
 		else:
 			self._write(" - ")
 
-		self._write("(")
+		if right_parentheses:
+			self._write("(")
 
 		self._visit(node.right)
 
-		self._write(")")
+		if right_parentheses:
+			self._write(")")
 
 	def visit_unary_operator(self, node):
 		if node.type == nodes.UnaryOperator.T_LENGTH_OPERATOR:
@@ -223,13 +242,27 @@ class Visitor(traverse.Visitor):
 		self._write("MULTRES")
 
 	def visit_table_element(self, node):
-		self._visit(node.table)
+		key = node.key
+		base = node.table
+		if isinstance(key, nodes.Constant) and key.type == key.T_STRING:
+			if isinstance(base, nodes.Identifier)	\
+					and base.type == base.T_BUILTIN:
+				assert base.name == "_env"
+				self._skip(base)
+			else:
+				self._visit(base)
+				self._write(".")
 
-		self._write("[")
+			self._write(key.value)
+			self._skip(key)
+		else:
+			self._visit(base)
 
-		self._visit(node.key)
+			self._write("[")
 
-		self._write("]")
+			self._visit(key)
+
+			self._write("]")
 
 	def visit_vararg(self, node):
 		self._write("...")
@@ -298,6 +331,106 @@ class Visitor(traverse.Visitor):
 		self._visit(node.then_block)
 
 		self._end_block()
+
+	# ##
+
+	def visit_block(self, node):
+		self._write("--- BLOCK {0} {1}-{2}, warpins: {3} ---",
+					node.__hash__(),
+					node.first_address, node.last_address,
+					node.warpsin_count)
+
+		self._end_line()
+
+		self._start_block()
+
+		self._visit(node.statements)
+
+		self._end_block()
+
+		self._write("--- END OF BLOCK {0} ---", node.__hash__())
+
+		self._end_line()
+
+		self._end_line()
+		self._visit(node.warp)
+		self._end_line()
+
+		self._end_line()
+
+	def visit_unconditional_warp(self, node):
+		if node.type == nodes.UnconditionalWarp.T_FLOW:
+			self._write("FLOW")
+		elif node.type == nodes.UnconditionalWarp.T_JUMP:
+			self._write("UNCONDITIONAL JUMP")
+
+		self._write("; TARGET {0}", node.target.__hash__())
+
+		self._end_line()
+
+	def visit_conditional_warp(self, node):
+		self._write("if ")
+
+		self._visit(node.condition)
+
+		self._write(" then")
+		self._end_line()
+
+		self._start_block()
+
+		self._write("JUMP ")
+
+		if node.type == nodes.ConditionalWarp.T_NEGATIVE_JUMP:
+			self._write("BEHIND")
+		else:
+			self._write("AHEAD")
+
+		self._write(" TO BLOCK {0}", node.true_target.__hash__())
+
+		self._end_block()
+
+		self._end_line()
+		self._write("else")
+		self._end_line()
+
+		self._start_block()
+
+		self._write("JUMP TO BLOCK {0}", node.false_target.__hash__())
+
+		self._end_block()
+
+		self._end_line()
+
+		self._write("end")
+		self._end_line()
+
+	def visit_iterator_warp(self, node):
+		self._write("for ")
+
+		self._visit(node.variables)
+
+		self._write(" in ")
+
+		self._visit(node.controls)
+
+		self._write(" LOOP BLOCK {0}", node.body.__hash__())
+		self._end_line()
+
+		self._write("GO OUT TO BLOCK {0}", node.way_out.__hash__())
+
+	def visit_numeric_loop_warp(self, node):
+		self._write("for ")
+
+		self._visit(node.index)
+
+		self._write("=")
+
+		self._visit(node.controls)
+
+		self._write(" LOOP BLOCK {0}", node.body.__hash__())
+		self._end_line()
+
+		self._write("GO OUT TO BLOCK {0}", node.way_out.__hash__())
 
 	# ##
 
@@ -415,6 +548,9 @@ class Visitor(traverse.Visitor):
 		else:
 			self._write("nil")
 
+	def _skip(self, node):
+		self.visited_nodes_stack[-1].add(node)
+
 	def _visit(self, node):
 		assert node is not None
 
@@ -433,12 +569,15 @@ class Visitor(traverse.Visitor):
 		self.visited_nodes_stack.pop()
 
 
-def write(fd, ast):
+def write(fd, ast, warped=True):
 	assert isinstance(ast, nodes.FunctionDefinition)
 
-	visitor = Visitor()
+	visitor = Visitor(warped)
 
-	traverse.traverse(visitor, ast.block)
+	if warped:
+		traverse.traverse(visitor, ast.blocks)
+	else:
+		traverse.traverse(visitor, ast.statements)
 
 	_process_queue(fd, visitor.print_queue)
 
