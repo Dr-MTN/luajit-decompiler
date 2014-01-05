@@ -28,7 +28,7 @@ function vararg(...)
 	if t.x == 3 then
 		return a, t, s, ...
 	else
-		return a, t, s, ...
+		return ...
 	end
 end
 
@@ -61,6 +61,18 @@ end
 
 function logical()
 	x = 3
+
+	print ("if true")
+
+	if true then
+		print ("That's true")
+	end
+
+	print ("if false")
+
+	if false then
+		print ("That's false")
+	end
 
 	print ("Ordinary if")
 
@@ -106,7 +118,9 @@ function logical()
 		print("Hellish X!")
 
 		if x > 321 then
-			print ("X > 321 - Isn't that obvious already?")
+			if x > 333 then
+				print ("X > 321 AND 333 - Isn't that obvious already?")
+			end
 		else
 			print ("Seriously???")
 		end
@@ -123,71 +137,6 @@ function logical()
 	print ("normal logical expression")
 
 	b = (x and y) or ((y > 3) and (((x/2) < 1) or (y > 100))) and (x ~= 2)
-
-	print ("If interpretation of the expression above")
-
-	local t = x
-
-	if t then
-		t = y
-
-		if t then
-		else
-			-- BLOCKREF 1
-			if y > 3 then
-				if x/2 < 1 then
-					if x ~= 2 then
-						t = true
-					else
-						t = false
-					end
-				else
-					if y > 100 then
-						if x ~= 2 then
-							t = true
-						else
-							t = false
-						end
-					else
-						t = false
-					end
-				end
-			else
-				t = false
-			end
-			-- BLOCKREF 1
-		end
-	else
-		-- BLOCK 1
-		if y > 3 then
-			if x/2 < 1 then
-				if x ~= 2 then
-					t = true
-				else
-					t = false
-				end
-			else
-				if y > 100 then
-					if x ~= 2 then
-						t = true
-					else
-						t = false
-					end
-				else
-					--BLOCKREF 2
-					t = false
-					--BLOCKREF 2
-				end
-			end
-		else
-			--BLOCK 2
-			t = false
-			--BLOCK 2
-		end
-		-- BLOCK 1
-	end
-
-	b = t
 
 	--[[
 
@@ -298,7 +247,6 @@ function loops()
 
 	print("iterator for with another iterator")
 
-	local z = false
 	for key, value in ipairs(t) do
 		print(key, value)
 	end
