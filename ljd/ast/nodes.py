@@ -10,13 +10,15 @@ class FunctionDefinition():
 	def __init__(self):
 		self.arguments = IdentifiersList()
 		self.name = None
-		self.block = StatementsList()
+		self.statements = StatementsList()
+		self.blocks = []
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_function_definition, self)
 
 		visitor._visit(self.arguments)
-		visitor._visit(self.block)
+		visitor._visit(self.statements)
+		visitor._visit_list(self.blocks)
 
 		visitor._leave_node(visitor.leave_function_definition, self)
 
@@ -233,8 +235,8 @@ class FunctionCall():
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_function_call, self)
 
-		visitor._visit(self.function)
 		visitor._visit(self.arguments)
+		visitor._visit(self.function)
 
 		visitor._leave_node(visitor.leave_function_call, self)
 
@@ -271,6 +273,106 @@ class ElseIf():
 		visitor._visit(self.then_block)
 
 		visitor._leave_node(visitor.leave_elseif, self)
+
+# ##
+
+
+class Block():
+	def __init__(self):
+		self.warp = None
+		self.statements = StatementsList()
+		self.first_address = 0
+		self.last_address = 0
+		self.warpsin_count = 0
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_block, self)
+
+		visitor._visit(self.statements)
+		visitor._visit(self.warp)
+
+		visitor._leave_node(visitor.leave_block, self)
+
+
+class UnconditionalWarp():
+	T_JUMP = 0
+	T_FLOW = 1
+
+	def __init__(self):
+		self.type = -1
+		self.target = None
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_unconditional_warp, self)
+
+		# DO NOT VISIT self.target - warps are not part of the tree
+
+		visitor._leave_node(visitor.leave_unconditional_warp, self)
+
+
+class ConditionalWarp():
+	T_POSITIVE_JUMP = 0
+	T_NEGATIVE_JUMP = 1
+
+	def __init__(self):
+		self.type = -1
+		self.condition = None
+		self.true_target = None
+		self.false_target = None
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_conditional_warp, self)
+
+		visitor._visit(self.condition)
+		# DO NOT VISIT self.true_target - warps are not part of the tree
+		# DO NOT VISIT self.false_target - warps are not part of the tree
+
+		visitor._leave_node(visitor.leave_conditional_warp, self)
+
+
+class IteratorWarp():
+	def __init__(self):
+		self.variables = VariablesList()
+		self.controls = ExpressionsList()
+		self.body = None
+		self.way_out = None
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_iterator_warp, self)
+
+		visitor._visit(self.variables)
+		visitor._visit(self.controls)
+		# DO NOT VISIT self.body - warps are not part of the tree
+		# DO NOT VISIT self.way_out - warps are not part of the tree
+
+		visitor._leave_node(visitor.leave_iterator_warp, self)
+
+
+class NumericLoopWarp():
+	def __init__(self):
+		self.index = Identifier()
+		self.controls = ExpressionsList()
+		self.body = None
+		self.way_out = None
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_numeric_loop_warp, self)
+
+		visitor._visit(self.index)
+		visitor._visit(self.controls)
+		# DO NOT VISIT self.body - warps are not part of the tree
+		# DO NOT VISIT self.way_out - warps are not part of the tree
+
+		visitor._leave_node(visitor.leave_numeric_loop_warp, self)
+
+
+class EndWarp():
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_end_warp, self)
+		visitor._leave_node(visitor.leave_end_warp, self)
+
+
+# ##
 
 
 class Return():

@@ -28,7 +28,14 @@ class TypeRestriction():
 			.format(type(node), typespec)
 
 
-STATEMENT_TYPES = (
+WARPED_STATEMENT_TYPES = (
+	nodes.Assignment,
+	nodes.FunctionDefinition,
+	nodes.FunctionCall,
+	nodes.Return
+)
+
+UNWARPED_STATEMENT_TYPES = (
 	nodes.Assignment,
 	nodes.If,
 	nodes.IteratorFor,
@@ -40,7 +47,6 @@ STATEMENT_TYPES = (
 	nodes.FunctionCall,
 	nodes.While
 )
-
 
 EXPRESSION_TYPES = (
 	nodes.FunctionCall,
@@ -62,11 +68,20 @@ VARIABLE_TYPES = (
 	nodes.MULTRES  # It's not valid here, but it is a hack anyway...
 )
 
+WARP_TYPES = (
+	nodes.UnconditionalWarp,
+	nodes.ConditionalWarp,
+	nodes.IteratorWarp,
+	nodes.NumericLoopWarp,
+	nodes.EndWarp
+)
+
 
 class Visitor(traverse.Visitor):
-	def __init__(self):
+	def __init__(self, warped=True):
 		# Restrictions for the upmost level
 		self.restrictions = [None]
+		self.warped = warped
 
 	def _set_restrictions(self, default, specific={}):
 		self.restrictions[-1] = TypeRestriction(default, specific)
@@ -74,10 +89,15 @@ class Visitor(traverse.Visitor):
 	# ##
 
 	def visit_function_definition(self, node):
-		self._set_restrictions({
+		self._set_restrictions(nodes.Block, {
 			node.arguments: nodes.IdentifiersList,
-			node.block: nodes.StatementsList
+			node.statements: nodes.StatementsList
 		})
+
+		if self.warped:
+			assert len(node.statements.contents) == 0
+		else:
+			assert len(node.blocks) == 0
 
 	# ##
 
@@ -143,7 +163,12 @@ class Visitor(traverse.Visitor):
 	# ##
 
 	def visit_statements_list(self, node):
-		self._set_restrictions(STATEMENT_TYPES)
+		if self.warped:
+			types = WARPED_STATEMENT_TYPES
+		else:
+			types = UNWARPED_STATEMENT_TYPES
+
+		self._set_restrictions(types)
 
 	def visit_identifiers_list(self, node):
 		# HACK
@@ -202,6 +227,56 @@ class Visitor(traverse.Visitor):
 		self._set_restrictions({
 			node.expression: EXPRESSION_TYPES,
 			node.then_block: nodes.StatementsList
+		})
+
+	# ##
+
+	def visit_block(self, node):
+		self._set_restrictions({
+			node.warp: WARP_TYPES,
+			node.statements: nodes.StatementsList
+		})
+
+		assert node.first_address >= 0			\
+			and node.first_address <= node.last_address
+
+		# if false
+		# assert node.warpsin_count > 0
+
+	def visit_unconditional_warp(self, node):
+		assert node.target is not None
+
+		assert node.type == nodes.UnconditionalWarp.T_JUMP	\
+			or node.type == nodes.UnconditionalWarp.T_FLOW	\
+			or node.type == nodes.UnconditionalWarp.T_LOOP
+
+	def visit_conditional_warp(self, node):
+		self._set_restrictions({
+			node.condition: EXPRESSION_TYPES
+		})
+
+		assert node.true_target is not None
+		assert node.false_target is not None
+
+		assert node.type == nodes.ConditionalWarp.T_POSITIVE_JUMP	\
+			or node.type == nodes.ConditionalWarp.T_NEGATIVE_JUMP
+
+	def visit_iterator_warp(self, node):
+		assert node.body is not None
+		assert node.way_out is not None
+
+		self._set_restrictions(nodes.Block, {
+			node.variables: nodes.VariablesList,
+			node.controls: nodes.ExpressionsList
+		})
+
+	def visit_numeric_loop_warp(self, node):
+		assert node.body is not None
+		assert node.way_out is not None
+
+		self._set_restrictions(nodes.Block, {
+			node.index: nodes.Identifier,
+			node.controls: nodes.ExpressionsList
 		})
 
 	# ##
@@ -267,6 +342,6 @@ class Visitor(traverse.Visitor):
 		self.restrictions.pop()
 
 
-def validate(ast):
-	visitor = Visitor()
+def validate(ast, warped=True):
+	visitor = Visitor(warped)
 	traverse.traverse(visitor, ast)
