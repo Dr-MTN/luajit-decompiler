@@ -1024,9 +1024,10 @@ def _build_identifier(state, addr, slot, want_type):
 			node.name = info.name
 
 			for i in _PENDING_MAYBE_LOCALS_STACK[-1][slot]:
-				i.type = want_type
-				i.name = info.name
-				i._varinfo = info
+				if i._addr >= info.start_addr:
+					i.type = want_type
+					i.name = info.name
+					i._varinfo = info
 
 			_PENDING_MAYBE_LOCALS_STACK[-1][slot] = []
 		else:
