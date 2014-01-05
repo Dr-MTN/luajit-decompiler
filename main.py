@@ -29,7 +29,7 @@ import ljd.rawdump.parser
 import ljd.pseudoasm.writer
 import ljd.ast.builder
 import ljd.ast.validator
-import ljd.ast.mutator
+import ljd.ast.eliminator
 import ljd.lua.writer
 
 
@@ -85,7 +85,7 @@ def main():
 
 	ljd.ast.validator.validate(ast)
 
-	ast = ljd.ast.mutator.mutate(ast)
+	ljd.ast.eliminator.eliminate_slots(ast)
 
 	ljd.ast.validator.validate(ast)
 	# dump("AST", ast)
