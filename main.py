@@ -83,14 +83,14 @@ def main():
 
 	assert ast is not None
 
-	ljd.ast.validator.validate(ast)
+	ljd.ast.validator.validate(ast, warped=True)
 
 	ljd.ast.eliminator.eliminate_slots(ast)
 
-	ljd.ast.validator.validate(ast)
+	ljd.ast.validator.validate(ast, warped=True)
 	# dump("AST", ast)
 
-	ljd.lua.writer.write(sys.stdout, ast)
+	ljd.lua.writer.write(sys.stdout, ast, warped=True)
 
 	return 0
 
