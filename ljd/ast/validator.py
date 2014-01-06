@@ -246,7 +246,6 @@ class Visitor(traverse.Visitor):
 		assert node.true_target is not None
 		assert node.false_target is not None
 		assert node.true_target != node.false_target
-
 		assert node.true_target.index != node.false_target.index
 
 	def visit_iterator_warp(self, node):
@@ -279,19 +278,19 @@ class Visitor(traverse.Visitor):
 	def visit_while(self, node):
 		self._set_restrictions({
 			node.expression: EXPRESSION_TYPES,
-			node.block: nodes.StatementsList
+			node.statements: nodes.StatementsList
 		})
 
 	def visit_repeat_until(self, node):
 		self._set_restrictions({
 			node.expression: EXPRESSION_TYPES,
-			node.block: nodes.StatementsList
+			node.statements: nodes.StatementsList
 		})
 
 	def visit_numeric_for(self, node):
 		self._set_restrictions({
 			node.expressions: nodes.ExpressionsList,
-			node.block: nodes.StatementsList,
+			node.statements: nodes.StatementsList,
 			node.variable: VARIABLE_TYPES
 		})
 
@@ -299,7 +298,7 @@ class Visitor(traverse.Visitor):
 		self._set_restrictions({
 			node.expressions: nodes.ExpressionsList,
 			node.identifiers: nodes.IdentifiersList,
-			node.block: nodes.StatementsList
+			node.statements: nodes.StatementsList
 		})
 
 	# ##

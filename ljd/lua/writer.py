@@ -456,7 +456,7 @@ class Visitor(traverse.Visitor):
 		self._end_line()
 
 		self._start_block()
-		self._visit(node.block)
+		self._visit(node.statements)
 		self._end_block()
 
 		self._write("end")
@@ -469,7 +469,7 @@ class Visitor(traverse.Visitor):
 		self._end_line()
 
 		self._start_block()
-		self._visit(node.block)
+		self._visit(node.statements)
 		self._end_block()
 
 		self._write("until ")
@@ -491,7 +491,7 @@ class Visitor(traverse.Visitor):
 		self._end_line()
 
 		self._start_block()
-		self._visit(node.block)
+		self._visit(node.statements)
 		self._end_block()
 
 		self._write("end")
@@ -509,7 +509,7 @@ class Visitor(traverse.Visitor):
 		self._end_line()
 
 		self._start_block()
-		self._visit(node.block)
+		self._visit(node.statements)
 		self._end_block()
 
 		self._write("end")

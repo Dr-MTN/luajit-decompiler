@@ -391,13 +391,13 @@ class Break():
 class While():
 	def __init__(self):
 		self.expression = None
-		self.block = StatementsList()
+		self.statements = StatementsList()
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_while, self)
 
 		visitor._visit(self.expression)
-		visitor._visit(self.block)
+		visitor._visit(self.statements)
 
 		visitor._leave_node(visitor.leave_while, self)
 
@@ -405,12 +405,12 @@ class While():
 class RepeatUntil():
 	def __init__(self):
 		self.expression = None
-		self.block = StatementsList()
+		self.statements = StatementsList()
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_repeat_until, self)
 
-		visitor._visit(self.block)
+		visitor._visit(self.statements)
 		visitor._visit(self.expression)
 
 		visitor._leave_node(visitor.leave_repeat_until, self)
@@ -420,14 +420,14 @@ class NumericFor():
 	def __init__(self):
 		self.variable = None
 		self.expressions = ExpressionsList()
-		self.block = StatementsList()
+		self.statements = StatementsList()
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_numeric_for, self)
 
 		visitor._visit(self.variable)
 		visitor._visit(self.expressions)
-		visitor._visit(self.block)
+		visitor._visit(self.statements)
 
 		visitor._leave_node(visitor.leave_numeric_for, self)
 
@@ -436,14 +436,14 @@ class IteratorFor():
 	def __init__(self):
 		self.expressions = ExpressionsList()
 		self.identifiers = IdentifiersList()
-		self.block = StatementsList()
+		self.statements = StatementsList()
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_iterator_for, self)
 
 		visitor._visit(self.expressions)
 		visitor._visit(self.identifiers)
-		visitor._visit(self.block)
+		visitor._visit(self.statements)
 
 		visitor._leave_node(visitor.leave_iterator_for, self)
 
