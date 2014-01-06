@@ -502,9 +502,9 @@ def _build_numeric_loop_warp(state, addr, instruction):
 
 	warp.index = _build_destination(state, addr, base + 3)
 	warp.controls.contents = [
-		_build_variable(state, addr, base + 2),
-		_build_variable(state, addr, base + 1),
-		_build_variable(state, addr, base + 0)
+		_build_variable(state, addr, base + 0),  # start
+		_build_variable(state, addr, base + 1),  # limit
+		_build_variable(state, addr, base + 2)  # step
 	]
 
 	destination = get_jump_destination(addr, instruction)
