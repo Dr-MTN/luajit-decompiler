@@ -110,7 +110,7 @@ function logical()
 
 	print ("The same if as expression")
 
-	a = ((x == 6) and print("Is six!")) or print("Whatever else!")
+	local a = ((x == 6) and print("Is six!")) or print("Whatever else!")
 
 	print ("Nested if")
 
