@@ -170,10 +170,9 @@ class Visitor(traverse.Visitor):
 		elif node.type == nodes.BinaryOperator.T_MOD:
 			self._write("%")
 
-		elif node.type == nodes.BinaryOperator.T_POW:
-			self._write("^")
 		else:
-			self._write(" - ")
+			assert node.type == nodes.BinaryOperator.T_POW
+			self._write("^")
 
 		if right_parentheses:
 			self._write("(")
