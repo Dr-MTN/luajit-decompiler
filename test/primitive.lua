@@ -131,39 +131,177 @@ function logical()
 			print ("And it doesn't answer anything")
 		end
 	end
+end
 
-	y = 4
+function logical_expressions()
+	x = 0
+	y = 1
+	z = 2
+
+	print ("simple or expression")
+
+	b = x or y
+
+	print ("simple or not expression")
+
+	b = not x or y
+
+	print ("simple and expression")
+
+	b = x and y
+
+	print ("simple or expression with binary comparison")
+
+	b = (x < 100) or y
+
+	print ("simple and expression with binary comparison")
+
+	b = (x < 100) and y
+
+	print ("simple and expression with binary comparison and function call")
+
+	b = (x < 100) and print(y)
+
+	print ("simple and expression with double binary comparison")
+
+	b = (x < 100) and (y > 100)
+
+	print ("(and) or expression")
+
+	b = (x and y) or z
+
+	print ("(or) and expression")
+
+	b = (x or y) and z
+	print ("(and) and expression")
+
+	b = (x and y) and z
+
+	print ("(or) or expression")
+	b = (x or y) or z
+
+	print ("or (and) expression")
+
+	b = x or (y and x)
+
+	print ("and (or) expression")
+
+	b = x and (y or x)
+
+	print ("and (and) expression")
+
+	b = x and (y and x)
+
+	print ("or (or) expression")
+
+	b = x or (y or x)
+
+	print ("ond (or) and expression")
+
+	b = x and (y or x) and z
+
+	print ("or (and) or expression")
+
+	b = x or (y and x) or z
+
+	print ("and of two ors")
+
+	b = (x or z) and (y or z)
+
+	print ("or of two ands")
+
+	b = (x and z) or (y and z)
+
+	print ("and (or) and (or) expression with comparisons")
+
+	b = x < 100 and (y < 100 or x < 100) and (z < 100 or x < 100)
+
+	print ("and (or) and or expression with comparisons")
+
+	b = x < 100 and (y < 100 or x < 100) and z < 100 or x < 100
+
+	print ("or (and) or (and) expression with comparisons")
+
+	b = x < 100 or (y < 100 and x < 100) or (z < 100 and x < 100)
+
+	print ("and (and) and (and) expression with comparisons")
+
+	b = x < 100 and (y < 100 and x < 100) and (z < 100 and x < 100)
+
+	print ("or (or) or (or) expression with comparisons")
+
+	b = x < 100 or (y < 100 or x < 100) or (z < 100 or x < 100)
+
+	print ("4 and expression with comparisons")
+
+	b = x < 100 and y < 100 and x < 100 and z < 100 and x < 100
+
+	print ("4 or expression with comparisons")
+
+	b = x < 100 or y < 100 or x < 100 or z < 100 or x < 100
+
+	print ("and (or or) and (or or) expression with comparisons")
+
+	b = x < 100 and (y < 100 or x < 100 or z < 100)
+			and (y < 100 or x < 100 or z < 100)
+	print ("and (or and or) and (or and or) expression with comparisons")
+
+	b = x < 100 and (y < 100 or (x < 100 and x > 100) or z < 100)
+			and (y < 100 or (x < 100 and x > 100) or z < 100)
+
+	print ("or (and or and) or (and or and) expression with comparisons")
+
+	b = x < 100 or (y < 100 and (x < 100 or x > 100) and z < 100)
+			or (y < 100 and (x < 100 or x > 100) and z < 100)
+
+	print ("simple or and expression with binary comparison")
+
+	b = x or (y and (x < 100))
 
 	print ("normal logical expression")
 
-	b = (x and y) or ((y > 3) and (((x/2) < 1) or (y > 100))) and (x ~= 2)
+	b = (x and y) or ((y > 3) and (((x/2) < 1) or (y > 100)) and (x ~= 2))
 
-	--[[
-
+	-- Not supported yet =(
+--[[
 	print ("precalculated true expression")
 
 	c = true or (x and y) or true
 
-	print ("precalculated false expression")
+	--print ("precalculated false expression")
 
-	d = false and ((x and y) or true)
+	--d = false and ((x and y) or true)
 
-	print ("precalculated false expression with function")
+	--print ("precalculated false expression with function")
 
-	e = error() and false and ((x and y) or true)
+	--e = error() and false and ((x and y) or true)
 
-	print ("precalculated? false expression with variable")
+	--print ("precalculated? false expression with variable")
 
-	local z = false
+	--local z = false
 
-	f = z and ((x and y) or true)
+	--f = z and ((x and y) or true)
 
-	print ("precalculated false expression with nil")
+	--print ("precalculated false expression with nil")
 
-	f = nil and ((x and y) or true)
+	--f = nil and ((x and y) or true)
+	
+	print("if with expression")
+--]]
 
+--[[
+--	Oh crap...
+
+	if x > 300 and y < 300 then
+		print ("Many things!")
+		print ("Hooray!")
+
+		if x > 100 and y < 100 then
+			print ("Crap...")
+		end
+	end
+]]--
 	print(x, y, b, c, d, e, f)
-	]]--
 end
 
 function functions()
