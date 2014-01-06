@@ -432,8 +432,8 @@ def _finalize_iterator_warp(state, addr, instruction):
 	assert isinstance(warp, nodes.IteratorWarp)
 
 	destination = get_jump_destination(addr, instruction)
-	warp.body = state._warp_in_block(destination)
-	warp.way_out = state._warp_in_block(addr + 1)
+	warp.way_out = state._warp_in_block(destination)
+	warp.body = state._warp_in_block(addr + 1)
 
 
 def _build_call(state, addr, instruction):
