@@ -28,14 +28,7 @@ class TypeRestriction():
 			.format(type(node), typespec)
 
 
-WARPED_STATEMENT_TYPES = (
-	nodes.Assignment,
-	nodes.FunctionDefinition,
-	nodes.FunctionCall,
-	nodes.Return
-)
-
-UNWARPED_STATEMENT_TYPES = (
+STATEMENT_TYPES = (
 	nodes.Assignment,
 	nodes.If,
 	nodes.IteratorFor,
@@ -93,11 +86,6 @@ class Visitor(traverse.Visitor):
 			node.arguments: nodes.IdentifiersList,
 			node.statements: nodes.StatementsList
 		})
-
-		if self.warped:
-			assert len(node.statements.contents) == 0
-		else:
-			assert len(node.blocks) == 0
 
 	# ##
 
@@ -164,9 +152,9 @@ class Visitor(traverse.Visitor):
 
 	def visit_statements_list(self, node):
 		if self.warped:
-			types = WARPED_STATEMENT_TYPES
+			types = nodes.Block
 		else:
-			types = UNWARPED_STATEMENT_TYPES
+			types = STATEMENT_TYPES
 
 		self._set_restrictions(types)
 
@@ -232,9 +220,8 @@ class Visitor(traverse.Visitor):
 	# ##
 
 	def visit_block(self, node):
-		self._set_restrictions({
-			node.warp: WARP_TYPES,
-			node.statements: nodes.StatementsList
+		self._set_restrictions(STATEMENT_TYPES, {
+			node.warp: WARP_TYPES
 		})
 
 		assert node.first_address >= 0			\

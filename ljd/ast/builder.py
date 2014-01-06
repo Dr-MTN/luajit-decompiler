@@ -46,7 +46,8 @@ def _build_function_definition(prototype):
 	if prototype.flags.is_variadic:
 		node.arguments.contents.append(nodes.Vararg())
 
-	node.blocks = _build_function_blocks(state, prototype.instructions)
+	instructions = prototype.instructions
+	node.statements.contents = _build_function_blocks(state, instructions)
 
 	_PENDING_MAYBE_LOCALS_STACK.pop()
 
@@ -89,7 +90,7 @@ def _build_function_blocks(state, instructions):
 				setattr(statement, "_addr", addr)
 				setattr(statement, "_line", line)
 
-				block.statements.contents.append(statement)
+				block.contents.append(statement)
 
 			addr += 1
 

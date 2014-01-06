@@ -64,10 +64,7 @@ class Visitor(traverse.Visitor):
 
 		self._start_block()
 
-		if self.warped:
-			self._visit_list(node.blocks)
-		else:
-			self._visit(node.statements)
+		self._visit(node.statements)
 
 		self._end_block()
 
@@ -344,7 +341,7 @@ class Visitor(traverse.Visitor):
 
 		self._start_block()
 
-		self._visit(node.statements)
+		self._visit_list(node.contents)
 
 		self._end_block()
 
@@ -574,10 +571,7 @@ def write(fd, ast, warped=True):
 
 	visitor = Visitor(warped)
 
-	if warped:
-		traverse.traverse(visitor, ast.blocks)
-	else:
-		traverse.traverse(visitor, ast.statements)
+	traverse.traverse(visitor, ast.statements)
 
 	_process_queue(fd, visitor.print_queue)
 

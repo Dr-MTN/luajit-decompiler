@@ -11,14 +11,12 @@ class FunctionDefinition():
 		self.arguments = IdentifiersList()
 		self.name = None
 		self.statements = StatementsList()
-		self.blocks = []
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_function_definition, self)
 
 		visitor._visit(self.arguments)
 		visitor._visit(self.statements)
-		visitor._visit_list(self.blocks)
 
 		visitor._leave_node(visitor.leave_function_definition, self)
 
@@ -280,7 +278,7 @@ class ElseIf():
 class Block():
 	def __init__(self):
 		self.warp = None
-		self.statements = StatementsList()
+		self.contents = []
 		self.first_address = 0
 		self.last_address = 0
 		self.warpins_count = 0
@@ -288,7 +286,7 @@ class Block():
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_block, self)
 
-		visitor._visit(self.statements)
+		visitor._visit_list(self.contents)
 		visitor._visit(self.warp)
 
 		visitor._leave_node(visitor.leave_block, self)

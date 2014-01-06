@@ -126,10 +126,8 @@ class EliminatorVisitor(traverse.Visitor):
 				setattr(cmd.dst_parent, cmd.dst_attribute,
 							cmd.src)
 
-		statements = node.statements
 		mask = self._states[-1]._invalide_statements
-		statements.contents = [x for x in statements.contents	\
-					if x not in mask]
+		node.contents = [x for x in node.contents if x not in mask]
 
 	# ##
 
