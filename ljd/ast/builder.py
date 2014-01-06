@@ -841,11 +841,22 @@ def _build_identifier(state, addr, slot, want_type):
 			node.type = want_type
 			node.name = info.name
 
+			#
+			# Do NOT check the address scope here.
+			# All this stuff is done only because the address scope
+			# is unreliable, so we would rather rely on our
+			# assignments processing clearing up the queue (by
+			# calling the _build_destination).
+			#
+			# If there is a problem with something being marked as
+			# local when it shouldn't be - that's probably due to
+			# incorrect order of the _build_destination and
+			# _build_variable calls. Somewhere else.
+			#
 			for i in _PENDING_MAYBE_LOCALS_STACK[-1][slot]:
-				if i._addr >= info.start_addr:
-					i.type = want_type
-					i.name = info.name
-					i._varinfo = info
+				i.type = want_type
+				i.name = info.name
+				i._varinfo = info
 
 			_PENDING_MAYBE_LOCALS_STACK[-1][slot] = []
 		else:
