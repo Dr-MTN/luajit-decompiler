@@ -438,6 +438,8 @@ def _finalize_iterator_warp(state, addr, instruction):
 
 def _build_call(state, addr, instruction):
 	call = nodes.FunctionCall()
+	call.function = _build_variable(state, addr, instruction.A)
+	call.arguments.contents = _build_call_arguments(state, addr, instruction)
 
 	if instruction.opcode <= ins.CALL.opcode:
 		if instruction.B == 0:
@@ -456,10 +458,6 @@ def _build_call(state, addr, instruction):
 		assert instruction.opcode <= ins.CALLT.opcode
 		node = nodes.Return()
 		node.returns.contents.append(call)
-
-	call.function = _build_variable(state, addr, instruction.A)
-
-	call.arguments.contents = _build_call_arguments(state, addr, instruction)
 
 	return node
 
