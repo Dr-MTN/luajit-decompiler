@@ -47,8 +47,16 @@ def _swap_iterator_loop_boundaries(instructions):
 		patched.append(copy.deepcopy(instructions[destination]))
 		patched.append(copy.deepcopy(instructions[destination + 1]))
 
-		# Append the in-middle code
-		patched += instructions[addr + 1:destination]
+		# Append the in-middle code, but shift (and copy) all JMPs to
+		# outside (read: breaks) by -1 as we moved the body by one
+		# instruction down
+		#
+		# We don't bother about JMPs after the body as they may jump
+		# backwards only to a location before the loop and an overall
+		# loop instructions count hadn't changed
+		#
+		body = instructions[addr + 1:destination]
+		patched += _shift_jumps(addr + 1, body, destination + 1, -1)
 
 		# Append a COPY of the JMP - we are going to patch the
 		# destination and we don't want to touch the original
@@ -178,3 +186,19 @@ def _calculate_slots_init_address(addr, instructions, slots):
 	return addr
 
 
+def _shift_jumps(base, instructions, threshold, shift):
+	result = instructions[:]
+
+	for i, instruction in enumerate(instructions):
+		opcode = instruction.opcode
+
+		if opcode not in (ins.JMP.opcode, ins.UCLO.opcode):
+			continue
+
+		destination = get_jump_destination(base + i, instruction)
+
+		if destination > threshold:
+			result[i] = copy.deepcopy(instruction)
+			result[i].CD += shift
+
+	return result
