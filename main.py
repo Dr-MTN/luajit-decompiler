@@ -30,6 +30,7 @@ import ljd.pseudoasm.writer
 import ljd.ast.builder
 import ljd.ast.validator
 import ljd.ast.eliminator
+import ljd.ast.unwarper
 import ljd.lua.writer
 
 
@@ -88,7 +89,10 @@ def main():
 	ljd.ast.eliminator.eliminate_slots(ast)
 
 	ljd.ast.validator.validate(ast, warped=True)
-	# dump("AST", ast)
+
+	ljd.ast.unwarper.unwarp(ast)
+
+	# ljd.ast.validator.validate(ast, warped=False)
 
 	ljd.lua.writer.write(sys.stdout, ast, warped=True)
 
