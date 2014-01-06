@@ -240,8 +240,8 @@ class Visitor(traverse.Visitor):
 		assert node.first_address >= 0			\
 			and node.first_address <= node.last_address
 
-		# if false
-		# assert node.warpsin_count > 0
+		# if false produce a statements without warps in
+		# assert node.warpins_count > 0
 
 	def visit_unconditional_warp(self, node):
 		assert node.target is not None

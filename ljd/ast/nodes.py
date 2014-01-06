@@ -283,7 +283,7 @@ class Block():
 		self.statements = StatementsList()
 		self.first_address = 0
 		self.last_address = 0
-		self.warpsin_count = 0
+		self.warpins_count = 0
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_block, self)

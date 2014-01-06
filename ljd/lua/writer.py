@@ -338,7 +338,7 @@ class Visitor(traverse.Visitor):
 		self._write("--- BLOCK {0} {1}-{2}, warpins: {3} ---",
 					node.__hash__(),
 					node.first_address, node.last_address,
-					node.warpsin_count)
+					node.warpins_count)
 
 		self._end_line()
 

@@ -21,7 +21,7 @@ class _State():
 
 	def _warp_in_block(self, addr):
 		block = self.block_starts[addr]
-		block.warpsin_count += 1
+		block.warpins_count += 1
 		return block
 
 
@@ -72,7 +72,7 @@ def _build_function_blocks(state, instructions):
 	instructions = ljd.bytecode.patches.apply(instructions)
 	_blockenize(state, instructions)
 
-	state.blocks[0].warpsin_count = 1
+	state.blocks[0].warpins_count = 1
 
 	for block in state.blocks:
 		addr = block.first_address
