@@ -260,8 +260,9 @@ def _finalize_conditional_warp(state, addr, instruction):
 
 	destination = get_jump_destination(addr, instruction)
 
-	warp.true_target = state._warp_in_block(destination)
-	warp.false_target = state._warp_in_block(addr + 1)
+	# A condition is inverted during the preparation phase above
+	warp.false_target = state._warp_in_block(destination)
+	warp.true_target = state._warp_in_block(addr + 1)
 
 
 def _build_copy_if_statement(state, addr, instruction):
