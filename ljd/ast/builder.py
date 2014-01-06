@@ -797,7 +797,8 @@ def _build_unary_expression(state, addr, instruction):
 		operator.type = nodes.UnaryOperator.T_NOT
 	elif opcode == ins.UNM.opcode:
 		operator.type = nodes.UnaryOperator.T_MINUS
-	elif opcode == ins.LEN.opcode:
+	else:
+		assert opcode == ins.LEN.opcode
 		operator.type = nodes.UnaryOperator.T_LENGTH_OPERATOR
 
 	return operator
