@@ -1,7 +1,10 @@
 import collections
+import copy
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
+
+binop = nodes.BinaryOperator
 
 
 # ##
@@ -93,9 +96,8 @@ def _gather_statements_lists(node):
 # If the undefined slot will remain undefined we will traverse the first
 # instruction of the branching end block - there should be a reference the slot
 #
-# If there is no such reference or the slot is revealed to be a local variable,
-# we will create a new assignment and insert it as a first instruction to the
-# branching end block
+# In either case we just put a new assignment. There will be the second slot
+# elimination phase after this phase
 #
 def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 	boundaries = []
@@ -148,6 +150,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 		elif _expression_requirements_fulfiled(body):
 			_unwarp_logical_expression(start, end, body,
 							current_topmost_end)
+			processed = True
 		else:
 			_unwarp_if_statement(start, end, body,
 							current_topmost_end)
@@ -219,8 +222,361 @@ def _expression_requirements_fulfiled(body):
 	return True
 
 
+#
+# A terminator: the true or the false
+#
+# An topmost expression end: A terminator or the next block after the
+# 				expression
+#
+# A subexpression: a false target points not to an end
+# 			but to the first block of the next component at same
+# 			level, which becomes the new end for the subexpression
+#
+# A subexpression end: a false target points to the upper level end
+# 			(the expression end)
+#
+# A terminal clause: false target points to a terminator
+#
+# A terminal clause condition will be inverted if any of:
+# 1. the false target points to the true
+# 2. the false target points to the end and the condition is a "not" expression
+#
+# The "or" condition is inverted.
+#
+# The "and" condition is not inverted.
+#
+# If component is a terminal clause, then the true target points to the next
+# component. Otherwise the true target points to the subexpression.
+#
+# Operators between topmost components are detected from left to right as
+# 	follows:
+# 1. If the component is a terminal clause, then the operator is guessed from
+# 	the condition negation
+#
+# 2. If component is a subexpression, then operator to the next component is
+# 	guessed from the last block in the subexpression (the subexpression end),
+# 	which must be a terminal clause
+#
+# Operators between components in the subexpressions are negative to the
+# 	topmost operator to the right (if there is no operator to the right,
+# 	there should be no subexpression)
+#
+# So the algorithm is:
+# 1. Build a list of topmost components.
+# 2. Setup operators between the topmost components.
+# 3. Compile subexpressions recusively negating operator each time.
+# 4. Pray for the best
+#
 def _unwarp_logical_expression(start, end, body, topmost_end):
-	pass
+	slot = None
+
+	# Find the last occurence of the slot - it could be a local variable at
+	# the last occurance
+	for block in reversed(body):
+		if len(block.contents) != 1:
+			continue
+
+		slot = block.contents[0].destinations.contents[0]
+		break
+
+	assert slot is not None
+
+	true, false, body = _get_terminators(body)
+	expression = _compile_topmost_logical_expression(start, end, body,
+								true, false)
+
+	dst = copy.deepcopy(slot)
+
+	assignment = nodes.Assignment()
+	assignment.destinations.contents.append(dst)
+	assignment.expressions.contents.append(expression)
+
+	start.contents.append(assignment)
+
+
+def _compile_topmost_logical_expression(start, end, body, true, false):
+	body.insert(0, start)
+
+	parts = []
+
+	i = 0
+	while i < len(body):
+		block = body[i]
+		warp = block.warp
+
+		if isinstance(warp, nodes.UnconditionalWarp):
+			assert warp.target == end
+			assignment = block.contents[0]
+
+			assert len(assignment.expressions.contents) == 1
+
+			dst = assignment.expressions.contents[0]
+
+			parts.append(dst)
+
+			break
+
+		if _is_double_terminal_clause(warp, true, false, end):
+			if _is_negative(warp, true, false, end):
+				component = _negate(warp.condition)
+			else:
+				component = warp.condition
+
+			parts.append(component)
+
+			break
+
+		if _is_terminal_clause(warp, true, false, end):
+			if _is_negative(warp, true, false, end):
+				component = _negate(warp.condition)
+				operator = binop.T_LOGICAL_OR
+			else:
+				component = warp.condition
+				operator = binop.T_LOGICAL_AND
+
+			parts.append(component)
+			parts.append(operator)
+			i += 1
+			continue
+
+		assert warp.false_target.index < end.index
+
+		next_component = body.index(warp.false_target)
+		subexpression = body[i:next_component]
+
+		last = subexpression[-1]
+
+		assert isinstance(last.warp, nodes.ConditionalWarp)
+		assert _is_terminal_clause(last.warp, true, false, end)
+
+		if _is_negative(last.warp, true, false, end):
+			operator = binop.T_LOGICAL_OR
+		else:
+			operator = binop.T_LOGICAL_AND
+
+		component = _compile_subexpression(subexpression,
+							_opposite(operator),
+							warp.false_target)
+
+		parts.append(component)
+		parts.append(operator)
+
+		i = next_component
+
+	assert len(parts) > 0
+
+	parts = _make_explicit_subexpressions(parts)
+	return _assemble_expression(parts)
+
+
+def _compile_subexpression(body, operator, end):
+	i = 0
+
+	parts = []
+
+	while i < len(body):
+		block = body[i]
+		warp = block.warp
+
+		assert isinstance(warp, nodes.ConditionalWarp)
+
+		if warp.false_target == end:
+			if operator == binop.T_LOGICAL_OR:
+				component = _negate(warp.condition)
+			else:
+				component = warp.condition
+
+			parts.append(component)
+			parts.append(operator)
+			i += 1
+			continue
+		elif warp.false_target.index > end.index:
+			assert i == len(body) - 1
+
+			if operator == binop.T_LOGICAL_OR:
+				component = warp.condition
+			else:
+				component = _negate(warp.condition)
+
+			parts.append(component)
+
+			break
+
+		assert warp.false_target.index < end.index
+
+		next_component = body.index(warp.false_target)
+		subexpression = body[i:next_component]
+
+		last = subexpression[-1]
+
+		assert isinstance(last.warp, nodes.ConditionalWarp)
+		assert last.warp.false_target == end
+
+		component = _compile_subexpression(subexpression,
+							_opposite(operator),
+							warp.false_target)
+
+		parts.append(component)
+		parts.append(operator)
+
+		i = next_component
+
+	assert len(parts) > 0
+
+	return parts
+
+
+def _opposite(operator):
+	if operator == binop.T_LOGICAL_AND:
+		return binop.T_LOGICAL_OR
+	else:
+		assert operator == binop.T_LOGICAL_OR
+		return binop.T_LOGICAL_AND
+
+
+def _is_terminal_clause(warp, true, false, end):
+	return warp.false_target == true	\
+		or warp.false_target == false	\
+		or warp.false_target == end
+
+
+def _is_double_terminal_clause(warp, true, false, end):
+	return _is_terminal_clause(warp, true, false, end)	\
+		and (warp.true_target == true			\
+			or warp.true_target == false		\
+			or warp.true_target == end)
+
+
+def _is_negative(warp, true, false, end):
+	if warp.false_target == true:
+		return True
+	elif warp.false_target == end:
+		assert not isinstance(warp.condition, nodes.BinaryOperator)
+
+		if not isinstance(warp.condition, nodes.UnaryOperator):
+			return False
+
+		return warp.condition.type == nodes.UnaryOperator.T_NOT
+
+	return False
+
+
+_NEGATION_MAP = [None] * 100
+
+_NEGATION_MAP[binop.T_LESS_THEN] = binop.T_GREATER_OR_EQUAL
+_NEGATION_MAP[binop.T_GREATER_THEN] = binop.T_LESS_OR_EQUAL
+_NEGATION_MAP[binop.T_LESS_OR_EQUAL] = binop.T_GREATER_THEN
+_NEGATION_MAP[binop.T_GREATER_OR_EQUAL] = binop.T_LESS_THEN
+
+_NEGATION_MAP[binop.T_NOT_EQUAL] = binop.T_EQUAL
+_NEGATION_MAP[binop.T_EQUAL] = binop.T_NOT_EQUAL
+
+
+def _negate(expression):
+	if isinstance(expression, nodes.UnaryOperator):
+		return expression.operand
+
+	if not isinstance(expression, nodes.BinaryOperator):
+		node = nodes.UnaryOperator()
+		node.type = nodes.UnaryOperator.T_NOT
+		node.operand = expression
+
+		return node
+
+	# Just in case
+	expression = copy.deepcopy(expression)
+
+	new_type = _NEGATION_MAP[expression.type]
+
+	assert new_type is not None
+
+	expression.type = new_type
+
+	return expression
+
+
+def _get_terminators(body):
+	last = body[-1]
+
+	if len(last.contents) == 0:
+		return None, None, body
+
+	assignment = last.contents[0]
+	src = assignment.expressions.contents[0]
+
+	if not isinstance(src, nodes.Primitive) or src.type != src.T_TRUE:
+		return None, None, body
+
+	prev = body[-2]
+
+	assert len(prev.contents) == 1
+	src = prev.contents[0].expressions.contents[0]
+
+	assert isinstance(src, nodes.Primitive) and src.type == src.T_FALSE
+
+	return last, prev, body[:-2]
+
+
+def _assemble_expression(parts):
+	if not isinstance(parts, list):
+		return parts
+
+	node = nodes.BinaryOperator()
+	node.left = _assemble_expression(parts[-3])
+	node.type = parts[-2]
+	node.right = _assemble_expression(parts[-1])
+
+	i = len(parts) - 4
+
+	while i > 0:
+		operator = parts[i]
+		component = parts[i - 1]
+
+		upper_node = nodes.BinaryOperator()
+		upper_node.right = node
+		upper_node.left = _assemble_expression(component)
+
+		upper_node.type = operator
+
+		node = upper_node
+
+		i -= 2
+
+	return node
+
+
+# Split the topmost expression into smaller subexpressions at each
+# operator change to simplify the assembly phase
+def _make_explicit_subexpressions(parts):
+	patched = []
+
+	i = 0
+
+	last_operator = parts[1]
+	subexpression_start = -1
+
+	while i < len(parts) - 1:
+		component = parts[i]
+		operator = parts[i + 1]
+
+		if operator < last_operator:
+			subexpression_start = i
+			last_operator = operator
+		elif subexpression_start > 0:
+			if operator > last_operator:
+				patched.append(parts[subexpression_start:i])
+				subexpression_start = -1
+		else:
+			patched += [component, operator]
+
+		i += 2
+
+	if subexpression_start >= 0:
+		patched.append(parts[subexpression_start:])
+	else:
+		patched.append(parts[-1])
+
+	return patched
 
 
 def _unwarp_if_statement(start, end, body, topmost_end):
@@ -452,63 +808,26 @@ def _unwarp_breaks(start, blocks, next_block):
 
 
 #
-# The depth-first search for loops.
+# Thanks to the patching phase we don't need any complex checks here.
 #
-# We don't need a set or anything, because blocks are ordered and anything
-# looping should jump backwards
-#
-# And it is impossible to have a branched loop, i.e. there is always an only
-# "end" point (a jump back) to a "start" point
-#
-# As we don't care about contents, just return a starting and ending blocks for
-# an each loop detected
+# Just search for any negative jump - that's a loop and what it's jumping to is
+# a loop start.
 #
 def _find_all_loops(blocks):
-	stack = collections.deque()
+	# Duplicates are NOT possible
+	loops = []
 
-	first = blocks[0]
-
-	stack.append(first)
-
-	# Duplicates are possible
-	loops = set()
-
-	while len(stack) > 0:
-		block = stack.pop()
-
+	for block in blocks:
 		warp = block.warp
 
 		if isinstance(warp, nodes.UnconditionalWarp):
-			if warp.target.index < block.index:
-				loops.add((warp.target, block))
-			else:
-				assert warp.target.index != block.index
-				stack.append(warp.target)
-
-			# A special case for an unconditional "break" or
-			# if false'ed loops
-			next_block = blocks[block.index + 1]
-			if next_block.warpins_count == 0:
-				stack.append(next_block)
+			if warp.target.index <= block.index:
+				loops.append((warp.target, block))
 		elif isinstance(warp, nodes.ConditionalWarp):
 			if warp.true_target.index <= block.index:
-				loops.add((warp.true_target, block))
-			else:
-				stack.append(warp.true_target)
+				loops.append((warp.true_target, block))
 
 			if warp.false_target.index <= block.index:
-				loops.add((warp.false_target, block))
-			else:
-				stack.append(warp.false_target)
-		elif isinstance(warp, (nodes.IteratorWarp, nodes.NumericLoopWarp)):
-			stack.append(warp.body)
-			stack.append(warp.way_out)
+				loops.append((warp.false_target, block))
 
-			# Jump back will be in the last body block
-			# We can guess it from the index, but why bother?
-			assert warp.body.index > block.index
-			assert warp.way_out.index > block.index
-		else:
-			assert isinstance(warp, nodes.EndWarp)
-
-	return sorted(list(loops), key=lambda x: x[0].index)
+	return sorted(loops, key=lambda x: x[0].index)
