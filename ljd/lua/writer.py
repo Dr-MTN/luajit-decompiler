@@ -332,8 +332,8 @@ class Visitor(traverse.Visitor):
 	# ##
 
 	def visit_block(self, node):
-		self._write("--- BLOCK {0} {1}-{2}, warpins: {3} ---",
-					node.__hash__(),
+		self._write("--- BLOCK #{0} {1}-{2}, warpins: {3} ---",
+					node.index,
 					node.first_address, node.last_address,
 					node.warpins_count)
 
@@ -345,7 +345,7 @@ class Visitor(traverse.Visitor):
 
 		self._end_block()
 
-		self._write("--- END OF BLOCK {0} ---", node.__hash__())
+		self._write("--- END OF BLOCK #{0} ---", node.index)
 
 		self._end_line()
 
@@ -361,7 +361,7 @@ class Visitor(traverse.Visitor):
 		elif node.type == nodes.UnconditionalWarp.T_JUMP:
 			self._write("UNCONDITIONAL JUMP")
 
-		self._write("; TARGET {0}", node.target.__hash__())
+		self._write("; TARGET BLOCK #{0}", node.target.index)
 
 		self._end_line()
 
@@ -375,14 +375,7 @@ class Visitor(traverse.Visitor):
 
 		self._start_block()
 
-		self._write("JUMP ")
-
-		if node.type == nodes.ConditionalWarp.T_NEGATIVE_JUMP:
-			self._write("BEHIND")
-		else:
-			self._write("AHEAD")
-
-		self._write(" TO BLOCK {0}", node.true_target.__hash__())
+		self._write("JUMP TO BLOCK #{0}", node.true_target.index)
 
 		self._end_block()
 
@@ -392,7 +385,7 @@ class Visitor(traverse.Visitor):
 
 		self._start_block()
 
-		self._write("JUMP TO BLOCK {0}", node.false_target.__hash__())
+		self._write("JUMP TO BLOCK #{0}", node.false_target.index)
 
 		self._end_block()
 
@@ -410,10 +403,13 @@ class Visitor(traverse.Visitor):
 
 		self._visit(node.controls)
 
-		self._write(" LOOP BLOCK {0}", node.body.__hash__())
 		self._end_line()
+		self._write("LOOP BLOCK #{0}", node.body.index)
 
-		self._write("GO OUT TO BLOCK {0}", node.way_out.__hash__())
+		self._end_line()
+		self._write("GO OUT TO BLOCK #{0}", node.way_out.index)
+
+		self._end_line()
 
 	def visit_numeric_loop_warp(self, node):
 		self._write("for ")
@@ -424,10 +420,11 @@ class Visitor(traverse.Visitor):
 
 		self._visit(node.controls)
 
-		self._write(" LOOP BLOCK {0}", node.body.__hash__())
 		self._end_line()
+		self._write("LOOP BLOCK #{0}", node.body.index)
 
-		self._write("GO OUT TO BLOCK {0}", node.way_out.__hash__())
+		self._end_line()
+		self._write("GO OUT TO BLOCK #{0}", node.way_out.index)
 
 	# ##
 

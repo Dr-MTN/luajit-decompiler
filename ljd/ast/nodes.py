@@ -277,6 +277,7 @@ class ElseIf():
 
 class Block():
 	def __init__(self):
+		self.index = -1
 		self.warp = None
 		self.contents = []
 		self.first_address = 0
@@ -309,11 +310,7 @@ class UnconditionalWarp():
 
 
 class ConditionalWarp():
-	T_POSITIVE_JUMP = 0
-	T_NEGATIVE_JUMP = 1
-
 	def __init__(self):
-		self.type = -1
 		self.condition = None
 		self.true_target = None
 		self.false_target = None

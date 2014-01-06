@@ -250,11 +250,6 @@ def _finalize_conditional_warp(state, addr, instruction):
 
 	destination = get_jump_destination(addr, instruction)
 
-	if destination < addr:
-		warp.type = nodes.ConditionalWarp.T_NEGATIVE_JUMP
-	else:
-		warp.type = nodes.ConditionalWarp.T_POSITIVE_JUMP
-
 	warp.true_target = state._warp_in_block(destination)
 	warp.false_target = state._warp_in_block(addr + 1)
 

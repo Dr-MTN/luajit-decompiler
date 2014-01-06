@@ -224,6 +224,8 @@ class Visitor(traverse.Visitor):
 			node.warp: WARP_TYPES
 		})
 
+		assert node.index >= 0
+
 		assert node.first_address >= 0			\
 			and node.first_address <= node.last_address
 
@@ -234,8 +236,7 @@ class Visitor(traverse.Visitor):
 		assert node.target is not None
 
 		assert node.type == nodes.UnconditionalWarp.T_JUMP	\
-			or node.type == nodes.UnconditionalWarp.T_FLOW	\
-			or node.type == nodes.UnconditionalWarp.T_LOOP
+			or node.type == nodes.UnconditionalWarp.T_FLOW
 
 	def visit_conditional_warp(self, node):
 		self._set_restrictions({
@@ -244,13 +245,15 @@ class Visitor(traverse.Visitor):
 
 		assert node.true_target is not None
 		assert node.false_target is not None
+		assert node.true_target != node.false_target
 
-		assert node.type == nodes.ConditionalWarp.T_POSITIVE_JUMP	\
-			or node.type == nodes.ConditionalWarp.T_NEGATIVE_JUMP
+		assert node.true_target.index != node.false_target.index
 
 	def visit_iterator_warp(self, node):
 		assert node.body is not None
 		assert node.way_out is not None
+
+		assert node.way_out.index > node.body.index
 
 		self._set_restrictions(nodes.Block, {
 			node.variables: nodes.VariablesList,
