@@ -46,7 +46,8 @@ def _build_function_definition(prototype):
 	if prototype.flags.is_variadic:
 		node.arguments.contents.append(nodes.Vararg())
 
-	instructions = prototype.instructions
+	instructions = ljd.bytecode.patches.apply(prototype.arguments_count,
+							prototype.instructions)
 	node.statements.contents = _build_function_blocks(state, instructions)
 
 	_PENDING_MAYBE_LOCALS_STACK.pop()
@@ -70,7 +71,6 @@ def _build_function_arguments(state, prototype):
 
 
 def _build_function_blocks(state, instructions):
-	instructions = ljd.bytecode.patches.apply(instructions)
 	_blockenize(state, instructions)
 
 	state.blocks[0].warpins_count = 1

@@ -29,7 +29,9 @@ def write(writer, prototype):
 	# skip the first function header
 	addr = 1
 
-	patched = ljd.bytecode.patches.apply(prototype.instructions)
+	patched = ljd.bytecode.patches.apply(prototype.arguments_count,
+						prototype.instructions)
+	# patched = prototype.instructions
 
 	writer = _State(writer, prototype, patched)
 

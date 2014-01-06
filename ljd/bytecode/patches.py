@@ -4,10 +4,12 @@ import ljd.bytecode.instructions as ins
 from ljd.bytecode.helpers import get_jump_destination, set_jump_destination
 
 
-def apply(instructions):
+def apply(args_count, instructions):
+	known_slots = set(range(0, args_count))
+
 	step0 = instructions
-	step1 = _swap_iterator_loop_boundaries(step0)
-	step2 = _replace_forl_with_jump_to_init(step1)
+	step1 = _swap_iterator_loop_boundaries(known_slots, step0)
+	step2 = _replace_forl_with_jump_to_init(known_slots, step1)
 	return step2
 
 
@@ -20,18 +22,24 @@ def apply(instructions):
 # We have to keep both ITERC/N and ITERL instructions because we can put only
 # so much information into a single instruction
 #
-def _swap_iterator_loop_boundaries(instructions):
+def _swap_iterator_loop_boundaries(known_slots, instructions):
 	patched = []
 
 	last_swap = 0
 
-	for addr, instruction in enumerate(instructions):
+	addr = 0
+	while addr < len(instructions) - 1:
+		addr += 1
+		instruction = instructions[addr]
 		opcode = instruction.opcode
 
 		if opcode != ins.JMP.opcode and opcode != ins.ISNEXT.opcode:
 			continue
 
 		destination = get_jump_destination(addr, instruction)
+
+		if destination >= len(instructions):
+			continue
 
 		target = instructions[destination]
 
@@ -58,6 +66,11 @@ def _swap_iterator_loop_boundaries(instructions):
 		body = instructions[addr + 1:destination]
 		patched += _shift_jumps(addr + 1, body, destination + 1, -1)
 
+		controls = set(range(target.A, target.A + target.B - 1))
+		subslots = known_slots | controls
+
+		body = _swap_iterator_loop_boundaries(subslots, body)
+
 		# Append a COPY of the JMP - we are going to patch the
 		# destination and we don't want to touch the original
 		# instructions
@@ -72,7 +85,8 @@ def _swap_iterator_loop_boundaries(instructions):
 		jmp = patched[destination + 1]
 		assert jmp.opcode == instruction.opcode
 
-		init_addr = _calculate_iterator_init_begin(addr, patched)
+		init_addr = _calculate_iterator_init_begin(known_slots,
+								addr, patched)
 		set_jump_destination(destination + 1, jmp, init_addr)
 
 		# Point the ITERL to a after-JMP location
@@ -87,6 +101,8 @@ def _swap_iterator_loop_boundaries(instructions):
 		iterl.CD = -iterl.CD - 1
 		iterl.description = iterl.description.replace("!=", "==")
 
+		addr = destination
+
 	patched += instructions[last_swap:]
 
 	return patched
@@ -100,7 +116,7 @@ def _swap_iterator_loop_boundaries(instructions):
 # That makes no sense for the runtime, but who cares - that will simplify a
 # task of control flow rebuild significantly
 #
-def _replace_forl_with_jump_to_init(instructions):
+def _replace_forl_with_jump_to_init(known_slots, instructions):
 	# Copy all the contents (as references) in a single chunk to speed up
 	# the process
 	patched = instructions[:]
@@ -116,7 +132,8 @@ def _replace_forl_with_jump_to_init(instructions):
 		destination = get_jump_destination(addr, instruction)
 
 		fori_addr = destination - 1
-		init_addr = _calculate_numeric_init_begin(fori_addr, patched)
+		init_addr = _calculate_numeric_init_begin(known_slots,
+							fori_addr, patched)
 
 		jmp = ins.JMP()
 		# Set anything, we don't care about correctness of the
@@ -131,25 +148,27 @@ def _replace_forl_with_jump_to_init(instructions):
 	return patched
 
 
-def _calculate_iterator_init_begin(iterc_addr, instructions):
+def _calculate_iterator_init_begin(known_slots, iterc_addr, instructions):
 	iterc = instructions[iterc_addr]
 	assert iterc.opcode in (ins.ITERC.opcode, ins.ITERN.opcode)
 
 	slots = set((iterc.A - 1, iterc.A - 2, iterc.A - 3))
 
-	return _calculate_slots_init_address(iterc_addr, instructions, slots)
+	return _calculate_slots_init_address(iterc_addr, instructions,
+						known_slots, slots)
 
 
-def _calculate_numeric_init_begin(fori_addr, instructions):
+def _calculate_numeric_init_begin(known_slots, fori_addr, instructions):
 	fori = instructions[fori_addr]
 	assert fori.opcode in (ins.FORI.opcode, ins.JFORI.opcode)
 
 	slots = set((fori.A, fori.A + 1, fori.A + 2))
 
-	return _calculate_slots_init_address(fori_addr, instructions, slots)
+	return _calculate_slots_init_address(fori_addr, instructions,
+						known_slots, slots)
 
 
-def _calculate_slots_init_address(addr, instructions, slots):
+def _calculate_slots_init_address(addr, instructions, known_slots, slots):
 	while addr > 0 and len(slots) > 0:
 		addr -= 1
 
@@ -178,10 +197,12 @@ def _calculate_slots_init_address(addr, instructions, slots):
 			slots.remove(instruction.A)
 
 			if instruction.B_type == ins.T_VAR:
-				slots.add(instruction.B)
+				if instruction.B not in known_slots:
+					slots.add(instruction.B)
 
 			if instruction.CD_type == ins.T_VAR:
-				slots.add(instruction.CD)
+				if instruction.CD not in known_slots:
+					slots.add(instruction.CD)
 
 	return addr
 
