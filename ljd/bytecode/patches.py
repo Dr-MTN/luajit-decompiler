@@ -4,6 +4,13 @@ import ljd.bytecode.instructions as ins
 from ljd.bytecode.helpers import get_jump_destination, set_jump_destination
 
 
+def apply(instructions):
+	step0 = instructions
+	step1 = _swap_iterator_loop_boundaries(step0)
+	step2 = _replace_forl_with_jump_to_init(step1)
+	return step2
+
+
 #
 # Swap the the JMP instruction pointing to the ITERC/N with it's target
 # (ITERC/N + the following ITERL)
@@ -171,8 +178,3 @@ def _calculate_slots_init_address(addr, instructions, slots):
 	return addr
 
 
-def apply(instructions):
-	step0 = instructions
-	step1 = _swap_iterator_loop_boundaries(step0)
-	step2 = _replace_forl_with_jump_to_init(step1)
-	return step2
