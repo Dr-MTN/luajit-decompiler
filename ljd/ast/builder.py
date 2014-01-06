@@ -151,10 +151,18 @@ def _blockenize(state, instructions):
 	last_addresses = sorted(list(last_addresses))
 	last_addresses.append(len(instructions) - 1)
 
+	# This could happen if something jumps to the first instruction
+	# We don't need "zero block" with function header, so simply ignore
+	# this
+	if last_addresses[0] == 0:
+		last_addresses.pop(0)
+
 	previous_last_address = 0
 
+	index = 0
 	for last_address in last_addresses:
 		block = nodes.Block()
+		block.index = index
 		block.first_address = previous_last_address + 1
 		block.last_address = last_address
 
@@ -162,6 +170,8 @@ def _blockenize(state, instructions):
 		state.block_starts[block.first_address] = block
 
 		previous_last_address = last_address
+
+		index += 1
 
 
 def _build_statement(state, addr, instruction):
