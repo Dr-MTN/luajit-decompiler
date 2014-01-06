@@ -125,8 +125,21 @@ class Visitor(traverse.Visitor):
 
 		# If the subexpressions are less in order then this expression,
 		# they should go with parentheses
-		left_parentheses = is_left_op and node.left.type < node.type
-		right_parentheses = is_right_op and node.right.type < node.type
+
+		left_parentheses = False
+		right_parentheses = False
+
+		if is_left_op:
+			if node.type <= nodes.BinaryOperator.T_LOGICAL_AND:
+				left_parentheses = node.left.type != node.type
+			else:
+				left_parentheses = node.left.type < node.type
+
+		if is_right_op:
+			if node.type <= nodes.BinaryOperator.T_LOGICAL_AND:
+				right_parentheses = node.right.type != node.type
+			else:
+				right_parentheses = node.right.type < node.type
 
 		if left_parentheses:
 			self._write("(")
