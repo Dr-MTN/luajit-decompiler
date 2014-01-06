@@ -191,11 +191,16 @@ class Visitor(traverse.Visitor):
 		elif node.type == nodes.UnaryOperator.T_NOT:
 			self._write("not ")
 
-		self._write("(")
+		has_subexp = isinstance(node.operand, OPERATOR_TYPES)
+		need_parentheses = has_subexp and node.operand.type < node.type
+
+		if need_parentheses:
+			self._write("(")
 
 		self._visit(node.operand)
 
-		self._write(")")
+		if need_parentheses:
+			self._write(")")
 
 	# ##
 
