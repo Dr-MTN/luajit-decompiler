@@ -2,6 +2,8 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+import re
+
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 
@@ -329,15 +331,16 @@ class Visitor(traverse.Visitor):
 
 		self._visit_list(node.elseifs)
 
-		self._write("else")
+		if len(node.else_block.contents) > 0:
+			self._write("else")
 
-		self._end_line()
+			self._end_line()
 
-		self._start_block()
+			self._start_block()
 
-		self._visit(node.else_block)
+			self._visit(node.else_block)
 
-		self._end_block()
+			self._end_block()
 
 		self._write("end")
 
