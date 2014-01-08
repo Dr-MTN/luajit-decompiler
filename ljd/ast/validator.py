@@ -109,9 +109,10 @@ class Visitor(traverse.Visitor):
 		if node.destinations.contents[0].type != nodes.Identifier.T_LOCAL:
 			return
 
-		for destination in node.destinations.contents:
-			# It's either all or none
-			assert destination.type == nodes.Identifier.T_LOCAL
+# 		Why?
+# 		for destination in node.destinations.contents:
+# 			# It's either all or none
+# 			assert destination.type == nodes.Identifier.T_LOCAL
 
 		# Don't test type flag here
 	# ##
