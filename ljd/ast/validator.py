@@ -298,7 +298,7 @@ class Visitor(traverse.Visitor):
 	def visit_iterator_for(self, node):
 		self._set_restrictions({
 			node.expressions: nodes.ExpressionsList,
-			node.identifiers: nodes.IdentifiersList,
+			node.identifiers: nodes.VariablesList,
 			node.statements: nodes.StatementsList
 		})
 

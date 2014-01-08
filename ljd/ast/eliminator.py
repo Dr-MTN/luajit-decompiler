@@ -101,10 +101,10 @@ class EliminatorVisitor(traverse.Visitor):
 
 	# ##
 
-	def visit_function_definition(self, node):
+	def visit_statements_list(self, node):
 		self._states.append(_FunctionState())
 
-	def leave_function_definition(self, node):
+	def leave_statements_list(self, node):
 		self._states.pop()
 
 	def visit_block(self, node):
@@ -193,8 +193,9 @@ class EliminatorVisitor(traverse.Visitor):
 		last_expression = node.expressions.contents[-1]
 		last_destination = node.destinations.contents[-1]
 
-		assert isinstance(last_expression, nodes.MULTRES)	\
-			and isinstance(last_destination, nodes.MULTRES)
+		if not isinstance(last_expression, nodes.MULTRES)	\
+				or not isinstance(last_destination, nodes.MULTRES):
+			return
 
 		table_slot = node.destinations.contents[0].table.slot
 		description = self._get_slot_description(table_slot)
@@ -210,6 +211,9 @@ class EliminatorVisitor(traverse.Visitor):
 	def _leave_table_assignment(self, node):
 		tablevar = node.destinations.contents[0]
 		slot = node.expressions.contents[0]
+
+		if not isinstance(slot, nodes.Identifier):
+			return
 
 		# Skip local variables
 		if slot.type != nodes.Identifier.T_SLOT:
@@ -344,10 +348,10 @@ class EliminatorVisitor(traverse.Visitor):
 	def leave_conditional_warp(self, node):
 		self._process_attribute_copy_from(node, "condition")
 
-	def leave_iterator_warp(self, node):
+	def leave_iterator_for(self, node):
 		slots = []
 
-		for slot in node.controls.contents:
+		for slot in node.expressions.contents:
 			assert isinstance(slot, nodes.Identifier)	\
 				and slot.type == nodes.Identifier.T_SLOT
 
@@ -367,11 +371,11 @@ class EliminatorVisitor(traverse.Visitor):
 		src = description.assignment.expressions
 
 		self._invalidate_node(description.assignment)
-		self._copy_node(node.controls, src)
-		self._commit_cmd(node.controls, node, "controls")
+		self._copy_node(node.expressions, src)
+		self._commit_cmd(node.expressions, node, "expressions")
 
-	def leave_numeric_loop_warp(self, node):
-		self._process_attribute_copy_from(node, "index")
+	def leave_numeric_for(self, node):
+		self._process_attribute_copy_from(node, "variable")
 
 	# ##
 

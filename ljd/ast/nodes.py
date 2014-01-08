@@ -435,7 +435,7 @@ class NumericFor():
 class IteratorFor():
 	def __init__(self):
 		self.expressions = ExpressionsList()
-		self.identifiers = IdentifiersList()
+		self.identifiers = VariablesList()
 		self.statements = StatementsList()
 
 	def _accept(self, visitor):
