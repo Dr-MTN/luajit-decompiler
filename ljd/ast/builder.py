@@ -2,7 +2,6 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
-import ljd.bytecode.patches
 import ljd.bytecode.instructions as ins
 
 from ljd.bytecode.helpers import get_jump_destination
@@ -46,8 +45,7 @@ def _build_function_definition(prototype):
 	if prototype.flags.is_variadic:
 		node.arguments.contents.append(nodes.Vararg())
 
-	instructions = ljd.bytecode.patches.apply(prototype.arguments_count,
-							prototype.instructions)
+	instructions = prototype.instructions
 	node.statements.contents = _build_function_blocks(state, instructions)
 
 	_PENDING_MAYBE_LOCALS_STACK.pop()
@@ -71,11 +69,15 @@ def _build_function_arguments(state, prototype):
 
 
 def _build_function_blocks(state, instructions):
+	global _PENDING_MAYBE_LOCALS_STACK
+
 	_blockenize(state, instructions)
 
 	state.blocks[0].warpins_count = 1
 
 	for block in state.blocks:
+		_PENDING_MAYBE_LOCALS_STACK[-1] = [[]] * 255
+
 		addr = block.first_address
 		state.block = block
 
@@ -108,13 +110,14 @@ def _build_function_blocks(state, instructions):
 _JUMP_WARP_INSTRUCTIONS = set((
 	ins.UCLO.opcode,
 	ins.ISNEXT.opcode,
-	ins.JMP.opcode
+	ins.JMP.opcode,
+	ins.FORI.opcode,
+	ins.JFORI.opcode
 ))
 
 
 _WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | set((
-	ins.FORI.opcode, ins.JFORI.opcode,
-	# FORL instructions are patched out
+	ins.FORL.opcode, ins.IFORL.opcode, ins.JFORL.opcode,
 	ins.ITERL.opcode, ins.IITERL.opcode, ins.JITERL.opcode
 ))
 
@@ -227,6 +230,9 @@ def _build_statement(state, addr, instruction):
 		return _build_return(state, addr, instruction)
 
 	elif opcode == ins.FORI.opcode:
+		return _build_numeric_loop_warp_stub(state, addr, instruction)
+
+	elif opcode >= ins.FORL.opcode and opcode <= ins.JFORL.opcode:
 		return _build_numeric_loop_warp(state, addr, instruction)
 
 	elif opcode >= ins.ITERL.opcode and opcode <= ins.JITERL.opcode:
@@ -418,8 +424,8 @@ def _prepare_iterator_warp(state, addr, instruction):
 	slot = base
 
 	while slot <= last_slot:
-		# Fix the scope as instructions are patched
-		variable = _build_destination(state, addr + 1, slot)
+		# Fix the scope
+		variable = _build_destination(state, addr - 1, slot)
 		warp.variables.contents.append(variable)
 		slot += 1
 
@@ -432,8 +438,8 @@ def _finalize_iterator_warp(state, addr, instruction):
 	assert isinstance(warp, nodes.IteratorWarp)
 
 	destination = get_jump_destination(addr, instruction)
-	warp.way_out = state._warp_in_block(destination)
-	warp.body = state._warp_in_block(addr + 1)
+	warp.way_out = state._warp_in_block(addr + 1)
+	warp.body = state._warp_in_block(destination)
 
 
 def _build_call(state, addr, instruction):
@@ -500,6 +506,15 @@ def _build_return(state, addr, instruction):
 	return node
 
 
+def _build_numeric_loop_warp_stub(state, addr, instruction):
+	warp = nodes.UnconditionalWarp()
+	warp.type = nodes.UnconditionalWarp.T_FLOW
+	warp.target = state._warp_in_block(addr + 1)
+
+	assert state.block.warp is None
+	state.block.warp = warp
+
+
 def _build_numeric_loop_warp(state, addr, instruction):
 	warp = nodes.NumericLoopWarp()
 
@@ -507,14 +522,14 @@ def _build_numeric_loop_warp(state, addr, instruction):
 
 	warp.index = _build_destination(state, addr, base + 3)
 	warp.controls.contents = [
-		_build_variable(state, addr, base + 0),  # start
-		_build_variable(state, addr, base + 1),  # limit
-		_build_variable(state, addr, base + 2)  # step
+		_build_slot(state, addr, base + 0),  # start
+		_build_slot(state, addr, base + 1),  # limit
+		_build_slot(state, addr, base + 2)  # step
 	]
 
 	destination = get_jump_destination(addr, instruction)
-	warp.body = state._warp_in_block(addr + 1)
-	warp.way_out = state._warp_in_block(destination)
+	warp.body = state._warp_in_block(destination)
+	warp.way_out = state._warp_in_block(addr + 1)
 
 	assert state.block.warp is None
 	state.block.warp = warp

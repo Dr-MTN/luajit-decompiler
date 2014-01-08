@@ -6,7 +6,6 @@ import ljd.bytecode.instructions as ins
 from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
 
 import ljd.pseudoasm.prototype
-import ljd.bytecode.patches
 
 _FORMAT = "{addr:3}\t[{line:3}]\t{name:<5}\t{a:3}\t{b}\t{c}\t; {description}"
 
@@ -29,14 +28,12 @@ def write(writer, prototype):
 	# skip the first function header
 	addr = 1
 
-	patched = ljd.bytecode.patches.apply(prototype.arguments_count,
-						prototype.instructions)
-	# patched = prototype.instructions
+	instructions = prototype.instructions
 
-	writer = _State(writer, prototype, patched)
+	writer = _State(writer, prototype, instructions)
 
-	while addr < len(patched):
-		instruction = patched[addr]
+	while addr < len(instructions):
+		instruction = instructions[addr]
 		line = prototype.debuginfo.lookup_line_number(addr)
 
 		if instruction.opcode == ins.FNEW.opcode:

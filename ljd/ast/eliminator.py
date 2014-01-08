@@ -357,7 +357,8 @@ class EliminatorVisitor(traverse.Visitor):
 
 		description = self._get_slot_description(slots[0])
 
-		assert description is not None
+		if description is None:
+			return
 
 		# Dissected iterator case
 		if description.slots != slots:
