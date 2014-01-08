@@ -1,7 +1,3 @@
---[[
-
---]]
-
 if x < 100 then
 	print ("then")
 else
@@ -284,3 +280,90 @@ else
 		print ("False terminator!")
 	end
 end
+
+local a = 0
+
+if x % 2 == 0 then
+	a = 1
+end
+
+local a = "test"
+local b = "result"
+if a == "test" then
+	b = "test"
+elseif a == "1234" then
+	b = "1234"
+elseif a == "asd" then
+	b = "asd"
+elseif a == "fadasd" then
+	b = "fadasd"
+else
+	b = "Otherwise"
+end
+
+print (a, b)
+
+local a = "test"
+if a == "test" then
+	b = "test"
+	if  a == "1234" then
+		b = "1234"
+
+		if a == "asd" then
+			a = "asd"
+
+			if a == "fadasd" then
+				b = "fadasd"
+			end
+		end
+	end
+end
+
+if a == "test" then
+	b = "test"
+	if a == "test" then
+		b = "test"
+	elseif a == "1234" then
+		b = "1234"
+	elseif a == "asd" then
+		b = "asd"
+	elseif a == "fadasd" then
+		b = "fadasd"
+	else
+		b = "Otherwise"
+	end
+elseif a == "1234" then
+	b = "1234"
+elseif a == "asd" then
+	b = "asd"
+elseif a == "fadasd" then
+	b = "fadasd"
+else
+	b = "Otherwise"
+end
+
+print (a, b)
+slot1, slot2 = nil
+
+if componentInfo.details ~= nil then
+	layout = componentInfo.details.layout
+
+	if layout == "table" then
+		mainFrame = "tableFrame"
+	else
+		if layout == "header" then
+			mainFrame = "headerFrame"
+		else
+			if layout == "long" then
+				mainFrame = "fullFrame"
+			else
+				if layout == "short" then
+					mainFrame = "topFrame"
+				end
+			end
+
+		end
+	end
+end
+
+print ("asd")
