@@ -126,18 +126,11 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 
 		body = blocks[start_index + 1:end_index]
 
-		if topmost_end is None:
-			current_topmost_end = end
-		else:
-			current_topmost_end = topmost_end
-
 		if _expression_requirements_fulfiled(body):
-			_unwarp_logical_expression(start, end, body,
-							current_topmost_end)
+			_unwarp_logical_expression(start, end, body, end)
 			processed = True
 		else:
-			_unwarp_if_statement(start, end, body,
-							current_topmost_end)
+			_unwarp_if_statement(start, end, body, end)
 			processed = True
 
 		if processed:
@@ -222,10 +215,7 @@ def _unwarp_logical_expression(start, end, body, topmost_end):
 
 	true, false, body = _get_terminators(body)
 
-	parts = _unwarp_expression([start] + body, end, true, false)
-
-	parts = _make_explicit_subexpressions(parts)
-	expression = _assemble_expression(parts)
+	expression = _compile_expression([start] + body, end, true, false)
 
 	dst = copy.deepcopy(slot)
 
@@ -234,6 +224,17 @@ def _unwarp_logical_expression(start, end, body, topmost_end):
 	assignment.expressions.contents.append(expression)
 
 	start.contents.append(assignment)
+
+
+def _compile_expression(body, end, true, false):
+	parts = _unwarp_expression(body, end, true, false)
+
+	if len(parts) < 3:
+		assert len(parts) == 1
+		return parts[0]
+
+	parts = _make_explicit_subexpressions(parts)
+	return _assemble_expression(parts)
 
 
 #
@@ -593,14 +594,15 @@ def _make_explicit_subexpressions(parts):
 
 
 def _unwarp_if_statement(start, end, body, topmost_end):
-	warp = start.warp
+	expression, body, false = _extract_if_expression(start, end, body,
+								topmost_end)
 
 	node = nodes.If()
-	node.expression = warp.condition
+	node.expression = expression
 
 	# has an else branch
-	if warp.false_target != end and warp.false_target != topmost_end:
-		else_start = warp.false_target
+	if false != end and false != topmost_end:
+		else_start = false
 
 		else_start_index = body.index(else_start)
 
@@ -640,6 +642,65 @@ def _unwarp_if_statement(start, end, body, topmost_end):
 		then_blocks[-1].warp = nodes.EndWarp()
 
 	start.contents.append(node)
+
+
+def _extract_if_expression(start, end, body, topmost_end):
+	for i, block in enumerate(body):
+		if len(block.contents) != 0:
+			break
+
+	assert i < len(body)
+
+	expression = [start] + body[:i]
+	body = body[i:]
+
+	falses = []
+
+	for i, block in enumerate(body[:-1]):
+		if not isinstance(block.warp, nodes.UnconditionalWarp):
+			continue
+
+		if block.warp.type != nodes.UnconditionalWarp.T_JUMP:
+			continue
+
+		if block.warp.target != end and block.warp.target != topmost_end:
+			continue
+
+		falses.append(body[i + 1])
+
+	if len(falses) == 0:
+		falses.append(end)
+
+		if topmost_end is not None:
+			falses.append(topmost_end)
+
+	false = falses[0]
+	falses = set(falses)
+	expression_end = -1
+
+	for i, block in enumerate(expression):
+		target = _get_target(block.warp)
+
+		if target not in falses:
+			continue
+
+		if target.index < false.index:
+			break
+
+		if target.index >= false.index:
+			false = target
+			expression_end = i + 1
+
+	body = expression[expression_end:] + body
+	expression = expression[:expression_end]
+
+	assert len(expression) > 0
+
+	true = body[0]
+
+	expression = _compile_expression(expression, None, true, false)
+
+	return expression, body, false
 
 
 #
