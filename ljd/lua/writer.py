@@ -17,6 +17,9 @@ CMD_WRITE = 6
 OPERATOR_TYPES = (nodes.BinaryOperator, nodes.UnaryOperator)
 
 
+VALID_NAME = re.compile(r'^\w[\w\d]+$')
+
+
 class Visitor(traverse.Visitor):
 	def __init__(self, warped):
 		traverse.Visitor.__init__(self)
@@ -258,25 +261,34 @@ class Visitor(traverse.Visitor):
 	def visit_table_element(self, node):
 		key = node.key
 		base = node.table
+
 		if isinstance(key, nodes.Constant) and key.type == key.T_STRING:
+			is_name = VALID_NAME.match(key.value)
+
 			if isinstance(base, nodes.Identifier)	\
 					and base.type == base.T_BUILTIN:
 				assert base.name == "_env"
 				self._skip(base)
+
+				assert is_name
 			else:
 				self._visit(base)
-				self._write(".")
 
-			self._write(key.value)
-			self._skip(key)
+				if is_name:
+					self._write(".")
+
+			if is_name:
+				self._write(key.value)
+				self._skip(key)
+				return
 		else:
 			self._visit(base)
 
-			self._write("[")
+		self._write("[")
 
-			self._visit(key)
+		self._visit(key)
 
-			self._write("]")
+		self._write("]")
 
 	def visit_vararg(self, node):
 		self._write("...")
