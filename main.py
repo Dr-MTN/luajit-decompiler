@@ -78,7 +78,7 @@ def main():
 		return 1
 
 	# TODO: args
-	ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
+	# ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
 	ast = ljd.ast.builder.build(prototype)
 
@@ -90,9 +90,17 @@ def main():
 
 	ljd.ast.validator.validate(ast, warped=True)
 
-	ljd.ast.unwarper.unwarp(ast)
+	ljd.ast.unwarper.primary_pass(ast)
 
-	# ljd.ast.validator.validate(ast, warped=False)
+	ljd.ast.validator.validate(ast, warped=True)
+
+	ljd.ast.eliminator.eliminate_slots(ast)
+
+	ljd.ast.validator.validate(ast, warped=True)
+
+	ljd.ast.unwarper.final_pass(ast)
+
+	ljd.ast.validator.validate(ast, warped=False)
 
 	ljd.lua.writer.write(sys.stdout, ast, warped=True)
 
