@@ -112,23 +112,10 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 			if warp.type == nodes.UnconditionalWarp.T_FLOW:
 				start_index += 1
 				continue
-			else:
-				is_if_false = True
-		else:
-			is_if_false = False
 
 		processed = False
 
-		if is_if_false:
-			end = warp.target
-			assert len(end.contents) == 0
-			assert isinstance(end.warp, nodes.UnconditionalWarp)
-
-			end = end.warp.target
-		else:
-			assert isinstance(warp, nodes.ConditionalWarp)
-
-			end = _find_branching_end(start)
+		end = _find_branching_end(start, blocks)
 
 		try:
 			end_index = blocks.index(end)
@@ -144,10 +131,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 		else:
 			current_topmost_end = topmost_end
 
-		if is_if_false:
-			_unwarp_if_false(start, end, body, current_topmost_end)
-			processed = True
-		elif _expression_requirements_fulfiled(body):
+		if _expression_requirements_fulfiled(body):
 			_unwarp_logical_expression(start, end, body,
 							current_topmost_end)
 			processed = True
@@ -222,51 +206,6 @@ def _expression_requirements_fulfiled(body):
 	return True
 
 
-#
-# A terminator: the true or the false
-#
-# An topmost expression end: A terminator or the next block after the
-# 				expression
-#
-# A subexpression: a false target points not to an end
-# 			but to the first block of the next component at same
-# 			level, which becomes the new end for the subexpression
-#
-# A subexpression end: a false target points to the upper level end
-# 			(the expression end)
-#
-# A terminal clause: false target points to a terminator
-#
-# A terminal clause condition will be inverted if any of:
-# 1. the false target points to the true
-# 2. the false target points to the end and the condition is a "not" expression
-#
-# The "or" condition is inverted.
-#
-# The "and" condition is not inverted.
-#
-# If component is a terminal clause, then the true target points to the next
-# component. Otherwise the true target points to the subexpression.
-#
-# Operators between topmost components are detected from left to right as
-# 	follows:
-# 1. If the component is a terminal clause, then the operator is guessed from
-# 	the condition negation
-#
-# 2. If component is a subexpression, then operator to the next component is
-# 	guessed from the last block in the subexpression (the subexpression end),
-# 	which must be a terminal clause
-#
-# Operators between components in the subexpressions are negative to the
-# 	topmost operator to the right (if there is no operator to the right,
-# 	there should be no subexpression)
-#
-# So the algorithm is:
-# 1. Build a list of topmost components.
-# 2. Setup operators between the topmost components.
-# 3. Compile subexpressions recusively negating operator each time.
-# 4. Pray for the best
-#
 def _unwarp_logical_expression(start, end, body, topmost_end):
 	slot = None
 
@@ -282,8 +221,11 @@ def _unwarp_logical_expression(start, end, body, topmost_end):
 	assert slot is not None
 
 	true, false, body = _get_terminators(body)
-	expression = _compile_topmost_logical_expression(start, end, body,
-								true, false)
+
+	parts = _unwarp_expression([start] + body, end, true, false)
+
+	parts = _make_explicit_subexpressions(parts)
+	expression = _assemble_expression(parts)
 
 	dst = copy.deepcopy(slot)
 
@@ -294,160 +236,225 @@ def _unwarp_logical_expression(start, end, body, topmost_end):
 	start.contents.append(assignment)
 
 
-def _compile_topmost_logical_expression(start, end, body, true, false):
-	body.insert(0, start)
-
+#
+# The logical expressions:
+#
+# There are terminators: a true, a false and an end
+#
+# For an if case the true will be a "then" clause and the false - an "else" or
+# "after-the-if" clause. The end is required for a single-variable (unary)
+# components and is only used at during topmost phase.
+#
+# The last block in expression is always "double terminal" - both ends are
+# pointing at terminators. It's rather useless so we just append it's condition
+# (inverted if needed - it's easy to see if true end targets the false
+# terminator) at the end of processing.
+#
+# They we need to pack all other blocks into subexpressions. Subexpressions
+# always end with a _terminal block_, i.e. the block which warp points to a
+# terminator. Idea is that we can guess the operator which is only at the
+# right of a terminal block, because we can check if the block's warp condition
+# is inverted or not.
+#
+# If that's an "OR" clause then it will jump out of the current expression if
+# the condition is true, so the condition is inverted and the false branch is
+# pointing at the way out (at the TRUE terminator - because the result of that
+# expression level will be true in that case). (because in the bytecode there
+# is only one JMP, so in the "ConditionalWarp" the true branch is fake and
+# always points to the next block =). So if the bytecode wants to jump if
+# something is true, then it needs to invert the condition because normally
+# it jumps only if the condition is false).
+#
+# Otherwise, if that's an "AND" clause then it will jump out of the current
+# expression level if the condition is false, so the condition is not inverted
+# and false branch points to the false.
+#
+# So, guessing from the terminal blocks we can understand which operators go
+# at right of them. Everything in-between these block is considered a
+# subexpression. And just because we don't know where exactly the subexpression
+# ends we are using greedy approach and trying to pack into subexpression as
+# much blocks as possible, including terminal blocks in they point to the same
+# terminator and has same inversion status (that is - we are always using the
+# rightmost block if there are consequitive similar terminal blocks, ignoring
+# all the blocks at the left).
+#
+# Then comes the trick: the subexpression is a component of this expression and
+# we know the operator to the right of it. We can guess now what will
+# be evaluated if the subexpression evaluates to "false" and what - if it's
+# "true". If the operator is "AND" then the subexpression failure will cause
+# the expression failure too, i.e. the "FALSE" target remains the same and the
+# true terminator is set to the next block (after the "AND").
+#
+# If the operator is "OR" the the subexpression success will cause the success
+# of the expression, so the "TRUE" target remains the same, but the false
+# target is set to the next block (after the "OR").
+#
+# Now we have a subexpression and both TRUE and FALSE terminators for it.
+# Recurse and repeat.
+#
+def _unwarp_expression(body, end, true, false):
 	parts = []
 
+	if true is not None:
+		terminator_index = min(true.index, false.index)
+
+		if end is not None:
+			terminator_index = min(end.index, terminator_index)
+	else:
+		assert end is not None
+
+		terminator_index = end.index
+
+	terminators = set((true, false, end))
+
+	subexpression_start = 0
+
 	i = 0
-	while i < len(body):
+	while i < len(body) - 1:
 		block = body[i]
 		warp = block.warp
 
-		if isinstance(warp, nodes.UnconditionalWarp):
-			assert warp.target == end
-			assignment = block.contents[0]
+		target = _get_target(warp)
 
-			assert len(assignment.expressions.contents) == 1
-
-			dst = assignment.expressions.contents[0]
-
-			parts.append(dst)
-
-			break
-
-		if _is_double_terminal_clause(warp, true, false, end):
-			if _is_negative(warp, true, false, end):
-				component = _negate(warp.condition)
-			else:
-				component = warp.condition
-
-			parts.append(component)
-
-			break
-
-		if _is_terminal_clause(warp, true, false, end):
-			if _is_negative(warp, true, false, end):
-				component = _negate(warp.condition)
-				operator = binop.T_LOGICAL_OR
-			else:
-				component = warp.condition
-				operator = binop.T_LOGICAL_AND
-
-			parts.append(component)
-			parts.append(operator)
+		if target.index < terminator_index:
 			i += 1
 			continue
 
-		assert warp.false_target.index < end.index
+		assert target in terminators
 
-		next_component = body.index(warp.false_target)
-		subexpression = body[i:next_component]
+		while i < len(body) - 2:
+			next_block = body[i + 1]
+			next_target = _get_target(next_block.warp)
 
-		last = subexpression[-1]
+			if next_target != target:
+				break
 
-		assert isinstance(last.warp, nodes.ConditionalWarp)
-		assert _is_terminal_clause(last.warp, true, false, end)
+			next_inverted = _is_inverted(next_block.warp, true, end)
 
-		if _is_negative(last.warp, true, false, end):
-			operator = binop.T_LOGICAL_OR
+			this_inverted = _is_inverted(warp, true, end)
+
+			# Special hack for unary expressions (x, not x)...
+			if next_inverted != this_inverted:
+				break
+
+			block = next_block
+			warp = next_block.warp
+			i += 1
+
+		next_block = body[i + 1]
+		subexpression = body[subexpression_start:i + 1]
+
+		operator = _get_operator(block, true, end)
+
+		subexpression = _compile_subexpression(subexpression, operator,
+							block, next_block,
+							true, end)
+
+		parts.append(subexpression)
+		parts.append(operator)
+
+		i += 1
+		subexpression_start = i
+
+	if len(body) > 1:
+		assert len(parts) > 0
+		assert isinstance(parts[-1], int)
+
+	last = body[-1]
+
+	if isinstance(last.warp, nodes.ConditionalWarp):
+		if _is_inverted(last.warp, true, end):
+			last = _invert(last.warp.condition)
 		else:
-			operator = binop.T_LOGICAL_AND
+			last = last.warp.condition
+	else:
+		assert isinstance(last.warp, nodes.UnconditionalWarp)
 
-		component = _compile_subexpression(subexpression,
-							_opposite(operator),
-							warp.false_target)
+		last = _get_last_assignment_source(last)
 
-		parts.append(component)
-		parts.append(operator)
-
-		i = next_component
-
-	assert len(parts) > 0
-
-	parts = _make_explicit_subexpressions(parts)
-	return _assemble_expression(parts)
-
-
-def _compile_subexpression(body, operator, end):
-	i = 0
-
-	parts = []
-
-	while i < len(body):
-		block = body[i]
-		warp = block.warp
-
-		assert isinstance(warp, nodes.ConditionalWarp)
-
-		if warp.false_target == end:
-			if operator == binop.T_LOGICAL_OR:
-				component = _negate(warp.condition)
-			else:
-				component = warp.condition
-
-			parts.append(component)
-			parts.append(operator)
-			i += 1
-			continue
-		elif warp.false_target.index > end.index:
-			assert i == len(body) - 1
-
-			if operator == binop.T_LOGICAL_OR:
-				component = warp.condition
-			else:
-				component = _negate(warp.condition)
-
-			parts.append(component)
-
-			break
-
-		assert warp.false_target.index < end.index
-
-		next_component = body.index(warp.false_target)
-		subexpression = body[i:next_component]
-
-		last = subexpression[-1]
-
-		assert isinstance(last.warp, nodes.ConditionalWarp)
-		assert last.warp.false_target == end
-
-		component = _compile_subexpression(subexpression,
-							_opposite(operator),
-							warp.false_target)
-
-		parts.append(component)
-		parts.append(operator)
-
-		i = next_component
-
-	assert len(parts) > 0
+	parts.append(last)
 
 	return parts
 
 
-def _opposite(operator):
-	if operator == binop.T_LOGICAL_AND:
-		return binop.T_LOGICAL_OR
+def _get_target(warp):
+	if isinstance(warp, nodes.ConditionalWarp):
+		return warp.false_target
 	else:
-		assert operator == binop.T_LOGICAL_OR
-		return binop.T_LOGICAL_AND
+		assert isinstance(warp, nodes.UnconditionalWarp)
+		return warp.target
 
 
-def _is_terminal_clause(warp, true, false, end):
-	return warp.false_target == true	\
-		or warp.false_target == false	\
-		or warp.false_target == end
+def _get_operator(block, true, end):
+	if isinstance(block.warp, nodes.UnconditionalWarp):
+		src = _get_last_assignment_source(block)
+
+		if isinstance(src, nodes.Constant):
+			is_true = src.value != 0
+		else:
+			assert isinstance(src, nodes.Primitive)
+
+			is_true = src.type == nodes.Primitive.T_TRUE
+
+		if is_true:
+			return binop.T_LOGICAL_OR
+		else:
+			return binop.T_LOGICAL_AND
+	else:
+		is_inverted = _is_inverted(block.warp, true, end)
+
+		if is_inverted:
+			return binop.T_LOGICAL_OR
+		else:
+			return binop.T_LOGICAL_AND
 
 
-def _is_double_terminal_clause(warp, true, false, end):
-	return _is_terminal_clause(warp, true, false, end)	\
-		and (warp.true_target == true			\
-			or warp.true_target == false		\
-			or warp.true_target == end)
+def _get_last_assignment_source(block):
+	assignment = block.contents[-1]
+	assert isinstance(assignment, nodes.Assignment)
+	return assignment.expressions.contents[0]
 
 
-def _is_negative(warp, true, false, end):
+def _get_and_remove_last_assignment_source(block):
+	assignment = block.contents.pop()
+	assert isinstance(assignment, nodes.Assignment)
+	return assignment.expressions.contents[0]
+
+
+def _compile_subexpression(subexpression, operator,
+						block, next_block, true, end):
+	warp = block.warp
+
+	if len(subexpression) == 1:
+		if isinstance(warp, nodes.UnconditionalWarp):
+			return _get_and_remove_last_assignment_source(block)
+		elif _is_inverted(warp, true, end):
+			return _invert(warp.condition)
+		else:
+			return warp.condition
+	else:
+		if isinstance(warp, nodes.UnconditionalWarp):
+			if operator == binop.T_LOGICAL_OR:
+				subtrue = warp.target
+				subfalse = next_block
+			else:
+				subtrue = next_block
+				subfalse = warp.target
+		else:
+			if operator == binop.T_LOGICAL_OR:
+				subtrue = warp.false_target
+				subfalse = warp.true_target
+			else:
+				subtrue = warp.true_target
+				subfalse = warp.false_target
+
+		return _unwarp_expression(subexpression, None, subtrue, subfalse)
+
+
+def _is_inverted(warp, true, end):
+	if isinstance(warp, nodes.UnconditionalWarp):
+		return False
+
 	if warp.false_target == true:
 		return True
 	elif warp.false_target == end:
@@ -472,7 +479,7 @@ _NEGATION_MAP[binop.T_NOT_EQUAL] = binop.T_EQUAL
 _NEGATION_MAP[binop.T_EQUAL] = binop.T_NOT_EQUAL
 
 
-def _negate(expression):
+def _invert(expression):
 	if isinstance(expression, nodes.UnaryOperator):
 		return expression.operand
 
@@ -496,9 +503,12 @@ def _negate(expression):
 
 
 def _get_terminators(body):
+	if len(body) < 2:
+		return None, None, body
+
 	last = body[-1]
 
-	if len(last.contents) == 0:
+	if len(last.contents) != 1:
 		return None, None, body
 
 	assignment = last.contents[0]
@@ -509,10 +519,13 @@ def _get_terminators(body):
 
 	prev = body[-2]
 
-	assert len(prev.contents) == 1
+	if len(prev.contents) != 1:
+		return None, None, body
+
 	src = prev.contents[0].expressions.contents[0]
 
-	assert isinstance(src, nodes.Primitive) and src.type == src.T_FALSE
+	if not isinstance(src, nodes.Primitive) or src.type != src.T_FALSE:
+		return None, None, body
 
 	return last, prev, body[:-2]
 
@@ -640,10 +653,26 @@ def _unwarp_if_statement(start, end, body, topmost_end):
 # As we add a block into the queue only if it's index is less then the
 # current end, queue will eventually depleed
 #
-def _find_branching_end(start):
+def _find_branching_end(start, blocks):
 	warp = start.warp
 
 	queue = collections.deque()
+
+	if not isinstance(start.warp, nodes.ConditionalWarp):
+		index = blocks.index(warp.target)
+
+		block = blocks[index - 1]
+		warp = block.warp
+
+		while isinstance(warp, nodes.UnconditionalWarp):
+			if warp.type == nodes.UnconditionalWarp.T_FLOW:
+				return warp.target
+
+			block = warp.target
+			warp = block.warp
+
+		if isinstance(warp, nodes.EndWarp):
+			return block
 
 	if warp.false_target.index > warp.true_target.index:
 		end = warp.false_target
