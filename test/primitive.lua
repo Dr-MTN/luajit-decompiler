@@ -262,45 +262,115 @@ function logical_expressions()
 
 	b = (x and y) or ((y > 3) and (((x/2) < 1) or (y > 100)) and (x ~= 2))
 
-	-- Not supported yet =(
---[[
 	print ("precalculated true expression")
 
 	c = true or (x and y) or true
 
-	--print ("precalculated false expression")
+	print ("precalculated false expression")
 
-	--d = false and ((x and y) or true)
+	d = false and ((x and y) or true)
 
-	--print ("precalculated false expression with function")
+	print ("precalculated false expression with function")
 
-	--e = error() and false and ((x and y) or true)
+	e = error() and false and ((x and y) or true)
 
-	--print ("precalculated? false expression with variable")
+	print ("precalculated true expression with function")
 
-	--local z = false
+	e = error() and true and ((x and y) or true)
 
-	--f = z and ((x and y) or true)
+	print ("precalculated? false expression with variable")
 
-	--print ("precalculated false expression with nil")
+	local z = false
 
-	--f = nil and ((x and y) or true)
+	f = z and ((x and y) or true)
+
+	print ("precalculated false expression with nil")
+
+	f = nil and ((x and y) or true)
 	
 	print("if with expression")
---]]
 
---[[
---	Oh crap...
+	a = x or y
+	a = x and y
+	a = x < 100 or y < 100
+	a = x < 100 and y < 100
 
-	if x > 300 and y < 300 then
-		print ("Many things!")
-		print ("Hooray!")
-
-		if x > 100 and y < 100 then
-			print ("Crap...")
-		end
+	if x or y then
+		print ("x or y")
 	end
-]]--
+
+	if x and y then
+		print ("x and y")
+	end
+
+	if x < 100 or y < 100 then
+		print ("x or y with comparisons")
+	end
+
+	if x < 100 and y < 100 then
+		print ("x and y with comparisons")
+	end
+
+	if x or y then
+		print ("x or y")
+	else
+		print ("ELSE x or y")
+	end
+
+	if x and y then
+		print ("x and y")
+	else
+		print ("ELSE x and y")
+	end
+
+	if x < 100 or y < 100 then
+		print ("x or y with comparisons")
+	else
+		print ("ELSE x or y with comparisons")
+	end
+
+	if x < 100 and y < 100 then
+		print ("x and y with comparisons")
+	else
+		print ("ELSE x and y with comparisons")
+	end
+
+	if (x < 100 and y < 100) or z < 100 then
+		print ("(and) or with comparisons")
+	else
+		print ("ELSE (and) or with comparisons")
+	end
+
+	if (x < 300 and (y < 300 or z > 300)) or z < 300 and error() then
+		print ("True terminator!")
+	else
+		print ("False terminator!")
+	end
+
+	if x < 300 and y < 300 then
+		print ("True terminator!")
+
+		if x < 300  and z < 300 then
+			print("Nested if")
+		end
+	else
+		print ("False terminator!")
+
+		if x < 300 and z < 300 then
+			print("Enclosed nested if")
+		end
+
+		print ("Enclosure")
+	end
+
+	while x > 300 and y < 300 do
+		print ("In while")
+	end
+
+	repeat
+		print ("In repeat until")
+	until x < 300 and y > 300
+
 	print(x, y, b, c, d, e, f)
 end
 
