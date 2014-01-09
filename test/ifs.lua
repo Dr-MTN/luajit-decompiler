@@ -343,7 +343,7 @@ else
 end
 
 print (a, b)
-slot1, slot2 = nil
+local slot1, slot2 = nil
 
 if componentInfo.details ~= nil then
 	layout = componentInfo.details.layout

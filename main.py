@@ -31,6 +31,7 @@ import ljd.ast.builder
 import ljd.ast.validator
 import ljd.ast.eliminator
 import ljd.ast.unwarper
+import ljd.ast.mutator
 import ljd.lua.writer
 
 
@@ -102,7 +103,11 @@ def main():
 
 	ljd.ast.validator.validate(ast, warped=False)
 
-	ljd.lua.writer.write(sys.stdout, ast, warped=True)
+	ljd.ast.mutator.mutate(ast)
+
+	ljd.ast.validator.validate(ast, warped=False)
+
+	ljd.lua.writer.write(sys.stdout, ast)
 
 	return 0
 

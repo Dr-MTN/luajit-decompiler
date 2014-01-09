@@ -212,9 +212,6 @@ class EliminatorVisitor(traverse.Visitor):
 		tablevar = node.destinations.contents[0]
 		slot = node.expressions.contents[0]
 
-		if not isinstance(slot, nodes.Identifier):
-			return
-
 		if isinstance(tablevar.table, nodes.Identifier) and	\
 				tablevar.table.type == nodes.Identifier.T_SLOT:
 			tabledesc = self._get_slot_description(tablevar.table.slot)
@@ -227,15 +224,14 @@ class EliminatorVisitor(traverse.Visitor):
 			if not isinstance(constructor, nodes.TableConstructor):
 				return
 
-			if slot.type == nodes.Identifier.T_SLOT:
-				description = self._get_slot_description(slot.slot)
+			value = slot
 
-				assert description is not None
-
-				srcs = description.assignment.expressions
-				value = srcs.contents[0]
-			else:
-				value = slot
+			if isinstance(slot, nodes.Identifier):
+				info = self._get_slot_description(slot.slot)
+				
+				if info is not None:
+					srcs = info.assignment.expressions
+					value = srcs.contents[0]
 
 			record = nodes.TableRecord()
 			record.key = tablevar.key
@@ -244,20 +240,22 @@ class EliminatorVisitor(traverse.Visitor):
 			constructor.records.contents.append(record)
 			self._invalidate_node(node)
 		else:
+			if not isinstance(slot, nodes.Identifier):
+				return
+
 			# Skip local variables
 			if slot.type != nodes.Identifier.T_SLOT:
 				return
 
 			description = self._get_slot_description(slot.slot)
+			# Nothing to worry about
+			if len(description.slots) == 1:
+				return
 
 			# That's possible in a case of a logical expression -
 			# A global variable is assigned in the first instruction
 			# of the next block after the expression
 			if description is None:
-				return
-
-			# Nothing to worry about
-			if len(description.slots) == 1:
 				return
 
 			dst = description.node
