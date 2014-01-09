@@ -9,7 +9,6 @@
 class FunctionDefinition():
 	def __init__(self):
 		self.arguments = IdentifiersList()
-		self.name = None
 		self.statements = StatementsList()
 
 	def _accept(self, visitor):

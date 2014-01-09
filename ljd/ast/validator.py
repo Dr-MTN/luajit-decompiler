@@ -34,7 +34,6 @@ STATEMENT_TYPES = (
 	nodes.IteratorFor,
 	nodes.NumericFor,
 	nodes.RepeatUntil,
-	nodes.FunctionDefinition,
 	nodes.Return,
 	nodes.Break,
 	nodes.FunctionCall,
@@ -108,11 +107,6 @@ class Visitor(traverse.Visitor):
 
 		if node.destinations.contents[0].type != nodes.Identifier.T_LOCAL:
 			return
-
-# 		Why?
-# 		for destination in node.destinations.contents:
-# 			# It's either all or none
-# 			assert destination.type == nodes.Identifier.T_LOCAL
 
 		# Don't test type flag here
 	# ##
