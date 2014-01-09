@@ -107,7 +107,7 @@ def main():
 
 	ljd.ast.validator.validate(ast, warped=False)
 
-	ljd.lua.writer.write(sys.stdout, ast, warped=True)
+	ljd.lua.writer.write(sys.stdout, ast)
 
 	return 0
 

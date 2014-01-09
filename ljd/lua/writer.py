@@ -18,13 +18,12 @@ OPERATOR_TYPES = (nodes.BinaryOperator, nodes.UnaryOperator)
 
 
 class Visitor(traverse.Visitor):
-	def __init__(self, warped):
+	def __init__(self):
 		traverse.Visitor.__init__(self)
 
 		self.visited_nodes_stack = [set()]
 
 		self.print_queue = []
-		self.warped = True
 
 	# ##
 
@@ -580,10 +579,10 @@ class Visitor(traverse.Visitor):
 		self.visited_nodes_stack.pop()
 
 
-def write(fd, ast, warped=True):
+def write(fd, ast):
 	assert isinstance(ast, nodes.FunctionDefinition)
 
-	visitor = Visitor(warped)
+	visitor = Visitor()
 
 	traverse.traverse(visitor, ast.statements)
 
