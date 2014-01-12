@@ -1,5 +1,4 @@
 --[[
-
 --]]
 
 for i=1, 100 do
@@ -80,11 +79,70 @@ end
 y = 0
 x = y
 
+print ("while with emmidiate break")
+while x do
+	break
+end
+
+while x and false do
+	print ("while x and false")
+end
+
+while x or false do
+	print ("while x or false")
+end
+
+while x and true do
+	print ("while x and true")
+end
+
+while x or true do
+	print ("while x or true")
+end
+
+print ("Something")
+
+while true do
+	print ("while true")
+
+	if x then
+		print ("something")
+	end
+end
+
+
+print ("Something")
+
+while true do
+	if x then
+		print ("something")
+	end
+end
+
+print ("Something")
+
+while true do
+	if x then
+		print("something")
+		break
+	end
+end
+
+while true do
+	if x then
+		break
+	end
+end
+
+
+while false do
+	print ("while false")
+end
+
 while x do
 	print ("while with copy check")
 	x = y
 end
-
 
 while x > 100 do
 	print ("while")
@@ -278,7 +336,6 @@ repeat
 	until x < 3 or y < 3
 until x < 3 and y < 3
 
-
 repeat
 	if (((x < 100 or y < 100 and z < 100)) or x > 300) and z == 3 then
 		print ("Repeat until with expression")
@@ -290,3 +347,5 @@ repeat
 	end
 until x < 3 and y < 3
 
+--[[
+--]]

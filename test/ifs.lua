@@ -1,3 +1,37 @@
+if true then
+	print("if true")
+end
+
+print ("something")
+
+if false then
+	print("if false")
+end
+
+print ("something")
+
+if x then
+	print ("something after")
+end
+
+if x and false then
+	print("if and false")
+end
+
+
+if x and true then
+	print("if and true")
+end
+
+if x or false then
+	print("if or false")
+end
+
+
+if x or true then
+	print("if or true")
+end
+
 if x < 100 then
 	print ("then")
 else
@@ -367,3 +401,6 @@ if componentInfo.details ~= nil then
 end
 
 print ("asd")
+
+--[[
+--]]
