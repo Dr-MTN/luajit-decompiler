@@ -1151,8 +1151,24 @@ def _fix_expression(blocks, start, end):
 			_set_target(block.warp, end)
 
 
+def _gather_possible_ends(block):
+	warp = block.warp
+
+	ends = set((block,))
+
+	while _is_jump(warp):
+		block = warp.target
+		warp = block.warp
+
+		ends.add(block)
+
+	return ends
+
+
 def _unwarp_breaks(start, blocks, next_block):
 	blocks_set = set([start] + blocks)
+
+	ends = _gather_possible_ends(next_block)
 
 	for i, block in enumerate(blocks):
 		warp = block.warp
@@ -1164,7 +1180,7 @@ def _unwarp_breaks(start, blocks, next_block):
 		if warp.target in blocks_set:
 			continue
 
-		assert warp.target == next_block, 		\
+		assert warp.target in ends, 		\
 			"GOTO statements are not supported"
 
 		block.contents.append(nodes.Break())
