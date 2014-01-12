@@ -635,7 +635,9 @@ class Visitor(traverse.Visitor):
 			self._write(node.value)
 			return
 
-		if "\n" in node.value:
+		lines = node.value.count("\n")
+
+		if lines > 2:
 			self._write("[[")
 
 			self._write("\n")
@@ -646,8 +648,9 @@ class Visitor(traverse.Visitor):
 		else:
 			text = node.value
 
-			if "\\" in text:
-				text = text.replace("\\", "\\\\")
+			text = text.replace("\\", "\\\\")
+			text = text.replace("\t", "\\t")
+			text = text.replace("\n", "\\n")
 
 			self._write('"' + text + '"')
 
