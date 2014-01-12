@@ -189,7 +189,6 @@ class Identifier():
 		self.name = None
 		self.type = -1
 		self.slot = -1
-		self._varinfo = None  # from debuginfo
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_identifier, self)

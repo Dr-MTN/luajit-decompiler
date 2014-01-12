@@ -179,12 +179,7 @@ class Visitor(traverse.Visitor):
 			or node.type == nodes.Identifier.T_BUILTIN	\
 			or node.type == nodes.Identifier.T_UPVALUE	\
 			or (node.name is not None			\
-				and node._varinfo is not None)
-
-		assert node.type == nodes.Identifier.T_SLOT		\
-			or node.type == nodes.Identifier.T_LOCAL	\
-			or node.type == nodes.Identifier.T_UPVALUE	\
-			or node.type == nodes.Identifier.T_BUILTIN
+				and node.type == nodes.Identifier.T_LOCAL)
 
 		assert node.type == nodes.Identifier.T_BUILTIN or node.slot >= 0
 
