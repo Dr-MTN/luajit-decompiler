@@ -30,7 +30,7 @@ class DebugInformation():
 		for info in self.variable_info:
 			if info.start_addr > addr:
 				break
-			if info.end_addr < addr:
+			if info.end_addr <= addr:
 				continue
 			elif slot == 0:
 				return info
