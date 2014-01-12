@@ -29,7 +29,8 @@ import ljd.rawdump.parser
 import ljd.pseudoasm.writer
 import ljd.ast.builder
 import ljd.ast.validator
-import ljd.ast.eliminator
+import ljd.ast.locals
+import ljd.ast.slotworks
 import ljd.ast.unwarper
 import ljd.ast.mutator
 import ljd.lua.writer
@@ -87,7 +88,15 @@ def main():
 
 	ljd.ast.validator.validate(ast, warped=True)
 
-	ljd.ast.eliminator.eliminate_slots(ast)
+	ljd.ast.mutator.pre_pass(ast)
+
+	ljd.ast.validator.validate(ast, warped=True)
+
+	ljd.ast.locals.mark_locals(ast)
+
+	ljd.ast.validator.validate(ast, warped=True)
+
+	ljd.ast.slotworks.eliminate_temporary(ast)
 
 	ljd.ast.validator.validate(ast, warped=True)
 
@@ -95,7 +104,11 @@ def main():
 
 	ljd.ast.validator.validate(ast, warped=True)
 
-	ljd.ast.eliminator.eliminate_slots(ast)
+	ljd.ast.slotworks.eliminate_temporary(ast)
+
+	ljd.ast.validator.validate(ast, warped=True)
+
+	ljd.ast.locals.mark_local_definitions(ast)
 
 	ljd.ast.validator.validate(ast, warped=True)
 
@@ -103,7 +116,7 @@ def main():
 
 	ljd.ast.validator.validate(ast, warped=False)
 
-	ljd.ast.mutator.mutate(ast)
+	ljd.ast.mutator.primary_pass(ast)
 
 	ljd.ast.validator.validate(ast, warped=False)
 
