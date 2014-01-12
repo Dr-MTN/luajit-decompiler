@@ -34,7 +34,8 @@ STATEMENT_WHILE = 8
 
 STATEMENT_FUNCTION = 9
 
-VALID_IDENTIFIER = re.compile(r'^\w[\w\d]+$')
+VALID_IDENTIFIER = re.compile(r'^\w[\w\d]*$')
+
 
 class _State():
 	def __init__(self):
