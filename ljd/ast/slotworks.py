@@ -69,9 +69,6 @@ def _fill_massive_refs(info, simple, massive, iterators):
 		if not is_table:
 			return
 
-		assert isinstance(dst.table, nodes.Identifier)
-		assert dst.table.type == dst.table.T_BUILTIN
-
 		assert len(info.references) == 2
 		orig = info.references[0].identifier
 
