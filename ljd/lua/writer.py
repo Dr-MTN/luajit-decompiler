@@ -42,7 +42,6 @@ class _State():
 		self.current_statement = STATEMENT_NONE
 		self.function_name = None
 		self.function_local = False
-		self.visited_nodes = set()
 
 
 class Visitor(traverse.Visitor):
@@ -51,6 +50,7 @@ class Visitor(traverse.Visitor):
 
 		self.print_queue = []
 
+		self._visited_nodes = [set()]
 		self._states = [_State()]
 
 	# ##
@@ -98,7 +98,7 @@ class Visitor(traverse.Visitor):
 				self._write("local ")
 
 			self._write("function ")
-			
+
 			self._visit(self._state().function_name)
 
 			self._write("(")
@@ -195,11 +195,11 @@ class Visitor(traverse.Visitor):
 		self._visit(node.expressions)
 
 		self._end_statement(STATEMENT_ASSIGNMENT)
-	
+
 	def _is_variable(self, node):
 		if isinstance(node, nodes.Identifier):
 			return True
-	
+
 		return self._is_global(node)
 
 	def _is_global(self, node):
@@ -655,20 +655,24 @@ class Visitor(traverse.Visitor):
 			self._write("nil")
 
 	def _skip(self, node):
-		self._state().visited_nodes.add(node)
+		self._visited_nodes[-1].add(node)
 
 	def _visit(self, node):
 		assert node is not None
 
-		if node in self._state().visited_nodes:
+		if node in self._visited_nodes[-1]:
 			return
+
+		self._visited_nodes[-1].add(node)
 
 		# TODO: add check
 		# "It looks like you forgot about some node changes..."
 
-		self._state().visited_nodes.add(node)
+		self._visited_nodes.append(set())
 
 		traverse.Visitor._visit(self, node)
+
+		self._visited_nodes.pop()
 
 
 def write(fd, ast):
