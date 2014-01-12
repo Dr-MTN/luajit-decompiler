@@ -10,7 +10,10 @@ T_TRUE = 2
 class Table():
 	def __init__(self):
 		self.array = []
-		self.dictionary = {}
+
+		# Use a list so we can keep the original items order in the
+		# table
+		self.dictionary = []
 
 
 class Constants():

@@ -145,7 +145,7 @@ def _read_table(parser, table):
 		key = _read_table_item(parser)
 		value = _read_table_item(parser)
 
-		table.dictionary[key] = value
+		table.dictionary.append((key, value))
 
 		hash_items_count -= 1
 

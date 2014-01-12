@@ -718,7 +718,7 @@ def _build_table_copy(state, slot):
 
 		i += 1
 
-	for key, value in table.dictionary.items():
+	for key, value in table.dictionary:
 		record = nodes.TableRecord()
 		record.key = _build_table_record_item(key)
 		record.value = _build_table_record_item(value)

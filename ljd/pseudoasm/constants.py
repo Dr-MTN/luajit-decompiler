@@ -28,7 +28,7 @@ def _write_table(writer, index, table):
 
 		i += 1
 
-	for key, value in table.dictionary.items():
+	for key, value in table.dictionary:
 		key = _translate_element(key)
 		value = _translate_element(value)
 
