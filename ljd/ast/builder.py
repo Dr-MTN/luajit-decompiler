@@ -707,6 +707,7 @@ def _build_table_copy(state, slot):
 
 	for value in table.array:
 		if i == 0 and value is None:
+			i += 1
 			continue
 
 		record = nodes.TableRecord()
