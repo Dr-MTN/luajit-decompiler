@@ -29,16 +29,16 @@ def build(prototype):
 
 
 def _build_function_definition(prototype):
-	global _PENDING_MAYBE_LOCALS_STACK
-
-	_PENDING_MAYBE_LOCALS_STACK.append([[]] * 255)
-
 	node = nodes.FunctionDefinition()
 
 	state = _State()
 
 	state.constants = prototype.constants
 	state.debuginfo = prototype.debuginfo
+
+	node._upvalues = prototype.constants.upvalue_references
+	node._debuginfo = prototype.debuginfo
+	node._instructions_count = len(prototype.instructions)
 
 	node.arguments.contents = _build_function_arguments(state, prototype)
 
@@ -47,8 +47,6 @@ def _build_function_definition(prototype):
 
 	instructions = prototype.instructions
 	node.statements.contents = _build_function_blocks(state, instructions)
-
-	_PENDING_MAYBE_LOCALS_STACK.pop()
 
 	return node
 
@@ -60,7 +58,7 @@ def _build_function_arguments(state, prototype):
 
 	slot = 0
 	while slot < count:
-		variable = _build_variable(state, 0, slot)
+		variable = _build_slot(state, 0, slot)
 
 		arguments.append(variable)
 		slot += 1
@@ -69,15 +67,11 @@ def _build_function_arguments(state, prototype):
 
 
 def _build_function_blocks(state, instructions):
-	global _PENDING_MAYBE_LOCALS_STACK
-
 	_blockenize(state, instructions)
 
 	state.blocks[0].warpins_count = 1
 
 	for block in state.blocks:
-		_PENDING_MAYBE_LOCALS_STACK[-1] = [[]] * 255
-
 		addr = block.first_address
 		state.block = block
 
@@ -96,10 +90,19 @@ def _build_function_blocks(state, instructions):
 
 			addr += 1
 
-		if block != state.blocks[-1] and block.warp is None:
-			block.warp = nodes.UnconditionalWarp()
-			block.warp.type = nodes.UnconditionalWarp.T_FLOW
-			block.warp.target = state._warp_in_block(block.last_address + 1)
+		next_address = block.last_address + 1
+
+		if block.warp is None:
+			if block != state.blocks[-1]:
+				block.warp = nodes.UnconditionalWarp()
+				block.warp.type = nodes.UnconditionalWarp.T_FLOW
+
+				next_block = state._warp_in_block(next_address)
+				block.warp.target = next_block
+			else:
+				block.warp = nodes.EndWarp()
+
+		setattr(block.warp, "_addr", block.last_address)
 
 	state.blocks[-1].warp = nodes.EndWarp()
 
@@ -273,9 +276,9 @@ def _finalize_conditional_warp(state, addr, instruction):
 
 def _build_copy_if_statement(state, addr, instruction):
 	assignment = nodes.Assignment()
-	destination = _build_destination(state, addr, instruction.A)
+	destination = _build_slot(state, addr, instruction.A)
 
-	expression = _build_variable(state, addr, instruction.CD)
+	expression = _build_slot(state, addr, instruction.CD)
 
 	assignment.destinations.contents.append(destination)
 	assignment.expressions.contents.append(expression)
@@ -317,7 +320,7 @@ def _build_var_assignment(state, addr, instruction):
 		expression = _build_upvalue(state, addr, instruction.CD)
 
 	elif opcode == ins.USETV.opcode:
-		expression = _build_variable(state, addr, instruction.CD)
+		expression = _build_slot(state, addr, instruction.CD)
 
 	elif opcode <= ins.USETP.opcode:
 		expression = _build_const_expression(state, addr, instruction)
@@ -341,7 +344,7 @@ def _build_var_assignment(state, addr, instruction):
 	assignment.expressions.contents.append(expression)
 
 	if instruction.A_type == ins.T_DST:
-		destination = _build_destination(state, addr, instruction.A)
+		destination = _build_slot(state, addr, instruction.A)
 	else:
 		assert instruction.A_type == ins.T_UV
 
@@ -364,7 +367,7 @@ def _build_global_assignment(state, addr, instruction):
 	assignment = nodes.Assignment()
 
 	variable = _build_global_variable(state, addr, instruction.CD)
-	expression = _build_variable(state, addr, instruction.A)
+	expression = _build_slot(state, addr, instruction.A)
 
 	assignment.destinations.contents.append(variable)
 	assignment.expressions.contents.append(expression)
@@ -376,7 +379,7 @@ def _build_table_assignment(state, addr, instruction):
 	assignment = nodes.Assignment()
 
 	destination = _build_table_element(state, addr, instruction)
-	expression = _build_variable(state, addr, instruction.A)
+	expression = _build_slot(state, addr, instruction.A)
 
 	assignment.destinations.contents.append(destination)
 	assignment.expressions.contents.append(expression)
@@ -389,21 +392,12 @@ def _build_table_mass_assignment(state, addr, instruction):
 
 	base = instruction.A
 
-	start = int(state.constants.numeric_constants[instruction.CD])
-
 	destination = nodes.TableElement()
-	destination.key = _build_literal(state, start)
-	destination.table = _build_variable(state, addr, base - 1)
+	destination.key = _build_literal(state, nodes.MULTRES())
+	destination.table = _build_slot(state, addr, base - 1)
 
-	assignment.destinations.contents = [
-		destination,
-		nodes.MULTRES()
-	]
-
-	assignment.expressions.contents = [
-		_build_variable(state, addr, base),
-		nodes.MULTRES()
-	]
+	assignment.destinations.contents = [destination]
+	assignment.expressions.contents = [nodes.MULTRES()]
 
 	return assignment
 
@@ -424,8 +418,7 @@ def _prepare_iterator_warp(state, addr, instruction):
 	slot = base
 
 	while slot <= last_slot:
-		# Fix the scope
-		variable = _build_destination(state, addr - 1, slot)
+		variable = _build_slot(state, addr - 1, slot)
 		warp.variables.contents.append(variable)
 		slot += 1
 
@@ -444,7 +437,7 @@ def _finalize_iterator_warp(state, addr, instruction):
 
 def _build_call(state, addr, instruction):
 	call = nodes.FunctionCall()
-	call.function = _build_variable(state, addr, instruction.A)
+	call.function = _build_slot(state, addr, instruction.A)
 	call.arguments.contents = _build_call_arguments(state, addr, instruction)
 
 	if instruction.opcode <= ins.CALL.opcode:
@@ -496,7 +489,7 @@ def _build_return(state, addr, instruction):
 
 	# Negative count for the RETM is OK
 	while slot <= last_slot:
-		variable = _build_variable(state, addr, slot)
+		variable = _build_slot(state, addr, slot)
 		node.returns.contents.append(variable)
 		slot += 1
 
@@ -520,7 +513,7 @@ def _build_numeric_loop_warp(state, addr, instruction):
 
 	base = instruction.A
 
-	warp.index = _build_destination(state, addr, base + 3)
+	warp.index = _build_slot(state, addr, base + 3)
 	warp.controls.contents = [
 		_build_slot(state, addr, base + 0),  # start
 		_build_slot(state, addr, base + 1),  # limit
@@ -574,7 +567,7 @@ def _build_call_arguments(state, addr, instruction):
 	slot = base + 1
 
 	while slot <= last_argument_slot:
-		argument = _build_variable(state, addr, slot)
+		argument = _build_slot(state, addr, slot)
 		arguments.append(argument)
 		slot += 1
 
@@ -592,7 +585,7 @@ def _build_range_assignment(state, addr, from_slot, to_slot):
 	assert from_slot <= to_slot
 
 	while slot <= to_slot:
-		destination = _build_destination(state, addr, slot)
+		destination = _build_slot(state, addr, slot)
 
 		assignment.destinations.contents.append(destination)
 
@@ -626,15 +619,15 @@ def _build_binary_expression(state, addr, instruction):
 		operator.type = nodes.BinaryOperator.T_POW
 
 	if instruction.B_type == ins.T_VAR and instruction.CD_type == ins.T_VAR:
-		operator.left = _build_variable(state, addr, instruction.B)
-		operator.right = _build_variable(state, addr, instruction.CD)
+		operator.left = _build_slot(state, addr, instruction.B)
+		operator.right = _build_slot(state, addr, instruction.CD)
 	elif instruction.B_type == ins.T_VAR:
-		operator.left = _build_variable(state, addr, instruction.B)
+		operator.left = _build_slot(state, addr, instruction.B)
 		operator.right = _build_numeric_constant(state, instruction.CD)
 	else:
 		assert instruction.CD_type == ins.T_VAR
 
-		operator.right = _build_variable(state, addr, instruction.B)
+		operator.right = _build_slot(state, addr, instruction.B)
 		operator.left = _build_numeric_constant(state, instruction.CD)
 
 	return operator
@@ -646,15 +639,15 @@ def _build_concat_expression(state, addr, instruction):
 
 	slot = instruction.B
 
-	operator.left = _build_variable(state, addr, slot)
-	operator.right = _build_variable(state, addr, slot + 1)
+	operator.left = _build_slot(state, addr, slot)
+	operator.right = _build_slot(state, addr, slot + 1)
 
 	slot += 2
 
 	while slot <= instruction.CD:
 		upper_operator = nodes.BinaryOperator()
 		upper_operator.left = operator
-		upper_operator.right = _build_variable(state, addr, slot)
+		upper_operator.right = _build_slot(state, addr, slot)
 		upper_operator.type = nodes.BinaryOperator.T_CONCAT
 
 		operator = upper_operator
@@ -682,10 +675,10 @@ def _build_const_expression(state, addr, instruction):
 
 def _build_table_element(state, addr, instruction):
 	node = nodes.TableElement()
-	node.table = _build_variable(state, addr, instruction.B)
+	node.table = _build_slot(state, addr, instruction.B)
 
 	if instruction.CD_type == ins.T_VAR:
-		node.key = _build_variable(state, addr, instruction.CD)
+		node.key = _build_slot(state, addr, instruction.CD)
 	else:
 		node.key = _build_const_expression(state, addr, instruction)
 
@@ -778,7 +771,7 @@ _COMPARISON_MAP[ins.ISNEP.opcode] = nodes.BinaryOperator.T_EQUAL
 def _build_comparison_expression(state, addr, instruction):
 	operator = nodes.BinaryOperator()
 
-	operator.left = _build_variable(state, addr, instruction.A)
+	operator.left = _build_slot(state, addr, instruction.A)
 
 	opcode = instruction.opcode
 
@@ -789,7 +782,7 @@ def _build_comparison_expression(state, addr, instruction):
 	elif opcode == ins.ISEQP.opcode or opcode == ins.ISNEP.opcode:
 		operator.right = _build_primitive(state, instruction.CD)
 	else:
-		operator.right = _build_variable(state, addr, instruction.CD)
+		operator.right = _build_slot(state, addr, instruction.CD)
 
 	operator.type = _COMPARISON_MAP[instruction.opcode]
 	assert operator.type is not None
@@ -800,7 +793,7 @@ def _build_comparison_expression(state, addr, instruction):
 def _build_unary_expression(state, addr, instruction):
 	opcode = instruction.opcode
 
-	variable = _build_variable(state, addr, instruction.CD)
+	variable = _build_slot(state, addr, instruction.CD)
 
 	# Mind the inversion
 	if opcode == ins.ISFC.opcode			\
@@ -824,16 +817,7 @@ def _build_unary_expression(state, addr, instruction):
 	return operator
 
 
-_PENDING_MAYBE_LOCALS_STACK = []
-
-
-def _build_destination(state, addr, slot):
-	global _PENDING_MAYBE_LOCALS_STACK
-	_PENDING_MAYBE_LOCALS_STACK[-1][slot] = []
-	return _build_variable(state, addr, slot)
-
-
-def _build_variable(state, addr, slot):
+def _build_slot(state, addr, slot):
 	return _build_identifier(state, addr, slot, nodes.Identifier.T_LOCAL)
 
 
@@ -841,48 +825,14 @@ def _build_upvalue(state, addr, slot):
 	return _build_identifier(state, addr, slot, nodes.Identifier.T_UPVALUE)
 
 
-def _build_slot(state, addr, slot):
-	return _build_identifier(state, addr, slot, nodes.Identifier.T_SLOT)
-
-
 def _build_identifier(state, addr, slot, want_type):
-	global _PENDING_MAYBE_LOCALS_STACK
-
 	node = nodes.Identifier()
 	setattr(node, "_addr", addr)
 
 	node.slot = slot
 	node.type = nodes.Identifier.T_SLOT
 
-	if want_type == nodes.Identifier.T_LOCAL:
-		info = state.debuginfo.lookup_local_name(addr, slot)
-		node._varinfo = info
-
-		if info is not None and info.type != info.T_INTERNAL:
-			node.type = want_type
-			node.name = info.name
-
-			#
-			# Do NOT check the address scope here.
-			# All this stuff is done only because the address scope
-			# is unreliable, so we would rather rely on our
-			# assignments processing clearing up the queue (by
-			# calling the _build_destination).
-			#
-			# If there is a problem with something being marked as
-			# local when it shouldn't be - that's probably due to
-			# incorrect order of the _build_destination and
-			# _build_variable calls. Somewhere else.
-			#
-			for i in _PENDING_MAYBE_LOCALS_STACK[-1][slot]:
-				i.type = want_type
-				i.name = info.name
-				i._varinfo = info
-
-			_PENDING_MAYBE_LOCALS_STACK[-1][slot] = []
-		else:
-			_PENDING_MAYBE_LOCALS_STACK[-1][slot].append(node)
-	elif want_type == nodes.Identifier.T_UPVALUE:
+	if want_type == nodes.Identifier.T_UPVALUE:
 		name = state.debuginfo.lookup_upvalue_name(slot)
 
 		if name is not None:
