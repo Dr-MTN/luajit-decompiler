@@ -70,6 +70,9 @@ class _LocalsMarker(traverse.Visitor):
 		self._state().debuginfo = node._debuginfo
 
 	def leave_function_definition(self, node):
+		addr = node._instructions_count
+		self._process_slots(addr)
+
 		self._pop_state()
 
 	# ##
@@ -89,6 +92,11 @@ class _LocalsMarker(traverse.Visitor):
 			slots = queue.setdefault(node.slot, [])
 
 			slots.append(node)
+
+			addr = getattr(node, "_addr", None)
+
+			if addr is not None:
+				self._process_slots(addr)
 
 	# ##
 
