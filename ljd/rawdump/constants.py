@@ -91,7 +91,7 @@ def _read_numeric_constants(parser, numeric_constants):
 
 			number = _assemble_number(lo, hi)
 		else:
-			number = lo
+			number = _process_sign(lo)
 
 		numeric_constants.append(number)
 
@@ -107,6 +107,12 @@ def _read_number(parser):
 	return _assemble_number(lo, hi)
 
 
+def _read_signed_int(parser):
+	number = parser.stream.read_uleb128()
+
+	return _process_sign(number)
+
+
 def _assemble_number(lo, hi):
 	if sys.byteorder == 'big':
 		float_as_int = lo << 32 | hi
@@ -115,6 +121,13 @@ def _assemble_number(lo, hi):
 
 	raw_bytes = struct.pack("=Q", float_as_int)
 	return struct.unpack("=d", raw_bytes)[0]
+
+
+def _process_sign(number):
+	if number & 0x80000000:
+		return -0x100000000 + number
+	else:
+		return number
 
 
 def _read_table(parser, table):
@@ -148,7 +161,7 @@ def _read_table_item(parser):
 		return parser.stream.read_bytes(length).decode("ascii")
 
 	elif data_type == BCDUMP_KTAB_INT:
-		return parser.stream.read_uleb128()
+		return _read_signed_int(parser)
 
 	elif data_type == BCDUMP_KTAB_NUM:
 		return _read_number(parser)

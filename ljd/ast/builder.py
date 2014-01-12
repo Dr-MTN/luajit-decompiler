@@ -664,7 +664,14 @@ def _build_const_expression(state, addr, instruction):
 		return _build_string_constant(state, instruction.CD)
 	elif CD_type == ins.T_CDT:
 		return _build_cdata_constant(state, instruction.CD)
-	elif CD_type == ins.T_LIT or CD_type == ins.T_SLIT:
+	elif CD_type == ins.T_SLIT:
+		value = instruction.CD
+
+		if value & 0x8000:
+			value = -0x10000 + value
+
+		return _build_literal(state, value)
+	elif CD_type == ins.T_LIT:
 		return _build_literal(state, instruction.CD)
 	elif CD_type == ins.T_NUM:
 		return _build_numeric_constant(state, instruction.CD)
