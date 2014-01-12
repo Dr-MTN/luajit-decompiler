@@ -12,8 +12,8 @@ binop = nodes.BinaryOperator
 # ##
 # ## Block indices are unreliable while you are mangling them!
 # ##
-# ## P.S. Probably then should not be named indices... But they ARE used as
-# ## indices during other phases
+# ## P.S. Probably they should not be named indices... But they ARE used as
+# ## indices during other phases. Sometimes.
 # ##
 
 
