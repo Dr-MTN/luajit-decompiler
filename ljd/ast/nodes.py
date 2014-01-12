@@ -11,6 +11,10 @@ class FunctionDefinition():
 		self.arguments = IdentifiersList()
 		self.statements = StatementsList()
 
+		self._upvalues = None
+		self._debuginfo = None
+		self._instructions_count = 0
+
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_function_definition, self)
 
