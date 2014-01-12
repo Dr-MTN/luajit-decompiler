@@ -23,17 +23,18 @@ TODO
 ---
 
 There is a lot of work to do, in the order of priority
+
 1. AST Mutations:
-	3. Use the line information (or common sense if there is no line
+	1. Use the line information (or common sense if there is no line
 	   information) to squash similar expressions into a single expression.
 
 2. Formatting improvements
-	2. Use the line information (or common sense) to preserve empty lines
+	1. Use the line information (or common sense) to preserve empty lines
 	   and break long statements like in the original code.
 	   
 	   This is mostly done, but only in the "common sense" part.
 
-	3. Use method-style calls and definitions for tables.
+	2. Use method-style calls and definitions for tables.
 
 3. Features not supported:
 	1. GOTO statement (from lua 5.2). All the required functionality is
