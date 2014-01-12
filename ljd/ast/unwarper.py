@@ -238,6 +238,13 @@ def _expression_requirements_fulfiled(start, body):
 		elif slot != dst.slot:
 			return False
 
+	# We have something at the end, but not the true/false?
+	if len(body) > 1 and len(body[-1].contents) > 0	\
+				and len(body[-2].contents) > 0:
+		true, _false, _body = _get_terminators(body)
+
+		need_true_false = True
+
 	if slot < 0:
 		return False
 
