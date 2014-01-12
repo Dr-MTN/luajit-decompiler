@@ -740,20 +740,13 @@ def _extract_if_expression(start, end, body, topmost_end):
 
 		falses.append(body[i + 1])
 
-	if len(falses) == 0:
-		falses.append(end)
+	falses.append(end)
 
-		if topmost_end is not None:
-			falses.append(topmost_end)
+	if topmost_end is not None:
+		falses.append(topmost_end)
 
-	false = falses[0]
 	falses = set(falses)
-	false, end_i = _search_expression_end(expression, false, falses)
-
-	if end_i < 0:
-		false = end
-		falses = set((end, topmost_end))
-		false, end_i = _search_expression_end(expression, false, falses)
+	false, end_i = _search_expression_end(expression, falses)
 
 	assert end_i >= 0
 
@@ -769,8 +762,9 @@ def _extract_if_expression(start, end, body, topmost_end):
 	return expression, body, false
 
 
-def _search_expression_end(expression, false, falses):
+def _search_expression_end(expression, falses):
 	expression_end = -1
+	false = None
 
 	for i, block in enumerate(expression):
 		target = _get_target(block.warp)
@@ -778,12 +772,13 @@ def _search_expression_end(expression, false, falses):
 		if target not in falses:
 			continue
 
-		if target.index < false.index:
-			break
-
-		if target.index >= false.index:
+		if false is None or target == false:
 			false = target
 			expression_end = i + 1
+		else:
+			break
+
+	assert false is not None
 
 	return false, expression_end
 
