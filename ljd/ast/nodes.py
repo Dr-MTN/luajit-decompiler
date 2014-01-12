@@ -55,15 +55,15 @@ class Assignment():
 	T_NORMAL = 1
 
 	def __init__(self):
-		self.destinations = VariablesList()
 		self.expressions = ExpressionsList()
+		self.destinations = VariablesList()
 		self.type = -1
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_assignment, self)
 
-		visitor._visit(self.destinations)
 		visitor._visit(self.expressions)
+		visitor._visit(self.destinations)
 
 		visitor._leave_node(visitor.leave_assignment, self)
 
