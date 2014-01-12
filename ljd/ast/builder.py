@@ -291,13 +291,17 @@ def _finalize_conditional_warp(state, addr, instruction):
 
 
 def _build_copy_if_statement(state, addr, instruction):
-	assignment = nodes.Assignment()
-	destination = _build_slot(state, addr, instruction.A)
+	# It's being used only for expressions, and we don't need
+	# useless assignments there. Slot eliminator will take care of the
+	# conditions
 
-	expression = _build_slot(state, addr, instruction.CD)
+	# assignment = nodes.Assignment()
+	# destination = _build_slot(state, addr, instruction.A)
 
-	assignment.destinations.contents.append(destination)
-	assignment.expressions.contents.append(expression)
+	# expression = _build_slot(state, addr, instruction.CD)
+
+	# assignment.destinations.contents.append(destination)
+	# assignment.expressions.contents.append(expression)
 
 	warp = nodes.ConditionalWarp()
 	warp.condition = _build_unary_expression(state, addr, instruction)
@@ -305,7 +309,7 @@ def _build_copy_if_statement(state, addr, instruction):
 	assert state.block.warp is None
 	state.block.warp = warp
 
-	return assignment
+	# return assignment
 
 
 def _build_var_assignment(state, addr, instruction):
