@@ -1,3 +1,6 @@
+--[[
+--]]
+
 print ("true or true")
 
 b = true or true
@@ -41,13 +44,11 @@ print ("precalculated false expression with nil")
 f = nil and ((x and y) or true)
 
 print ("simple or expression")
-
 b = x or y
 
 print ("simple or not expression")
 
 b = not x or y
-
 print ("simple and expression")
 
 b = x and y
@@ -178,3 +179,10 @@ a = x < 100 or (y < 100 and (x < 100 or z < 100))
 
 print ("(not or (and (or)))")
 a = (not (x < 100)) or (y < 100 and (x < 100 or z < 100))
+
+local value = 1.0
+
+value = scaleinfo.floorValue and math.floor(value) or math.ceil(value)
+
+--[[
+--]]

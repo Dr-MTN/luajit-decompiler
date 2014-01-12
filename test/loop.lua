@@ -349,3 +349,17 @@ until x < 3 and y < 3
 
 --[[
 --]]
+
+if x then
+	for i=1,2,3 do
+		print ("something")
+
+		if y then
+			break
+		end
+
+		print ("something")
+	end
+else
+	print("else")
+end

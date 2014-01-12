@@ -1,3 +1,6 @@
+--[[
+--]]
+
 if true then
 	print("if true")
 end
@@ -18,6 +21,29 @@ if x and false then
 	print("if and false")
 end
 
+if x then
+	if false then
+		print("if and false")
+	end
+end
+
+if x then
+	if false then
+		print("if and false")
+	else
+		print("if and false with else!")
+	end
+end
+
+if x then
+	if false then
+		print("if and false")
+	else
+		print("if and false with else!")
+	end
+else
+	print ("Else!")
+end
 
 if x and true then
 	print("if and true")
@@ -37,7 +63,6 @@ if x < 100 then
 else
 	print ("else")
 end
-
 
 if x < 100 and y < 100 then
 	print ("semi-nested then")
@@ -80,12 +105,22 @@ else
 end
 
 if x < 100 or z > 100 then
+	if y < 300 or x > 100 then
+		print ("Nested then")
+	else
+		print ("Nested else")
+	end
+end
+
+
+if x < 100 or z > 100 then
 	if y < 100 or x > 100 then
 		print ("Nested then")
 	end
 else
 	print ("Else")
 end
+
 
 if x < 100 or z > 100 then
 	if y < 100 or x > 100 then
@@ -114,6 +149,7 @@ end
 if x < 100 or y < 100 then
 	print ("x or y with comparisons")
 end
+
 
 if x < 100 and y < 100 then
 	print ("x and y with comparisons")
@@ -402,5 +438,36 @@ end
 
 print ("asd")
 
+local value = 1.3
+
+if scaleinfo.floorValue then
+	value = math.floor(value*scaleinfo.factor)
+else
+	value = math.ceil(value*scaleinfo.factor)
+end
+
+function func(button, buttonElement)
+	local stateEntry = buttonElement.buttonState
+	local targetSlide = nil
+
+	if buttonElement.active then
+		if stateEntry.mouseClick or stateEntry.keyboardPress then
+			targetSlide = "click"
+		else
+			if stateEntry.mouseOver or stateEntry.keyboard then
+				targetSlide = "highlight"
+			else
+				targetSlide = "normal"
+			end
+		end
+	else
+		targetSlide = "unselect"
+	end
+
+	local _, curSide = getCurrentSlide(buttonElement.element)
+end
+
+
 --[[
 --]]
+
