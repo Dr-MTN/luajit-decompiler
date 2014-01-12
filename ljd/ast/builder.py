@@ -121,7 +121,8 @@ _JUMP_WARP_INSTRUCTIONS = set((
 
 _WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | set((
 	ins.FORL.opcode, ins.IFORL.opcode, ins.JFORL.opcode,
-	ins.ITERL.opcode, ins.IITERL.opcode, ins.JITERL.opcode
+	ins.ITERL.opcode, ins.IITERL.opcode, ins.JITERL.opcode,
+	ins.LOOP.opcode
 ))
 
 
