@@ -644,7 +644,12 @@ class Visitor(traverse.Visitor):
 
 			self._write("]]")
 		else:
-			self._write('"' + node.value + '"')
+			text = node.value
+
+			if "\\" in text:
+				text = text.replace("\\", "\\\\")
+
+			self._write('"' + text + '"')
 
 	def visit_primitive(self, node):
 		if node.type == nodes.Primitive.T_FALSE:
