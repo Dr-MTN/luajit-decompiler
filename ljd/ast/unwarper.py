@@ -955,9 +955,29 @@ def _unwarp_loop(start, end, body):
 
 	last = body[-1]
 
+	if isinstance(start.warp, nodes.IteratorWarp):
+		assert isinstance(last.warp, nodes.UnconditionalWarp)
+		assert last.warp.target == start
+
+		loop = nodes.IteratorFor()
+		loop.statements.contents = body
+		loop.identifiers = start.warp.variables
+		loop.expressions = start.warp.controls
+		_set_flow_to(start, body[0])
+
+	elif isinstance(start.warp, nodes.NumericLoopWarp):
+		assert isinstance(last.warp, nodes.UnconditionalWarp)
+		assert last.warp.target == start
+
+		loop = nodes.NumericFor()
+		loop.statements.contents = body
+		loop.variable = start.warp.index
+		loop.expressions = start.warp.controls
+		_set_flow_to(start, body[0])
+
 	# While (including "while true" and "repeat until false" which will be
 	# while true)
-	if isinstance(last.warp, nodes.UnconditionalWarp):
+	elif isinstance(last.warp, nodes.UnconditionalWarp):
 		assert last.warp.target == start
 
 		# There shouldn't be many problems similar to ifs, as we are
@@ -1014,8 +1034,10 @@ def _unwarp_loop(start, end, body):
 		_set_flow_to(start, body[0])
 
 	# Repeat until
-	elif isinstance(last.warp, nodes.ConditionalWarp):
+	else:
+		assert isinstance(last.warp, nodes.ConditionalWarp)
 		assert last.warp.false_target == start
+
 		i = len(body) - 1
 
 		while i >= 0:
@@ -1065,25 +1087,6 @@ def _unwarp_loop(start, end, body):
 		body[0] = start_copy
 
 		loop.statements.contents = body
-
-	# for x, y in a, b, c
-	elif isinstance(last.warp, nodes.IteratorWarp):
-		assert isinstance(start.warp, nodes.UnconditionalWarp)
-		assert start.warp.target == last
-
-		loop = nodes.IteratorFor()
-		loop.statements.contents = body
-		loop.identifiers = last.warp.variables
-		loop.expressions = last.warp.controls
-		_set_flow_to(start, body[0])
-	else:
-		assert isinstance(last.warp, nodes.NumericLoopWarp)
-
-		loop = nodes.NumericFor()
-		loop.statements.contents = body
-		loop.variable = last.warp.index
-		loop.expressions = last.warp.controls
-		_set_flow_to(start, body[0])
 
 	return loop
 
@@ -1238,13 +1241,6 @@ def _find_all_loops(blocks, repeat_until):
 			end = blocks[end_index + 1]
 
 			loops.append((start, end))
-		elif isinstance(warp, (nodes.NumericLoopWarp, nodes.IteratorWarp)):
-			assert not repeat_until
-			assert warp.body.index <= block.index
-
-			# There always is a block with controls initialization
-			start = _get_previous_block(warp.body, blocks)
-			loops.append((start, warp.way_out))
 
 		i += 1
 
