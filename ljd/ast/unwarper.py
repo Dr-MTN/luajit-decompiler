@@ -147,7 +147,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 
 		processed = False
 
-		end = _find_branching_end(start, blocks)
+		end = _find_branching_end(start, blocks, topmost_end)
 
 		try:
 			end_index = blocks.index(end)
@@ -792,10 +792,15 @@ def _search_expression_end(expression, false, falses):
 # As we add a block into the queue only if it's index is less then the
 # current end, queue will eventually depleed
 #
-def _find_branching_end(start, blocks):
+def _find_branching_end(start, blocks, topmost_end):
 	warp = start.warp
 
 	queue = collections.deque()
+
+	if topmost_end is None:
+		top_ends = set()
+	else:
+		top_ends = _gather_possible_ends(topmost_end)
 
 	if not isinstance(start.warp, nodes.ConditionalWarp):
 		index = blocks.index(warp.target)
@@ -807,7 +812,12 @@ def _find_branching_end(start, blocks):
 			if warp.type == nodes.UnconditionalWarp.T_FLOW:
 				return warp.target
 
-			index = blocks.index(warp.target)
+			try:
+				index = blocks.index(warp.target)
+			except ValueError:
+				assert warp.target in top_ends
+
+				return warp.target
 
 			previous = blocks[index - 1]
 
