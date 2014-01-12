@@ -16,7 +16,7 @@ decompile the decompiler - a great test too!
 How to use it
 ---
 
-There is not argument parsing right now, so comment out things in the ```main.py```
+There is no argument parsing right now, so comment out things in the ```main.py```
 script and launch it as in ```main.py path/to/file.luac```
 
 TODO
@@ -24,51 +24,21 @@ TODO
 
 There is a lot of work to do, in the order of priority
 
-1. AST Optimizations - currently the resulting code is not even compilable.
-	1. If statements recomposition
-	   ```lua
-	   if something then
-	   	...
-	   elseif something_else then
-		...
-	   end
-	   ```
-
-	   is now translated into
-	   ```lua
-	   if something then
-	   	...
-	   else
-	   	if something_else then
-			...
-		end
-	   end
-	   ```
-
-	   *This should be fixed for code readability*
-
-	2. Logical expressions recomposition - logical expressions are not
-	   broken into dozen small if's. *This should be fixed for code
-	   readability*
-	
-	3. Use the line information (or common sense if there is no line
+1. AST Mutations:
+	1. Use the line information (or common sense if there is no line
 	   information) to squash similar expressions into a single expression.
 
-	4. Function names as _function name ()_ instead of _name = function()_
-
 2. Formatting improvements
-	1. Use operator priority information for arithmetic expressions to omit
-	   redundant parentheses.
-
-	2. Use the line information (or common sense) to preserve empty lines
+	1. Use the line information (or common sense) to preserve empty lines
 	   and break long statements like in the original code.
-	   *this should be done for code readability*
+	   
+	   This is mostly done, but only in the "common sense" part.
 
-	3. Use method-style calls and definitions for tables.
+	2. Use method-style calls and definitions for tables.
 
 3. Features not supported:
 	1. GOTO statement (from lua 5.2). All the required functionality is
-		now in place, but that's rather a low-priority task right now
+		now in place, but that's rather a low-priority task right now.
 
 	2. Local sub-blocks:
 	```lua
