@@ -273,6 +273,21 @@ def _finalize_conditional_warp(state, addr, instruction):
 	warp.false_target = state._warp_in_block(destination)
 	warp.true_target = state._warp_in_block(addr + 1)
 
+	# something or true or simply true
+	if warp.false_target == warp.true_target:
+		target = warp.false_target
+
+		black_hole = nodes.BlackHole()
+		black_hole.contents.append(warp.condition)
+
+		state.block.contents.append(black_hole)
+
+		warp = nodes.UnconditionalWarp()
+		warp.type = nodes.UnconditionalWarp.T_FLOW
+		warp.target = target
+
+		state.block.warp = warp
+
 
 def _build_copy_if_statement(state, addr, instruction):
 	assignment = nodes.Assignment()

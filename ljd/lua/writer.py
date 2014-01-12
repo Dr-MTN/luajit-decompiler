@@ -34,6 +34,8 @@ STATEMENT_WHILE = 8
 
 STATEMENT_FUNCTION = 9
 
+STATEMENT_BLACKHOLE = 10
+
 VALID_IDENTIFIER = re.compile(r'^\w[\w\d]*$')
 
 
@@ -369,6 +371,25 @@ class Visitor(traverse.Visitor):
 
 	def visit_multres(self, node):
 		self._write("MULTRES")
+
+	def visit_blackhole(self, node):
+		self._start_statement(STATEMENT_BLACKHOLE)
+
+		self._write("BLACK HOLE START")
+
+		self._end_line()
+
+		self._start_block()
+
+		self._visit_list(node.contents)
+
+		self._end_line()
+
+		self._end_block()
+
+		self._write("BLACK HOLE END")
+
+		self._end_statement(STATEMENT_BLACKHOLE)
 
 	def visit_table_element(self, node):
 		key = node.key

@@ -92,6 +92,12 @@ class Visitor():
 	def leave_multres(self, node):
 		pass
 
+	def visit_blackhole(self, node):
+		pass
+
+	def leave_blackhole(self, node):
+		pass
+
 	def visit_table_element(self, node):
 		pass
 

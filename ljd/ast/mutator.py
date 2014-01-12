@@ -80,6 +80,15 @@ class MutatorVisitor(traverse.Visitor):
 		node.elseifs += subif.elseifs
 		node.else_block = subif.else_block
 
+	def visit_statements_list(self, node):
+		patched = []
+
+		for statement in node.contents:
+			if not isinstance(statement, nodes.BlackHole):
+				patched.append(statement)
+
+		node.contents = patched
+
 
 def pre_pass(ast):
 	traverse.traverse(SimpleLoopWarpSwapper(), ast)
