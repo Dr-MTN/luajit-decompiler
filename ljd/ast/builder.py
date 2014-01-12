@@ -409,7 +409,7 @@ def _build_table_mass_assignment(state, addr, instruction):
 	base = instruction.A
 
 	destination = nodes.TableElement()
-	destination.key = _build_literal(state, nodes.MULTRES())
+	destination.key = nodes.MULTRES()
 	destination.table = _build_slot(state, addr, base - 1)
 
 	assignment.destinations.contents = [destination]
