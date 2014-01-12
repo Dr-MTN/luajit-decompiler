@@ -259,17 +259,23 @@ class _MultresEliminator(traverse.Visitor):
 			node.expressions.contents[i] = self._last_multres_value
 			self._last_multres_value = None
 
-	def visit_function_call(self, node):
-		for i, arg in enumerate(node.arguments.contents):
-			if isinstance(arg, nodes.MULTRES):
+	def _process_multres_in_list(self, nodes_list):
+		for i, node in enumerate(nodes_list):
+			if isinstance(node, nodes.MULTRES):
 				break
 		else:
 			return
 
 		assert self._last_multres_value is not None
 
-		node.arguments.contents[i] = self._last_multres_value
+		nodes_list[i] = self._last_multres_value
 		self._last_multres_value = None
+
+	def visit_function_call(self, node):
+		self._process_multres_in_list(node.arguments.contents)
+
+	def visit_return(self, node):
+		self._process_multres_in_list(node.returns.contents)
 
 
 class _SlotReference():
