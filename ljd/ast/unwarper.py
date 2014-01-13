@@ -608,7 +608,10 @@ def _assemble_expression(parts):
 
 	node = nodes.BinaryOperator()
 	node.left = _assemble_expression(parts[-3])
+
 	node.type = parts[-2]
+	assert isinstance(node.type, int)
+
 	node.right = _assemble_expression(parts[-1])
 
 	i = len(parts) - 4
