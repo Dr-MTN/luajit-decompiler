@@ -291,8 +291,8 @@ def _compile_expression(body, end, true, false):
 		assert len(parts) == 1
 		return parts[0]
 
-	parts = _make_explicit_subexpressions(parts)
-	return _assemble_expression(parts)
+	explicit_parts = _make_explicit_subexpressions(parts)
+	return _assemble_expression(explicit_parts)
 
 
 #
@@ -651,8 +651,11 @@ def _make_explicit_subexpressions(parts):
 			subexpression_start = i
 			last_operator = operator
 		elif subexpression_start > 0:
-			if operator > last_operator:
-				patched.append(parts[subexpression_start:i])
+			if operator > last_operator				\
+					and (i - subexpression_start) % 2 != 0:
+				subexpression = parts[subexpression_start:i]
+
+				patched.append(subexpression)
 				subexpression_start = -1
 		else:
 			patched += [component, operator]
