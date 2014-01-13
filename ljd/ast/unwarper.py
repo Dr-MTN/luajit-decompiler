@@ -211,6 +211,11 @@ def _expression_requirements_fulfiled(start, body):
 				need_true_false = True
 				break
 
+	# We have something at the end, but not the true/false?
+	if len(body) > 1 and len(body[-1].contents) > 0	\
+				and len(body[-2].contents) > 0:
+		need_true_false = True
+
 	for block in body:
 		if len(block.contents) == 0:
 			continue
@@ -238,12 +243,22 @@ def _expression_requirements_fulfiled(start, body):
 		elif slot != dst.slot:
 			return False
 
-	# We have something at the end, but not the true/false?
-	if len(body) > 1 and len(body[-1].contents) > 0	\
-				and len(body[-2].contents) > 0:
-		true, _false, _body = _get_terminators(body)
+		if need_true_false and body[-1].index - block.index < 3:
+			continue
 
-		need_true_false = True
+		if not isinstance(block.warp, nodes.UnconditionalWarp):
+			continue
+		elif body[-1] == block:
+			if block.warp.type != nodes.UnconditionalWarp.T_FLOW:
+				return False
+
+			continue
+
+		src = assignment.expressions.contents[0]
+
+		if not isinstance(src, (nodes.Primitive, nodes.Constant,
+					nodes.BinaryOperator)):
+			return False
 
 	if slot < 0:
 		return False
