@@ -43,10 +43,12 @@ print ("precalculated false expression with nil")
 
 f = nil and ((x and y) or true)
 
+
 print ("simple or expression")
 b = x or y
 
 print ("simple or not expression")
+
 
 b = not x or y
 print ("simple and expression")

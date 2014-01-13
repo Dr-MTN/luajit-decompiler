@@ -468,6 +468,51 @@ function func(button, buttonElement)
 end
 
 
+local sliderelement = {}
+local centerValue = ""
+
+if sliderelement.scale[1].displayCenter then
+	if sliderelement.scale[2] ~= nil and sliderelement.scale[2].displayCenter then
+		centerValue = formatNumber(
+				math.abs(getSliderCenterValue(sliderValue, sliderelement.scale[1])),
+				sliderelement.scale[1].valueSuffix,
+				math.abs(getSliderCenterValue(sliderValue, sliderelement.scale[2])),
+				sliderelement.scale[2].valueSuffix)
+	end
+else
+	if sliderelement.scale[1].displayCenter then
+		centerValue = formatNumber(math.abs(getSliderCenterValue(sliderValue, sliderelement.scale[1])), sliderelement.scale[1].valueSuffix)
+	else
+		if sliderelement.scale[2] and sliderelement.scale[2].displayCenter then
+			centerValue = formatNumber(math.abs(getSliderCenterValue(sliderValue, sliderelement.scale[2])), sliderelement.scale[2].valueSuffix)
+		end
+	end
+end
+
+function setElementPosition(anarkElement, x, y, xUseHalfPixel, yUseHalfPixel)
+	if config.verifyPixelExact then
+		local testx = x
+
+		if testx and ((xUseHalfPixel and private.offsetx % 1 == 0)
+				or (not xUseHalfPixel and private.offsetx % 1 ~= 0)) then
+			testx = testx + 0.5
+		end
+
+		local testy = y
+
+		if testy and ((yUseHalfPixel and private.offsety % 1 == 0)
+				or (not yUseHalfPixel and private.offsety % 1 ~= 0)) then
+			testy = testy + 0.5
+		end
+
+		if (testx ~= nil and testx % 1 ~= 0)
+				or (testy ~= nil and testy % 1 ~= 0) then
+			DebugError("Widget system warning. Given position for element " .. tostring(anarkElement) .. " uses subpixels. This will lead to graphical issues. x/y: " .. tostring(x) .. " / " .. tostring(y) .. " - using halfpixels (x/y): " .. tostring(xUseHalfPixel) .. " / " .. tostring(yUseHalfPixel))
+		end
+	end
+
+	setElementPositionUnchecked(anarkElement, x, y)
+end
+
 --[[
 --]]
-
