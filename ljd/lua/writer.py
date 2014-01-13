@@ -234,15 +234,25 @@ class Visitor(traverse.Visitor):
 		left_parentheses = False
 		right_parentheses = False
 
+		binop = nodes.BinaryOperator
+
 		if is_left_op:
-			if node.type <= nodes.BinaryOperator.T_LOGICAL_AND:
-				left_parentheses = node.left.type != node.type
+			if node.type <= binop.T_LOGICAL_AND:
+				left_parentheses = (
+					node.left.type <= node.type
+					or (node.left.type <= binop.T_LOGICAL_AND
+						and node.type <= binop.T_LOGICAL_AND)
+				) and node.left.type != node.type
 			else:
 				left_parentheses = node.left.type < node.type
 
 		if is_right_op:
 			if node.type <= nodes.BinaryOperator.T_LOGICAL_AND:
-				right_parentheses = node.right.type != node.type
+				right_parentheses = (
+					node.right.type <= node.type
+					or (node.right.type <= binop.T_LOGICAL_AND
+						and node.type <= binop.T_LOGICAL_AND)
+				) and node.right.type != node.type
 			else:
 				right_parentheses = node.right.type < node.type
 
