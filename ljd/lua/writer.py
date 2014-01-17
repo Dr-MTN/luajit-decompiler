@@ -682,6 +682,7 @@ class Visitor(traverse.Visitor):
 			text = text.replace("\\", "\\\\")
 			text = text.replace("\t", "\\t")
 			text = text.replace("\n", "\\n")
+			text = text.replace("\"", "\\\"")
 
 			self._write('"' + text + '"')
 
