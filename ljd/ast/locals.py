@@ -145,6 +145,10 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 	def visit_function_definition(self, node):
 		self._push_state()
 
+		for local in node.arguments.contents:
+			if not isinstance(local, nodes.Vararg):
+				self._update_known_locals(local, 1)
+
 	def leave_function_definition(self, node):
 		self._pop_state()
 
