@@ -1133,6 +1133,7 @@ def _create_next_block(original):
 	block.first_address = original.last_address + 1
 	block.last_address = block.first_address
 	block.index = original.index + 1
+	block.warpins_count = original.warpins_count
 
 	return block
 
@@ -1198,31 +1199,116 @@ def _gather_possible_ends(block):
 	return ends
 
 
+BREAK_INFINITE = 0
+BREAK_ONE_USE = 1
+
+
 def _unwarp_breaks(start, blocks, next_block):
 	blocks_set = set([start] + blocks)
 
 	ends = _gather_possible_ends(next_block)
 
+	breaks = set()
+
+	patched = []
+
 	for i, block in enumerate(blocks):
 		warp = block.warp
 
 		if not isinstance(warp, nodes.UnconditionalWarp):
+			patched.append(block)
 			continue
 
-		# Ignore ifs and other stuff inside the loop
-		if warp.target in blocks_set:
+		target = _get_target(warp)
+
+		if target in blocks_set:
+			patched.append(block)
 			continue
 
-		assert warp.target in ends, 		\
-			"GOTO statements are not supported"
+		assert target in ends, "GOTO statements are not supported"
+
+		if block.warpins_count != 0:
+			new_block = _create_next_block(block)
+			new_block.warpins_count = block.warpins_count
+			_set_flow_to(block, new_block)
+
+			patched.append(block)
+			patched.append(new_block)
+
+			block = new_block
+		else:
+			patched.append(block)
 
 		block.contents.append(nodes.Break())
 
 		if i + 1 == len(blocks):
 			block.warp = nodes.EndWarp()
 		else:
-			block.warp.type = nodes.UnconditionalWarp.T_FLOW
-			block.warp.target = blocks[i + 1]
+			_set_flow_to(block, blocks[i + 1])
+
+		breaks.add(block)
+
+	blocks[:] = patched
+
+	if len(breaks) == 0:
+		return
+
+	breaks_stack = []
+	warpsout = []
+	pending_break = None
+
+	for i, block in enumerate(reversed(blocks)):
+		if block in breaks:
+			pending_break = None
+
+			if block.warpins_count == 0:
+				breaks_stack.append((BREAK_ONE_USE, block))
+			else:
+				breaks_stack.append((BREAK_INFINITE, block))
+
+			continue
+
+		warp = block.warp
+
+		if not isinstance(warp, nodes.ConditionalWarp):
+			if _is_flow(warp):
+				pending_break = None
+
+			continue
+
+		target = _get_target(warp)
+
+		if target in blocks_set:
+			continue
+
+		assert target in ends, "GOTO statements are not supported"
+
+		if pending_break is None:
+			assert len(breaks_stack) > 0
+
+			top_break = breaks_stack[-1]
+
+			_set_target(warp, top_break[1])
+
+			if top_break[0] == BREAK_ONE_USE:
+				pending_break = breaks_stack.pop()
+
+				warpsout = []
+			else:
+				warpsout.append(block)
+		else:
+			_set_target(warp, pending_break[1])
+			warpsout.append(block)
+
+		if len(block.contents) > 0:
+			pending_break = None
+
+	while len(breaks_stack) > 0 and breaks_stack[-1][0] == BREAK_INFINITE:
+		breaks_stack.pop()
+
+	# And pray for the best...
+	while len(warpsout) > 0 and len(breaks_stack) > 0:
+		_set_target(warpsout.pop().warp, breaks_stack.pop()[1])
 
 
 #
