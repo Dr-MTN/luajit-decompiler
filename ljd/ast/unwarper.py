@@ -158,7 +158,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 
 		body = blocks[start_index + 1:end_index]
 
-		if _expression_requirements_fulfiled(start, body):
+		if _expression_requirements_fulfiled(start, body, end):
 			_unwarp_logical_expression(start, end, body, end)
 			processed = True
 		else:
@@ -198,7 +198,7 @@ def _unwarp_if_false(start, end, body, topmost_end):
 	start.contents.append(node)
 
 
-def _expression_requirements_fulfiled(start, body):
+def _expression_requirements_fulfiled(start, body, end):
 	slot = -1
 
 	need_true_false = False
@@ -208,16 +208,28 @@ def _expression_requirements_fulfiled(start, body):
 
 		if isinstance(warp, nodes.ConditionalWarp):
 			if isinstance(warp.condition, nodes.BinaryOperator):
-				need_true_false = True
-				break
+				if warp.false_target == end:
+					return False
 
 	# We have something at the end, but not the true/false?
 	if len(body) > 1 and len(body[-1].contents) > 0	\
 				and len(body[-2].contents) > 0:
 		need_true_false = True
 
-	for block in body:
-		if len(block.contents) == 0:
+	for block in [start] + body:
+		if isinstance(block.warp, nodes.ConditionalWarp)	\
+				and block.warp.false_target == end:
+			condition = block.warp.condition
+
+			if hasattr(block.warp, "_slot"):
+				if slot < 0:
+					slot = block.warp._slot
+				elif slot != block.warp._slot:
+					return False
+			elif not isinstance(condition, nodes.BinaryOperator):
+				return False
+
+		if block == start or len(block.contents) == 0:
 			continue
 
 		if len(block.contents) > 1:
@@ -241,23 +253,6 @@ def _expression_requirements_fulfiled(start, body):
 		if slot < 0:
 			slot = dst.slot
 		elif slot != dst.slot:
-			return False
-
-		if need_true_false and body[-1].index - block.index < 3:
-			continue
-
-		if not isinstance(block.warp, nodes.UnconditionalWarp):
-			continue
-		elif body[-1] == block:
-			if block.warp.type != nodes.UnconditionalWarp.T_FLOW:
-				return False
-
-			continue
-
-		src = assignment.expressions.contents[0]
-
-		if not isinstance(src, (nodes.Primitive, nodes.Constant,
-					nodes.BinaryOperator)):
 			return False
 
 	if slot < 0:
