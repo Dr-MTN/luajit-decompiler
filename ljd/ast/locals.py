@@ -20,6 +20,7 @@ class _LocalsMarker(traverse.Visitor):
 		def __init__(self):
 			self.pending_slots = {}
 			self.debuginfo = None
+			self.addr = -1
 
 	def __init__(self):
 		self._states = []
@@ -78,6 +79,8 @@ class _LocalsMarker(traverse.Visitor):
 	# ##
 
 	def visit_variables_list(self, node):
+		# Last chance for a local = local + 1 type assignments
+		self._process_slots(self._state().addr)
 		self._reset_all(node.contents)
 
 	def visit_identifiers_list(self, node):
@@ -93,20 +96,29 @@ class _LocalsMarker(traverse.Visitor):
 
 			slots.append(node)
 
-			addr = getattr(node, "_addr", None)
-
-			if addr is not None:
-				self._process_slots(addr)
-
 	# ##
 
-	def _visit(self, node):
+	def _process_worthy_node(self, node):
 		addr = getattr(node, "_addr", None)
 
-		if addr is not None:
+		if not isinstance(node, nodes.Identifier) and addr is not None:
+			assert self._state().addr <= addr
+			self._state().addr = addr
 			self._process_slots(addr)
 
-		traverse.Visitor._visit(self, node)
+	# We need to process slots twice as it could be the last
+	# statement in the function/block and it could be anassignment
+	# as well so we need to process slots before the reset
+
+	def _leave_node(self, handler, node):
+		traverse.Visitor._leave_node(self, handler, node)
+
+		self._process_worthy_node(node)
+
+	def _visit_node(self, handler, node):
+		self._process_worthy_node(node)
+
+		traverse.Visitor._visit_node(self, handler, node)
 
 
 class _LocalDefinitionsMarker(traverse.Visitor):
@@ -151,6 +163,17 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 
 	def leave_function_definition(self, node):
 		self._pop_state()
+
+	def visit_iterator_for(self, node):
+		addr = node.statements.contents[0].first_address
+
+		for local in node.identifiers.contents:
+			self._update_known_locals(local, addr)
+
+	def visit_numeric_for(self, node):
+		addr = node.statements.contents[0].first_address
+
+		self._update_known_locals(node.variable, addr)
 
 	# ##
 
