@@ -534,7 +534,7 @@ def _compile_subexpression(subexpression, operator,
 
 def _is_inverted(warp, true, end):
 	if isinstance(warp, nodes.UnconditionalWarp):
-		return False
+		return warp.target == end
 
 	if warp.false_target == true:
 		return True
