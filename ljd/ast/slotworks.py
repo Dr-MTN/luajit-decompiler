@@ -98,9 +98,9 @@ def _fill_simple_refs(info, simple, tables):
 		# Could be more then one reference here
 		if src_is_table and is_element:
 			assert holder.table == ref.identifier
-			tables.append((ref, src))
+			tables.append((info, ref))
 		else:
-			simple.append((info.assignment, ref, src))
+			simple.append((info, ref))
 
 
 LIST_TYPES = (nodes.VariablesList,
@@ -118,11 +118,12 @@ def _get_holder(path):
 
 
 def _eliminate_simple_cases(simple):
-	for assignment, ref, src in simple:
+	for info, ref in simple:
 		holder = ref.path[-2]
 		dst = ref.identifier
+		src = info.assignment.expressions.contents[0]
 
-		_mark_invalidated(assignment)
+		_mark_invalidated(info.assignment)
 
 		if isinstance(holder, LIST_TYPES):
 			nodes = holder.contents
@@ -134,7 +135,8 @@ def _eliminate_simple_cases(simple):
 
 
 def _eliminate_into_table_constructors(tables):
-	for ref, constructor in tables:
+	for info, ref in tables:
+		constructor = info.assignment.expressions.contents[0]
 		table_element = ref.path[-2]
 		assignment = ref.path[-4]
 
