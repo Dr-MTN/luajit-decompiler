@@ -83,11 +83,90 @@ class MutatorVisitor(traverse.Visitor):
 	def visit_statements_list(self, node):
 		patched = []
 
-		for statement in node.contents:
-			if not isinstance(statement, nodes.BlackHole):
-				patched.append(statement)
+		i = -1
+
+		while i < len(node.contents) - 1:
+			i += 1
+			statement = node.contents[i]
+
+			if isinstance(statement, nodes.BlackHole):
+				continue
+
+			patched.append(statement)
+
+			if not isinstance(statement, nodes.Assignment):
+				continue
+
+			src = statement.expressions.contents[0]
+
+			if not isinstance(src, nodes.TableConstructor):
+				continue
+
+			assert len(statement.destinations.contents) == 1
+
+			dst = statement.destinations.contents[0]
+
+			i += self._fill_constructor(dst, src, node.contents[i + 1:])
 
 		node.contents = patched
+
+	def _fill_constructor(self, table, constructor, statements):
+		consumed = 0
+
+		for statement in statements:
+			if not isinstance(statement, nodes.Assignment):
+				break
+
+			if len(statement.destinations.contents) > 1:
+				break
+
+			dst = statement.destinations.contents[0]
+
+			if not isinstance(dst, nodes.TableElement):
+				break
+
+			if not self._is_equal(dst.table, table):
+				break
+
+			assert len(statement.expressions.contents) == 1
+
+			src = statement.expressions.contents[0]
+
+			self._append_record(constructor, dst.key, src)
+			consumed += 1
+
+		return consumed
+
+	def _append_record(self, constructor, key, value):
+		record = nodes.TableRecord()
+		record.key = key
+		record.value = value
+
+		records = constructor.records.contents
+
+		if len(records) == 0:
+			records.append(record)
+			return
+
+		last = records[-1]
+
+		if isinstance(last, (nodes.FunctionCall, nodes.Vararg)):
+			records.insert(-1, record)
+		else:
+			records.append(record)
+
+	def _is_equal(self, a, b):
+		if type(a) != type(b):
+			return False
+
+		if isinstance(a, nodes.Identifier):
+			return a.type == b.type and a.slot == b.slot
+		elif isinstance(a, nodes.TableElement):
+			return self._is_equal(a.table, b.table)		\
+				and self._is_equal(a.key, b.key)
+		else:
+			assert isinstance(a, nodes.Constant)
+			return a.type == b.type and a.value == b.value
 
 
 def pre_pass(ast):
