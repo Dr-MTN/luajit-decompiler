@@ -549,6 +549,10 @@ class Visitor(traverse.Visitor):
 		self._end_line()
 
 	def visit_conditional_warp(self, node):
+		if hasattr(node, "_slot"):
+			self._write("slot" + str(node._slot))
+			self._write(" = ")
+
 		self._write("if ")
 
 		self._visit(node.condition)
@@ -705,6 +709,7 @@ class Visitor(traverse.Visitor):
 			text = text.replace("\\", "\\\\")
 			text = text.replace("\t", "\\t")
 			text = text.replace("\n", "\\n")
+			text = text.replace("\r", "\\r")
 			text = text.replace("\"", "\\\"")
 
 			self._write('"' + text + '"')
