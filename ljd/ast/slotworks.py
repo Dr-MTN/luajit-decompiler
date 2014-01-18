@@ -75,6 +75,15 @@ def _fill_massive_refs(info, simple, massive, iterators):
 	elif isinstance(holder, nodes.IteratorWarp):
 		assert len(info.references) == 2
 		iterators.append((info.assignment, src, holder))
+	elif isinstance(src, nodes.Primitive) and src.type == src.T_NIL:
+		assert len(info.references) == 2
+
+		# Create a new primitive, so it won't mess with the
+		# writer's ignore list
+		src = nodes.Primitive()
+		src.type = nodes.Primitive.T_NIL
+
+		simple.append((info, ref, src))
 
 
 def _fill_simple_refs(info, simple, tables):
@@ -95,7 +104,7 @@ def _fill_simple_refs(info, simple, tables):
 			assert holder.table == ref.identifier
 			tables.append((info, ref))
 		else:
-			simple.append((info, ref))
+			simple.append((info, ref, None))
 
 
 LIST_TYPES = (nodes.VariablesList,
@@ -113,10 +122,12 @@ def _get_holder(path):
 
 
 def _eliminate_simple_cases(simple):
-	for info, ref in simple:
+	for info, ref, src in simple:
 		holder = ref.path[-2]
 		dst = ref.identifier
-		src = info.assignment.expressions.contents[0]
+
+		if src is None:
+			src = info.assignment.expressions.contents[0]
 
 		_mark_invalidated(info.assignment)
 
