@@ -18,8 +18,8 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 			elif isinstance(warp, nodes.NumericLoopWarp):
 				self._swap_numeric_loop_warps(blocks, block)
 
-	def _swap_iterator_warps(self, blocks, block):
-		warp = block.warp
+	def _swap_iterator_warps(self, blocks, end):
+		warp = end.warp
 		index = warp.body.index
 
 		assert index > 0
@@ -28,18 +28,24 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
 		assert isinstance(start.warp, nodes.UnconditionalWarp)
 		assert start.warp.type == nodes.UnconditionalWarp.T_JUMP
-		assert start.warp.target == block
+		assert start.warp.target == end
+
+		end_addr = end.warp._addr
+		start_addr = start.warp._addr
 
 		new_end_warp = start.warp
-		new_start_warp = block.warp
+		new_end_warp._addr = end_addr
 
-		block.warp = new_end_warp
+		new_start_warp = end.warp
+		new_start_warp._addr = start_addr
+
+		end.warp = new_end_warp
 		start.warp = new_start_warp
 
 		new_end_warp.target = start
 
-	def _swap_numeric_loop_warps(self, blocks, block):
-		warp = block.warp
+	def _swap_numeric_loop_warps(self, blocks, end):
+		warp = end.warp
 		index = warp.body.index
 
 		assert index > 0
@@ -50,10 +56,16 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 		assert start.warp.type == nodes.UnconditionalWarp.T_FLOW
 		assert start.warp.target == warp.body
 
-		new_end_warp = start.warp
-		new_start_warp = block.warp
+		end_addr = end.warp._addr
+		start_addr = start.warp._addr
 
-		block.warp = new_end_warp
+		new_end_warp = start.warp
+		new_end_warp._addr = end_addr
+
+		new_start_warp = end.warp
+		new_start_warp._addr = start_addr
+
+		end.warp = new_end_warp
 		start.warp = new_start_warp
 
 		new_end_warp.type = nodes.UnconditionalWarp.T_JUMP
