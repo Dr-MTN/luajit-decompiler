@@ -140,9 +140,6 @@ class Visitor(traverse.Visitor):
 
 		self._write("}")
 
-		if self._state().current_statement != STATEMENT_FUNCTION_CALL:
-			self._end_line()
-
 	def visit_table_record(self, node):
 		if self._is_valid_name(node.key):
 			self._write(node.key.value)
