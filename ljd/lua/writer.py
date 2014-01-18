@@ -362,7 +362,7 @@ class Visitor(traverse.Visitor):
 		for subnode in node.contents[:-1]:
 			self._visit(subnode)
 
-			self._write(", ")
+			self._write(",")
 			self._end_line()
 
 		self._visit(node.contents[-1])
