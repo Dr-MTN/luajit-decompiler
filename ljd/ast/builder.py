@@ -252,12 +252,14 @@ def _build_statement(state, addr, instruction):
 
 
 def _prepare_conditional_warp(state, addr, instruction):
+	warp = nodes.ConditionalWarp()
+
 	if instruction.opcode >= ins.IST.opcode:
 		expression = _build_unary_expression(state, addr, instruction)
+		setattr(warp, "_slot", instruction.CD)
 	else:
 		expression = _build_comparison_expression(state, addr, instruction)
 
-	warp = nodes.ConditionalWarp()
 	warp.condition = expression
 
 	assert state.block.warp is None
@@ -293,18 +295,12 @@ def _finalize_conditional_warp(state, addr, instruction):
 def _build_copy_if_statement(state, addr, instruction):
 	# It's being used only for expressions, and we don't need
 	# useless assignments there. Slot eliminator will take care of the
-	# conditions
-
-	# assignment = nodes.Assignment()
-	# destination = _build_slot(state, addr, instruction.A)
-
-	# expression = _build_slot(state, addr, instruction.CD)
-
-	# assignment.destinations.contents.append(destination)
-	# assignment.expressions.contents.append(expression)
+	# conditions, but we will keep the information about copy to distinguish
+	# expressions from ifs later
 
 	warp = nodes.ConditionalWarp()
 	warp.condition = _build_unary_expression(state, addr, instruction)
+	setattr(warp, "_slot", instruction.A)
 
 	assert state.block.warp is None
 	state.block.warp = warp
