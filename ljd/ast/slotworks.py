@@ -64,11 +64,6 @@ def _fill_massive_refs(info, simple, massive, iterators):
 	if isinstance(holder, nodes.Assignment):
 		dst = holder.destinations.contents[0]
 
-		is_table = isinstance(dst, nodes.TableElement)
-
-		if not is_table:
-			return
-
 		assert len(info.references) == 2
 		orig = info.references[0].identifier
 

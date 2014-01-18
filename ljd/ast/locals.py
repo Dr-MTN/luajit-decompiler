@@ -167,8 +167,11 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 		known_slot = self._update_known_locals(dst, addr)
 
 		for slot in node.destinations.contents[1:]:
-			assert isinstance(slot, nodes.Identifier)
-			assert slot.type == nodes.Identifier.T_LOCAL
+			if not isinstance(slot, nodes.Identifier):
+				return
+
+			if slot.type != nodes.Identifier.T_LOCAL:
+				return
 
 			also_known = self._update_known_locals(slot, addr)
 
