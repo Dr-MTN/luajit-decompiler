@@ -138,11 +138,18 @@ class MutatorVisitor(traverse.Visitor):
 		return consumed
 
 	def _append_record(self, constructor, key, value):
+		records = constructor.records.contents
+
+		if isinstance(key, nodes.MULTRES):
+			assert len(records) == 0 \
+				or isinstance(records[-1], nodes.TableRecord)
+
+			records.append(value)
+			return
+
 		record = nodes.TableRecord()
 		record.key = key
 		record.value = value
-
-		records = constructor.records.contents
 
 		if len(records) == 0:
 			records.append(record)
