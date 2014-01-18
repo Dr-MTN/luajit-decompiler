@@ -441,13 +441,39 @@ class Visitor(traverse.Visitor):
 		if is_statement:
 			self._start_statement(STATEMENT_FUNCTION_CALL)
 
-		self._visit(node.function)
+		# We are going to modify this list so we can remove the first
+		# argument
+		args = node.arguments.contents
+		is_method = False
 
-		self._write("(")
+		if len(args) > 0 and isinstance(node.function, nodes.TableElement):
+			table = node.function.table
 
-		self._visit(node.arguments)
+			first_arg = node.arguments.contents[0]
 
-		self._write(")")
+			if self._is_valid_name(node.function.key):
+				is_method = table == first_arg
+
+		if is_method:
+			self._visit(node.function.table)
+			self._write(":")
+			self._write(node.function.key.value)
+
+			self._skip(node.function)
+
+			args.pop(0)
+
+			self._write("(")
+			self._visit(node.arguments)
+			self._write(")")
+
+			self._skip(node.arguments)
+		else:
+			self._visit(node.function)
+
+			self._write("(")
+			self._visit(node.arguments)
+			self._write(")")
 
 		if is_statement:
 			self._end_statement(STATEMENT_FUNCTION_CALL)
