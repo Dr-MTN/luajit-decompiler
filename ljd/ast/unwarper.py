@@ -319,33 +319,32 @@ def _compile_expression(body, end, true, false):
 # (inverted if needed - it's easy to see if true end targets the false
 # terminator) at the end of processing.
 #
-# They we need to pack all other blocks into subexpressions. Subexpressions
+# Then we need to pack all other blocks into subexpressions. Subexpressions
 # always end with a _terminal block_, i.e. the block which warp points to a
-# terminator. Idea is that we can guess the operator which is only at the
-# right of a terminal block, because we can check if the block's warp condition
-# is inverted or not.
+# terminator. Idea is that we can guess the operator only right of a
+# terminal block, because we can check if the block's warp condition is
+# inverted or not.
 #
 # If that's an "OR" clause then it will jump out of the current expression if
 # the condition is true, so the condition is inverted and the false branch is
-# pointing at the way out (at the TRUE terminator - because the result of that
-# expression level will be true in that case). (because in the bytecode there
-# is only one JMP, so in the "ConditionalWarp" the true branch is fake and
-# always points to the next block =). So if the bytecode wants to jump if
-# something is true, then it needs to invert the condition because normally
-# it jumps only if the condition is false).
+# pointing at the way out (at the TRUE terminator - because the result of the
+# expression level will be true). (because in the bytecode there
+# is only one JMP, so a ConditionalWarp's true branch is actually a fake and
+# always points to the next block - in the bytecode a "positive" jump
+# will be represented by a normal negative jump with inverted condition).
 #
 # Otherwise, if that's an "AND" clause then it will jump out of the current
-# expression level if the condition is false, so the condition is not inverted
-# and false branch points to the false.
+# expression level if a condition is false, so the condition is not inverted
+# and a false branch points to the false.
 #
-# So, guessing from the terminal blocks we can understand which operators go
-# at right of them. Everything in-between these block is considered a
-# subexpression. And just because we don't know where exactly the subexpression
-# ends we are using greedy approach and trying to pack into subexpression as
-# much blocks as possible, including terminal blocks in they point to the same
-# terminator and has same inversion status (that is - we are always using the
+# This way we can understand which operators go just right of terminal blocks.
+# Everything in-between these block is considered a subexpression. And just
+# because we don't know where exactly the subexpression ends we are using
+# greedy approach and trying to pack into a subexpression as much blocks as
+# possible, including any terminal blocks pointing at the same terminator
+# with the same inversion status (that is - we are always using the
 # rightmost block if there are consequitive similar terminal blocks, ignoring
-# all the blocks at the left).
+# all the blocks to the left).
 #
 # Then comes the trick: the subexpression is a component of this expression and
 # we know the operator to the right of it. We can guess now what will
