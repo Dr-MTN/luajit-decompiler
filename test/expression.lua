@@ -118,6 +118,13 @@ print ("or of two ands")
 
 b = (x and z) or (y and z)
 
+print ("x or string")
+local xi = "nothing"
+xi = x or "something"
+
+print ("x and string")
+xi = x and "something"
+
 print ("and (or) and (or) expression with comparisons")
 
 b = x < 100 and (y < 100 or x < 100) and (z < 100 or x < 100)
@@ -185,6 +192,17 @@ a = (not (x < 100)) or (y < 100 and (x < 100 or z < 100))
 local value = 1.0
 
 value = scaleinfo.floorValue and math.floor(value) or math.ceil(value)
+
+local function foo(a)
+	print(a)
+end
+
+local x = ""
+
+foo(x == "" and x or "test")
+
+local timeout = (menu.isOffer and (duration or -1)) or
+		((timeout and timeout ~= -1) and timeout or missiontime or -1)
 
 --[[
 --]]

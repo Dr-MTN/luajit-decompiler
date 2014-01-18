@@ -357,6 +357,8 @@ if x % 2 == 0 then
 	a = 1
 end
 
+local a = x % 2 == 0 or a
+
 local a = "test"
 local b = "result"
 if a == "test" then
@@ -512,6 +514,16 @@ function setElementPosition(anarkElement, x, y, xUseHalfPixel, yUseHalfPixel)
 	end
 
 	setElementPositionUnchecked(anarkElement, x, y)
+end
+
+local relationLEDValue, maxLED, minLED, boostActive
+
+if relationLEDValue < 0 then
+	if boostActive then
+		maxLED = maxLED - 1
+	end
+else
+	minLED = relationLEDValue < 0 and boostLocal or minLED - 1
 end
 
 --[[
