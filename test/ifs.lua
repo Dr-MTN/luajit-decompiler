@@ -359,6 +359,7 @@ end
 
 local a = x % 2 == 0 or a
 
+
 local a = "test"
 local b = "result"
 if a == "test" then
@@ -372,6 +373,10 @@ elseif a == "fadasd" then
 else
 	b = "Otherwise"
 end
+
+print ("Same thing as expression")
+
+b = (a == "test" and "test") or (a == "1234" and "1234") or (a == "asd" and "asd") or (a == "fadasd" and "fadasd") or "Otherwise"
 
 print (a, b)
 

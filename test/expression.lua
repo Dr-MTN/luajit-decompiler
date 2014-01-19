@@ -204,5 +204,11 @@ foo(x == "" and x or "test")
 local timeout = (menu.isOffer and (duration or -1)) or
 		((timeout and timeout ~= -1) and timeout or missiontime or -1)
 
+local a = x < 100
+
+local exists = 0
+
+exists = ffi.string(messageDetails.messageType) ~= ""
+
 --[[
 --]]
