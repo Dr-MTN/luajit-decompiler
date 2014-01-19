@@ -10,13 +10,41 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 	def visit_statements_list(self, node):
 		blocks = node.contents
 
-		for block in node.contents:
+		for i, block in enumerate(node.contents):
 			warp = block.warp
 
 			if isinstance(warp, nodes.IteratorWarp):
 				self._swap_iterator_warps(blocks, block)
-			elif isinstance(warp, nodes.NumericLoopWarp):
+				continue
+
+			if isinstance(warp, nodes.NumericLoopWarp):
 				self._swap_numeric_loop_warps(blocks, block)
+				continue
+
+			if not isinstance(warp, nodes.UnconditionalWarp):
+				continue
+
+			if not warp.is_uclo:
+				continue
+
+			target = warp.target
+
+			if len(target.contents) != 1:
+				continue
+
+			statement = target.contents[0]
+
+			if not isinstance(statement, nodes.Return):
+				continue
+
+			block.contents.append(statement)
+			statement._addr = block.last_address
+			target.contents = []
+
+			assert block != node.contents[-1]
+
+			warp.type = nodes.UnconditionalWarp.T_FLOW
+			warp.target = node.contents[i + 1]
 
 	def _swap_iterator_warps(self, blocks, end):
 		warp = end.warp

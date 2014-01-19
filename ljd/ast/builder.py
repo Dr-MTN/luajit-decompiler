@@ -556,7 +556,9 @@ def _build_unconditional_warp(state, addr, instruction):
 
 	opcode = instruction.opcode
 
-	if opcode == ins.UCLO.opcode and instruction.CD == 0:
+	warp.is_uclo = opcode == ins.UCLO.opcode
+
+	if warp.is_uclo and instruction.CD == 0:
 		# Not a jump
 		return
 	else:

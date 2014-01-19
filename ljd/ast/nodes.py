@@ -315,6 +315,7 @@ class UnconditionalWarp():
 	def __init__(self):
 		self.type = -1
 		self.target = None
+		self.is_uclo = False
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_unconditional_warp, self)
