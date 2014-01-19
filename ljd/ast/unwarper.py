@@ -201,7 +201,9 @@ def _unwarp_if_false(start, end, body, topmost_end):
 def _expression_requirements_fulfiled(start, body, end):
 	slot = -1
 
-	need_true_false = False
+	# Explicitly allow the local a = x ~= "b" case
+	if _is_simple_local_assignment(start, body, end):
+		return True
 
 	for block in [start] + body:
 		warp = block.warp
@@ -212,9 +214,6 @@ def _expression_requirements_fulfiled(start, body, end):
 					return False
 
 	# We have something at the end, but not the true/false?
-	if len(body) > 1 and len(body[-1].contents) > 0	\
-				and len(body[-2].contents) > 0:
-		need_true_false = True
 
 	for block in [start] + body:
 		if isinstance(block.warp, nodes.ConditionalWarp)	\
@@ -251,6 +250,9 @@ def _expression_requirements_fulfiled(start, body, end):
 			return False
 
 		if slot < 0:
+			if dst.type == nodes.Identifier.T_LOCAL:
+				return False
+
 			slot = dst.slot
 		elif slot != dst.slot:
 			return False
@@ -258,13 +260,16 @@ def _expression_requirements_fulfiled(start, body, end):
 	if slot < 0:
 		return False
 
-	if need_true_false:
-		true, _false, _body = _get_terminators([start] + body)
-
-		if true is None:
-			return False
-
 	return True
+
+
+def _is_simple_local_assignment(start, body, end):
+	if len(body) != 2:
+		return False
+
+	true, _false, body = _get_terminators(body)
+
+	return true is not None
 
 
 def _unwarp_logical_expression(start, end, body, topmost_end):
@@ -593,6 +598,10 @@ def _get_terminators(body):
 		return None, None, body
 
 	assignment = last.contents[0]
+
+	if not isinstance(assignment, nodes.Assignment):
+		return None, None, body
+
 	src = assignment.expressions.contents[0]
 
 	if not isinstance(src, nodes.Primitive) or src.type != src.T_TRUE:
