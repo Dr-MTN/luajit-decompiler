@@ -531,5 +531,26 @@ else
 	minLED = relationLEDValue < 0 and boostLocal or minLED - 1
 end
 
+function aaa()
+	local a, b, c
+
+	if a == 0 then
+		if b == 2 then
+			print("b")
+		else
+			print("bend")
+			return
+		end
+	else
+		function asd()
+			print(a, b, c)
+		end
+
+		return
+	end
+
+	return
+end
+
 --[[
 --]]
