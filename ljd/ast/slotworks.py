@@ -316,6 +316,8 @@ class _SlotsCollector(traverse.Visitor):
 		self.slots = []
 		self.unused = []
 
+		self._push_state()
+
 	# ##
 
 	def _state(self):
