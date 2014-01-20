@@ -359,9 +359,9 @@ end
 
 local a = x % 2 == 0 or a
 
-
 local a = "test"
 local b = "result"
+
 if a == "test" then
 	b = "test"
 elseif a == "1234" then
@@ -396,6 +396,8 @@ if a == "test" then
 	end
 end
 
+local a = "test"
+local b = "result"
 if a == "test" then
 	b = "test"
 	if a == "test" then
