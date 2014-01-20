@@ -43,12 +43,10 @@ print ("precalculated false expression with nil")
 
 f = nil and ((x and y) or true)
 
-
 print ("simple or expression")
 b = x or y
 
 print ("simple or not expression")
-
 
 b = not x or y
 print ("simple and expression")
@@ -209,6 +207,22 @@ local a = x < 100
 local exists = 0
 
 exists = ffi.string(messageDetails.messageType) ~= ""
+
+local row, cells, rowdata, colspans, noscaling, bgColor
+
+if menu.interactive then
+	row = self:addRow(true, cells, rowdata, colspans, noscaling, bgColor or Helper.defaultArrowRowBackgroundColor, true)
+else
+	row = self:addRow(true, cells, rowdata, colspans, noscaling, bgColor)
+end
+
+local a = 0
+
+a = z == 3 and (x < ((y == 0 and is_magic) and 3 or 2)) and "a" or "b"
+
+local a, is_magic, x, y, foo, bar
+
+a = is_magic and foo( x == "station" and y ) or bar()
 
 --[[
 --]]
