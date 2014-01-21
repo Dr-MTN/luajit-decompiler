@@ -89,7 +89,7 @@ def _fill_massive_refs(info, simple, massive, iterators):
 def _fill_simple_refs(info, simple, tables):
 	src = info.assignment.expressions.contents[0]
 
-	if isinstance(src, nodes.FunctionCall) and len(info.references) > 2:
+	if isinstance(src, nodes.FunctionCall) and len(info.references) > 3:
 		return
 
 	src_is_table = isinstance(src, nodes.TableConstructor)
