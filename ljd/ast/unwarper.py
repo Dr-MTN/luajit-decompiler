@@ -353,26 +353,32 @@ def _get_simple_local_assignment_slot(start, body, end):
 		return true.contents[0].destinations.contents[0].slot
 
 
-def _is_used_in(expression, slot):
-	if isinstance(expression, nodes.Identifier):
-		return expression.slot == slot
-	elif isinstance(expression, nodes.UnaryOperator):
-		return _is_used_in(expression.operand, slot)
-	elif isinstance(expression, nodes.BinaryOperator):
-		return _is_used_in(expression.left, slot)	\
-			or _is_used_in(expression.right, slot)
-	elif isinstance(expression, nodes.FunctionCall):
-		return _is_used_in(expression.function, slot)	\
-			or _is_used_in(expression.arguments.contents, slot)
-	elif isinstance(expression, nodes.TableElement):
-		return _is_used_in(expression.table, slot)	\
-			or _is_used_in(expression.key, slot)
-	elif isinstance(expression, list):
-		for subexpression in expression:
-			if _is_used_in(subexpression, slot):
-				return True
+def _is_used_in(node, slot):
+	class UseChecker(traverse.Visitor):
+		def __init__(self, slot):
+			self._slot = slot
+			self.found = False
 
-	return False
+		def visit_identifier(self, node):
+			if self._slot == node.slot:
+				self.found = True
+
+		def _visit_list(self, nodes_list):
+			if self.found:
+				return
+
+			traverse.Visitor._visit_list(self, nodes_list)
+
+		def _visit(self, node):
+			if self.found:
+				return
+
+			traverse.Visitor._visit(self, node)
+
+	checker = UseChecker(slot)
+	traverse.traverse(checker, node)
+
+	return checker.found
 
 
 def _unwarp_logical_expression(start, end, body, topmost_end):
