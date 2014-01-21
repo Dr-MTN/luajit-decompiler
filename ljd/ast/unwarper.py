@@ -232,7 +232,7 @@ def _find_expressions(start, body, end):
 	while i < len(extbody):
 		block = extbody[i]
 
-		subs = _find_subexpressions(block, body)
+		subs = _find_subexpressions(block, body[i:])
 
 		if len(subs) != 0:
 			endest_end = subs[-1][1]
