@@ -236,7 +236,6 @@ def _find_expressions(start, body, end):
 
 		if len(subs) != 0:
 			endest_end = subs[-1][1]
-			endest_slot = subs[-1][2]
 			new_i = extbody.index(endest_end)
 
 			# Loop? No way!
@@ -248,9 +247,6 @@ def _find_expressions(start, body, end):
 			end_warp = endest_end.warp
 
 			if not isinstance(end_warp, nodes.ConditionalWarp):
-				return []
-
-			if not _is_used_in(end_warp.condition, endest_slot):
 				return []
 
 			expressions += subs
@@ -351,34 +347,6 @@ def _get_simple_local_assignment_slot(start, body, end):
 		return -1
 	else:
 		return true.contents[0].destinations.contents[0].slot
-
-
-def _is_used_in(node, slot):
-	class UseChecker(traverse.Visitor):
-		def __init__(self, slot):
-			self._slot = slot
-			self.found = False
-
-		def visit_identifier(self, node):
-			if self._slot == node.slot:
-				self.found = True
-
-		def _visit_list(self, nodes_list):
-			if self.found:
-				return
-
-			traverse.Visitor._visit_list(self, nodes_list)
-
-		def _visit(self, node):
-			if self.found:
-				return
-
-			traverse.Visitor._visit(self, node)
-
-	checker = UseChecker(slot)
-	traverse.traverse(checker, node)
-
-	return checker.found
 
 
 def _unwarp_logical_expression(start, end, body, topmost_end):
