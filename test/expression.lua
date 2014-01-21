@@ -224,5 +224,12 @@ local a, is_magic, x, y, foo, bar
 
 a = is_magic and foo( x == "station" and y ) or bar()
 
+local a = (
+	((not commander and true or IsSameComponent(commander, menu.playership))
+	and "") or " [" .. ReadText(1001, 1001) .. "]"
+)
+
+local a = isfirst and foo(bar((table[trade.ware] and "-") or "+", 1 < x)) or ""
+
 --[[
 --]]
