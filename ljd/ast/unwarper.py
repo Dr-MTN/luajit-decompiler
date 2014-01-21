@@ -200,11 +200,14 @@ def _try_unwarp_logical_expression(start, blocks, end, topmost_end):
 
 		_unwarp_logical_expression(start, end, body, topmost_end)
 
-		start.warp = end.warp
+		if i == len(expressions) - 1:
+			break
+
+		end.contents = start.contents + end.contents
+
 		blocks = blocks[:start_index] + blocks[end_index:]
 
-		if i != len(expressions) - 1:
-			slotworks.eliminate_temporary(start)
+		slotworks.eliminate_temporary(end)
 
 	return True
 
