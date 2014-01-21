@@ -168,12 +168,14 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 		addr = node.statements.contents[0].first_address
 
 		for local in node.identifiers.contents:
-			self._update_known_locals(local, addr)
+			if local.type == nodes.Identifier.T_LOCAL:
+				self._update_known_locals(local, addr)
 
 	def visit_numeric_for(self, node):
 		addr = node.statements.contents[0].first_address
 
-		self._update_known_locals(node.variable, addr)
+		if node.variable.type == nodes.Identifier.T_LOCAL:
+			self._update_known_locals(node.variable, addr)
 
 	# ##
 
