@@ -539,16 +539,22 @@ def _unwarp_expression(body, end, true, false):
 			last = _invert(last.warp.condition)
 		else:
 			last = last.warp.condition
+
+		parts.append(last)
 	else:
 		assert isinstance(last.warp, nodes.UnconditionalWarp)
 
-		last = _get_last_assignment_source(last)
+		src = _get_last_assignment_source(last)
 
-		if last is None:
-			last = nodes.Primitive()
-			last.type = nodes.Primitive.T_FALSE
+		if src is None:
+			src = nodes.Primitive()
 
-	parts.append(last)
+			if last.warp.target == true:
+				src.type = nodes.Primitive.T_TRUE
+			else:
+				src.type = nodes.Primitive.T_FALSE
+
+		parts.append(src)
 
 	return parts
 
@@ -577,10 +583,12 @@ def _get_operator(block, true, end):
 			is_true = src.value != 0
 		elif isinstance(src, nodes.BinaryOperator):
 			is_true = True
-		else:
-			assert isinstance(src, nodes.Primitive)
-
+		elif isinstance(src, nodes.Primitive):
 			is_true = src.type == nodes.Primitive.T_TRUE
+		else:
+			assert src is None
+
+			is_true = block.warp.target == true
 
 		if is_true:
 			return binop.T_LOGICAL_OR
