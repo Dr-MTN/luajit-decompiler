@@ -461,44 +461,73 @@ def _unwarp_expression(body, end, true, false):
 
 		target = _get_target(warp)
 
+		#
+		# A chance for a
+		# (foo and (bar and y or z)) or x
+		# type expressions, because the first "foo and ... )) or" part
+		# will be broken by the "or z))" part in the code below.
+		#
+		# So we are going to intercept subexpressions by it's start
+		# instead of an end, but only if we are already at the
+		# subexpression start (so nothing formally changes, but creates
+		# a bit more correct execution order)
+		#
 		if target.index < terminator_index:
-			i += 1
-			continue
+			if i != subexpression_start:
+				i += 1
+				continue
 
-		assert target in terminators
+			target_index = body.index(target)
+			last_block = body[target_index - 1]
 
-		while i < len(body) - 2:
-			next_block = body[i + 1]
-			next_target = _get_target(next_block.warp)
+			last_block_target = _get_target(last_block.warp)
 
-			if next_target != target:
-				break
+			if last_block_target.index < terminator_index:
+				i += 1
+				continue
 
-			next_inverted = _is_inverted(next_block.warp, true, end)
+			assert last_block_target in terminators
 
-			this_inverted = _is_inverted(warp, true, end)
+			subexpression = body[i:target_index]
+		else:
+			assert target in terminators
 
-			# Special hack for unary expressions (x, not x)...
-			if next_inverted != this_inverted:
-				break
+			while i < len(body) - 2:
+				next_block = body[i + 1]
+				next_target = _get_target(next_block.warp)
 
-			block = next_block
-			warp = next_block.warp
-			i += 1
+				if next_target != target:
+					break
 
-		next_block = body[i + 1]
-		subexpression = body[subexpression_start:i + 1]
+				next_inv = _is_inverted(next_block.warp, true, end)
 
-		operator = _get_operator(block, true, end)
+				this_inv = _is_inverted(warp, true, end)
+
+				# Special hack for unary expressions (x, not x)...
+				if next_inv != this_inv:
+					break
+
+				block = next_block
+				warp = next_block.warp
+				i += 1
+
+			subexpression = body[subexpression_start:i + 1]
+
+		last_block = subexpression[-1]
+		last_block_index = body.index(last_block)
+
+		next_block = body[last_block_index + 1]
+
+		operator = _get_operator(last_block, true, end)
 
 		subexpression = _compile_subexpression(subexpression, operator,
-							block, next_block,
+							last_block, next_block,
 							true, end)
 
 		parts.append(subexpression)
 		parts.append(operator)
 
-		i += 1
+		i = last_block_index + 1
 		subexpression_start = i
 
 	last = body[-1]
