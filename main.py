@@ -90,24 +90,24 @@ def main():
 
 	ljd.ast.mutator.pre_pass(ast)
 
-	ljd.ast.validator.validate(ast, warped=True)
+	# ljd.ast.validator.validate(ast, warped=True)
 
 	ljd.ast.locals.mark_locals(ast)
 
-	ljd.ast.validator.validate(ast, warped=True)
+	# ljd.ast.validator.validate(ast, warped=True)
 
 	ljd.ast.slotworks.eliminate_temporary(ast)
 
-	ljd.ast.validator.validate(ast, warped=True)
+	# ljd.ast.validator.validate(ast, warped=True)
 
 	if True:
-		ljd.ast.unwarper.primary_pass(ast)
+		ljd.ast.unwarper.unwarp(ast)
 
-		ljd.ast.validator.validate(ast, warped=True)
+		# ljd.ast.validator.validate(ast, warped=False)
 
 		ljd.ast.locals.mark_local_definitions(ast)
 
-		ljd.ast.validator.validate(ast, warped=False)
+		# ljd.ast.validator.validate(ast, warped=False)
 
 		ljd.ast.mutator.primary_pass(ast)
 
