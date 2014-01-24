@@ -1,4 +1,3 @@
-import collections
 import copy
 
 import ljd.ast.nodes as nodes
@@ -919,30 +918,10 @@ def _remove_processed_blocks(blocks, boundaries):
 def _unwarp_loops(blocks, repeat_until):
 	loops = _find_all_loops(blocks, repeat_until)
 
-	# Preprocess breaks in nested loops - they may jump to the beginning
-	# of the outer loop creating a fake loop
+	if len(loops) == 0:
+		return blocks
 
-	last_start_index = -1
-	last_end = None
-
-	fixed = []
-
-	for start, end in loops:
-		if start.index == last_start_index:
-			assert last_end is not None
-
-			index = blocks.index(end)
-			warp = blocks[index - 1].warp
-
-			assert isinstance(warp, nodes.UnconditionalWarp)
-			assert warp.target == start
-
-			last_end_index = blocks.index(last_end)
-			warp.target = blocks[last_end_index - 1]
-		else:
-			fixed.append((start, end))
-			last_start_index = start.index
-			last_end = end
+	fixed = _cleanup_breaks_and_if_ends(loops, blocks)
 
 	for start, end in fixed:
 		start_index = blocks.index(start)
@@ -974,6 +953,67 @@ def _unwarp_loops(blocks, repeat_until):
 		blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
 
 	return blocks
+
+
+def _cleanup_breaks_and_if_ends(loops, blocks):
+	outer_start_index = -1
+	outer_end = None
+
+	current_start_index = -1
+	current_end = None
+
+	fixed = []
+
+	for start, end in loops:
+		if start.index in (outer_start_index, current_start_index):
+			end_i = blocks.index(end)
+			last_in_body = blocks[end_i - 1]
+			warp = last_in_body.warp
+
+			assert isinstance(warp, nodes.UnconditionalWarp)
+			assert warp.target == start
+
+			# Break
+			if start.index == outer_start_index:
+				assert outer_end is not None
+
+				outer_end_i = blocks.index(outer_end)
+				warp.target = blocks[outer_end_i - 1]
+
+				assert blocks[outer_end_i - 2] != end
+			else:
+				assert current_end is not None
+				assert start.index == current_start_index
+
+				current_end_i = blocks.index(current_end)
+
+				last = blocks[current_end_i - 1]
+
+				if last == end:
+					last = _create_next_block(end)
+					last.warp = end.warp
+
+					_set_flow_to(end, last)
+
+					blocks.insert(current_end_i, last)
+
+				warp.target = last
+		else:
+			fixed.append((start, end))
+
+			if current_end is not None				\
+					and current_start_index < start.index	\
+					and current_end.index >= end.index:
+				outer_start_index = current_start_index
+				outer_end = current_end
+			else:
+				outer_start_index = -1
+				outer_end = None
+
+			current_start_index = start.index
+			current_end = end
+
+	return fixed
 
 
 def _replace_targets(blocks, original, replacement):
