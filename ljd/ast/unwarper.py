@@ -798,7 +798,7 @@ def _unwarp_if_statement(start, body, end, topmost_end):
 		warp_out = body[-1].warp
 
 		if not isinstance(warp_out, nodes.EndWarp):
-			assert _is_flow(warp_out)
+			assert isinstance(warp_out, nodes.UnconditionalWarp)
 			assert warp_out.target in (end, topmost_end)
 
 		_set_end(body[-1])
@@ -882,6 +882,10 @@ def _find_branching_end(blocks, topmost_end):
 		warp = block.warp
 
 		target = _get_target(warp, allow_end=True)
+
+		if isinstance(warp, nodes.EndWarp) and target is None:
+			assert block == end
+			return block
 
 		if _is_flow(warp) and target == end:
 			return end
