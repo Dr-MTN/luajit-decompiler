@@ -27,7 +27,7 @@ class _StatementsCollector(traverse.Visitor):
 			self.result.append(node)
 
 
-def primary_pass(node):
+def unwarp(node):
 	# There could be many negative jumps within while conditions, so
 	# filter them first
 	_run_step(_unwarp_loops, node, repeat_until=False)
@@ -36,11 +36,6 @@ def primary_pass(node):
 	_run_step(_unwarp_ifs, node)
 
 	_glue_flows(node)
-
-
-def final_pass(node):
-	for statements in _gather_statements_lists(node):
-		statements.contents = statements.contents[0].contents
 
 
 def _run_step(step, node, **kargs):
@@ -77,7 +72,7 @@ def _glue_flows(node):
 			target.contents = block.contents + target.contents
 			block.contents = []
 
-		statements.contents = [blocks[-1]]
+		statements.contents = blocks[-1].contents
 
 
 #
@@ -199,14 +194,15 @@ def _try_unwarp_logical_expression(start, blocks, end, topmost_end):
 
 		_unwarp_logical_expression(start, end, body, topmost_end)
 
-		if i == len(expressions) - 1:
-			break
+		if i == len(expressions):
+			slotworks.eliminate_temporary(start)
+		else:
+			end.contents = start.contents + end.contents
+			start.contents = []
 
-		end.contents = start.contents + end.contents
+			blocks = blocks[:start_index] + blocks[end_index:]
 
-		blocks = blocks[:start_index] + blocks[end_index:]
-
-		slotworks.eliminate_temporary(end)
+			slotworks.eliminate_temporary(end)
 
 	return True
 
@@ -1027,6 +1023,8 @@ def _unwarp_loop(start, end, body):
 		loop.statements.contents = body
 		loop.identifiers = start.warp.variables
 		loop.expressions = start.warp.controls
+		loop._addr = body[0].first_address
+
 		_set_flow_to(start, body[0])
 
 	elif isinstance(start.warp, nodes.NumericLoopWarp):
@@ -1037,6 +1035,7 @@ def _unwarp_loop(start, end, body):
 		loop.statements.contents = body
 		loop.variable = start.warp.index
 		loop.expressions = start.warp.controls
+		loop._addr = body[0].first_address
 		_set_flow_to(start, body[0])
 
 	# While (including "while true" and "repeat until false" which will be

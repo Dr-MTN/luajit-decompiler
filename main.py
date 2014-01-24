@@ -105,15 +105,7 @@ def main():
 
 		ljd.ast.validator.validate(ast, warped=True)
 
-		ljd.ast.slotworks.eliminate_temporary(ast)
-
-		ljd.ast.validator.validate(ast, warped=True)
-
 		ljd.ast.locals.mark_local_definitions(ast)
-
-		ljd.ast.validator.validate(ast, warped=True)
-
-		ljd.ast.unwarper.final_pass(ast)
 
 		ljd.ast.validator.validate(ast, warped=False)
 
