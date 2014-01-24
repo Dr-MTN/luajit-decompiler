@@ -422,7 +422,6 @@ else
 end
 
 print (a, b)
-local slot1, slot2 = nil
 
 if componentInfo.details ~= nil then
 	layout = componentInfo.details.layout
@@ -552,6 +551,25 @@ function aaa()
 	end
 
 	return
+end
+
+local nins, snapref, dumpreg, snapno, printsnap, tr, snap, tracesnap
+
+for ins=1, nins do
+	if ins >= snapref then
+		if dumpreg then
+			out:write(format("", snapno))
+		else
+			out:write(format("", snapno))
+		end
+
+		printsnap(tr, snap)
+		snapno = snapno + 1
+		snap = tracesnap(tr, snapno)
+		snapref = snap and snap[0] or 65536
+	end
+
+	print ("Test")
 end
 
 --[[
