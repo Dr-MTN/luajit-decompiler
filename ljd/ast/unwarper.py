@@ -156,6 +156,8 @@ def _try_unwarp_logical_expression(start, blocks, end, topmost_end):
 
 			blocks = blocks[:start_index] + blocks[end_index:]
 
+			_replace_targets(blocks, start, end)
+
 			slotworks.eliminate_temporary(end)
 
 	return True
