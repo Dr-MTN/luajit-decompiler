@@ -168,8 +168,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 
 
 def _extract_if_body(start_index, blocks, topmost_end):
-	start = blocks[start_index]
-	end = _find_branching_end(start, blocks, topmost_end)
+	end = _find_branching_end(blocks[start_index:], topmost_end)
 
 	try:
 		end_index = blocks.index(end)
@@ -892,90 +891,19 @@ def _search_expression_end(expression, falses):
 	return false, expression_end
 
 
-#
-# A modified breadth-first search for an if's "end"
-#
-# Idea is to keep the farmost block referenced as "end" and out of the
-# breadth-first queue, so this branch won't be followed further. Eventually
-# either some other branch will reference a block below the current end and
-# will become the new end, or all other branches will reference same block.
-#
-# As we add a block into the queue only if it's index is less then the
-# current end, queue will eventually depleed
-#
-def _find_branching_end(start, blocks, topmost_end):
-	warp = start.warp
+def _find_branching_end(blocks, topmost_end):
+	end = blocks[0]
 
-	queue = collections.deque()
-
-	if topmost_end is None:
-		top_ends = set()
-	else:
-		top_ends = _gather_possible_ends(topmost_end)
-
-	if not isinstance(start.warp, nodes.ConditionalWarp):
-		index = blocks.index(warp.target)
-
-		block = blocks[index - 1]
+	for block in blocks:
 		warp = block.warp
 
-		while isinstance(warp, nodes.UnconditionalWarp):
-			if warp.type == nodes.UnconditionalWarp.T_FLOW:
-				return warp.target
+		target = _get_target(warp)
 
-			try:
-				index = blocks.index(warp.target)
-			except ValueError:
-				if warp.target in top_ends:
-					return warp.target
-				else:
-					raise
+		if _is_flow(warp) and target == end:
+			return end
 
-			previous = blocks[index - 1]
-
-			if _is_flow(previous.warp):
-				return warp.target
-
-			block = warp.target
-			warp = block.warp
-
-		if isinstance(warp, nodes.EndWarp):
-			return block
-
-	if warp.false_target.index > warp.true_target.index:
-		end = warp.false_target
-		queue.append(warp.true_target)
-	else:
-		end = warp.true_target
-		queue.append(warp.false_target)
-
-	while len(queue) > 0:
-		block = queue.popleft()
-
-		warp = block.warp
-
-		if isinstance(warp, nodes.ConditionalWarp):
-			if warp.true_target.index > end.index:
-				queue.append(end)
-				end = warp.true_target
-			elif warp.true_target.index < end.index:
-				queue.append(warp.true_target)
-
-			if warp.false_target.index > end.index:
-				queue.append(end)
-				end = warp.false_target
-			elif warp.false_target.index < end.index:
-				queue.append(warp.false_target)
-		elif isinstance(warp, nodes.UnconditionalWarp):
-			if warp.target.index > end.index:
-				queue.append(end)
-				end = warp.target
-			elif warp.target.index < end.index:
-				queue.append(warp.target)
-		else:
-			assert isinstance(warp, nodes.EndWarp)
-			assert len(queue) == 0
-			end = block
+		if target.index > end.index:
+			end = target
 
 	return end
 
