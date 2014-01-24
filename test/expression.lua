@@ -222,7 +222,8 @@ a = z == 3 and (x < ((y == 0 and is_magic) and 3 or 2)) and "a" or "b"
 
 local a, is_magic, x, y, foo, bar
 
-a = is_magic and foo( x == "station" and y ) or bar()
+a = is_magic and foo(x == "station" and y) or bar()
+
 
 local a = (
 	((not commander and true or IsSameComponent(commander, menu.playership))
@@ -230,6 +231,10 @@ local a = (
 )
 
 local a = isfirst and foo(bar((table[trade.ware] and "-") or "+", 1 < x)) or ""
+
+local a, x, y, is_magic
+
+a = (not x and ( (x < 50 and x < 100 and z) or (is_magic and 4 or 3) )) or x
 
 --[[
 --]]
