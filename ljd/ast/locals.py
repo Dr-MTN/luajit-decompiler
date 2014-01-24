@@ -39,13 +39,17 @@ class _LocalsMarker(traverse.Visitor):
 	def _process_slots(self, addr):
 		debuginfo = self._state().debuginfo
 
-		for slot, nodes in self._state().pending_slots.items():
-			if len(nodes) == 0:
-				continue
+		cleanup = []
 
+		for slot, nodes in self._state().pending_slots.items():
 			varinfo = debuginfo.lookup_local_name(addr, slot)
 
-			if varinfo is None or varinfo.type == varinfo.T_INTERNAL:
+			if varinfo is None:
+				continue
+
+			cleanup.append(slot)
+
+			if varinfo.type == varinfo.T_INTERNAL:
 				continue
 
 			for node in nodes:
@@ -54,10 +58,11 @@ class _LocalsMarker(traverse.Visitor):
 
 				setattr(node, "_varinfo", varinfo)
 
-			nodes[:] = []
+		for slot in cleanup:
+			del self._state().pending_slots[slot]
 
 	def _reset_slot(self, slot):
-		self._state().pending_slots[slot] = []
+		self._state().pending_slots.pop(slot, None)
 
 	def _reset_all(self, slots):
 		for slot in slots:
@@ -165,14 +170,14 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 		self._pop_state()
 
 	def visit_iterator_for(self, node):
-		addr = node.statements.contents[0].first_address
+		addr = node._addr
 
 		for local in node.identifiers.contents:
 			if local.type == nodes.Identifier.T_LOCAL:
 				self._update_known_locals(local, addr)
 
 	def visit_numeric_for(self, node):
-		addr = node.statements.contents[0].first_address
+		addr = node._addr
 
 		if node.variable.type == nodes.Identifier.T_LOCAL:
 			self._update_known_locals(node.variable, addr)
