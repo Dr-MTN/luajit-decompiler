@@ -75,58 +75,10 @@ def _glue_flows(node):
 		statements.contents = blocks[-1].contents
 
 
-#
-# We are considering two adequate cases of logical expressions
-# 1. A normal expression
-#    (x < 300 and y > 200) or ((x < 100) and (y == 3)) or invalid_coords(x, y)
-# 2. An ?: operator replacement
-#    a = coords_valid and (x*y + 100) else -1
-#
-# And one less adequate case:
-# 3. A weird compact if:
-#    junk = everything_is_ok and print("Everything ok!") else crash_something()
-#
-# ... because Lua syntax disallow logical expressions as statements
-#
-# There is no way to always say exactly if the given logical construction is an
-# expression or a statement. But there are a few requirements and signs to
-# guess this more or less precisely.
-#
-# There is an additional problem with the second case if the variable is local,
-# especially if it is unused afterwards.
-#
-# REQUIREMENTS:
-# 1. All the blocks in the construction are either empty or contain a single
-# 	assignment to the same undefined slot or local variable (of the same
-# 	slot - an undefined slot may suddenly became a local variable due to
-# 	weird luajit local variable markings)
-#
-# SIGNS:
-# 1. [Exact] There are jumps across "normal" branches, i.e. from a "then"
-# 	clause to an "else" cause on the same level. Jumps ouside of the
-# 	topmost if doesn't count - that's ok even for normal statements.
-# 2. [More or less] There are undefined slot assignments. May break without
-# 	a debug information.
-# 3. [More or less] Same as requirement 1 - there are empty blocks
-# 	or blocks with single assignments to the same slot or local vairable.
-# 	Some idiot may write the same thing by normal statements.
-# 4. [More or less] All statements in blocks are on the same line. Will break
-# 	without a debug information. Expression could be multiline.
-#
-# Generally we will check the requirement and the first sign.
-#
-# If the requirement is fulfilled we will consider this as an expression - at
-# least it will compile.
-# If the requirement is not fulfilled, but the first sign is - that's an error.
-# If neither the requirement, nor the first sign are fulfilled - that's a
-# statement.
-#
-# If the undefined slot will remain undefined we will traverse the first
-# instruction of the branching end block - there should be a reference the slot
-#
-# In either case we just put a new assignment. There will be the second slot
-# elimination phase after this phase
-#
+# ##
+# ## IFs AND EXPRESSIONs PROCESSING
+# ##
+
 def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 	boundaries = []
 
@@ -462,7 +414,7 @@ def _unwarp_expression(body, end, true, false):
 		target = _get_target(warp)
 
 		#
-		# A chance for a
+		# A chance for
 		# (foo and (bar and y or z)) or x
 		# type expressions, because the first "foo and ... )) or" part
 		# will be broken by the "or z))" part in the code below.
@@ -950,9 +902,10 @@ def _remove_processed_blocks(blocks, boundaries):
 
 	return remains
 
-# #
-# # ACHTUNG! Mess of hacks below
-# #
+
+# ##
+# ## LOOPS PROCESSING
+# ##
 
 
 def _unwarp_loops(blocks, repeat_until):
@@ -1105,8 +1058,7 @@ def _unwarp_loop(start, end, body):
 								true, false)
 
 			# If something jumps to the start (instead of the end)
-			# - that's the nested if
-
+			# - that's a nested if
 			loop = nodes.While()
 			loop.expression = expression
 			loop.statements.contents = body
@@ -1140,7 +1092,6 @@ def _unwarp_loop(start, end, body):
 
 		assert len(expression) > 0
 
-		# Early process the break
 		first = expression[0]
 		if _is_jump(first.warp):
 			# Don't append to the body - it already has it
@@ -1148,8 +1099,8 @@ def _unwarp_loop(start, end, body):
 			body[-1].contents.append(nodes.Break())
 
 		false = body[0]
-		# Don't use end as it could be broken by previous repeat until
-		# primary_pass
+		# Don't use end as it could be broken by a previous
+		# repeat until pass
 		true = expression[-1].warp.true_target
 
 		loop = nodes.RepeatUntil()
