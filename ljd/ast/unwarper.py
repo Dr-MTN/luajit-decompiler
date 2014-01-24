@@ -100,14 +100,17 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 			raise NotImplementedError("GOTO statements are not"
 								" supported")
 
+		is_end = isinstance(body[-1].warp, nodes.EndWarp)
+
 		if not _try_unwarp_logical_expression(start, body, end, end):
 			_unwarp_if_statement(start, body, end, end)
 
-		boundaries.append((start_index, end_index - 1))
+		if is_end:
+			_set_end(start)
+		else:
+			_set_flow_to(start, end)
 
-		start.warp = nodes.UnconditionalWarp()
-		start.warp.type = nodes.UnconditionalWarp.T_FLOW
-		start.warp.target = end
+		boundaries.append((start_index, end_index - 1))
 
 		start_index = end_index
 
@@ -138,7 +141,7 @@ def _try_unwarp_logical_expression(start, blocks, end, topmost_end):
 
 	blocks = [start] + blocks + [end]
 
-	for i, (start, end, _slot) in enumerate(expressions):
+	for start, end, _slot in expressions:
 		start_index = blocks.index(start)
 		end_index = blocks.index(end)
 
@@ -146,7 +149,7 @@ def _try_unwarp_logical_expression(start, blocks, end, topmost_end):
 
 		_unwarp_logical_expression(start, end, body, topmost_end)
 
-		if i == len(expressions):
+		if isinstance(body[-1].warp, nodes.EndWarp):
 			slotworks.eliminate_temporary(start)
 		else:
 			end.contents = start.contents + end.contents
@@ -492,7 +495,8 @@ def _unwarp_expression(body, end, true, false):
 
 		parts.append(last)
 	else:
-		assert isinstance(last.warp, nodes.UnconditionalWarp)
+		assert isinstance(last.warp, (nodes.EndWarp,
+						nodes.UnconditionalWarp))
 
 		src = _get_last_assignment_source(last)
 
@@ -509,10 +513,13 @@ def _unwarp_expression(body, end, true, false):
 	return parts
 
 
-def _get_target(warp):
+def _get_target(warp, allow_end=False):
 	if isinstance(warp, nodes.ConditionalWarp):
 		return warp.false_target
 	else:
+		if allow_end and isinstance(warp, nodes.EndWarp):
+			return getattr(warp, "_target", None)
+
 		assert isinstance(warp, nodes.UnconditionalWarp)
 		return warp.target
 
@@ -766,37 +773,38 @@ def _unwarp_if_statement(start, body, end, topmost_end):
 
 		then_warp_out = then_body[-1].warp
 
-		assert isinstance(then_warp_out, nodes.UnconditionalWarp)
-		assert then_warp_out.type == nodes.UnconditionalWarp.T_JUMP
-		assert then_warp_out.target == end	\
-			or then_warp_out.target == topmost_end
+		assert _is_jump(then_warp_out)
+		assert then_warp_out.target in (end, topmost_end)
 
 		else_body = body[else_start_index:]
 
 		else_warp_out = else_body[-1].warp
 
-		assert isinstance(else_warp_out, nodes.UnconditionalWarp)
-		assert else_warp_out.target == end	\
-			or else_warp_out.target == topmost_end
+		if isinstance(else_warp_out, nodes.UnconditionalWarp):
+			if else_warp_out.type == nodes.UnconditionalWarp.T_JUMP:
+				assert else_warp_out.target in (end, topmost_end)
+			else:
+				assert else_warp_out.target == end
+		else:
+			assert isinstance(else_warp_out, nodes.EndWarp)
 
+		_set_end(then_body[-1])
 		then_blocks = _unwarp_ifs(then_body, then_body[-1], topmost_end)
 		node.then_block.contents = then_blocks
 
+		_set_end(else_body[-1])
 		else_blocks = _unwarp_ifs(else_body, else_body[-1], topmost_end)
 		node.else_block.contents = else_blocks
-
-		then_blocks[-1].warp = nodes.EndWarp()
-		else_blocks[-1].warp = nodes.EndWarp()
 	else:
-		then_blocks = _unwarp_ifs(body, body[-1], topmost_end)
-		node.then_block.contents = then_blocks
 		warp_out = body[-1].warp
 
 		if not isinstance(warp_out, nodes.EndWarp):
-			assert isinstance(warp_out, nodes.UnconditionalWarp)
-			assert warp_out.target == end or warp_out == topmost_end
+			assert _is_flow(warp_out)
+			assert warp_out.target in (end, topmost_end)
 
-		then_blocks[-1].warp = nodes.EndWarp()
+		_set_end(body[-1])
+		then_blocks = _unwarp_ifs(body, body[-1], topmost_end)
+		node.then_block.contents = then_blocks
 
 	start.contents.append(node)
 
@@ -874,7 +882,7 @@ def _find_branching_end(blocks, topmost_end):
 	for block in blocks:
 		warp = block.warp
 
-		target = _get_target(warp)
+		target = _get_target(warp, allow_end=True)
 
 		if _is_flow(warp) and target == end:
 			return end
@@ -960,7 +968,7 @@ def _unwarp_loops(blocks, repeat_until):
 
 		_replace_targets(blocks, body[0], block)
 
-		body[-1].warp = nodes.EndWarp()
+		_set_end(body[-1])
 		_unwarp_breaks(start, body, end)
 
 		blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
@@ -1113,7 +1121,7 @@ def _unwarp_loop(start, end, body):
 		if len(body) > 1:
 			_set_flow_to(start_copy, body[1])
 		else:
-			start_copy.warp = nodes.EndWarp()
+			_set_end(start_copy)
 
 		_set_flow_to(start, start_copy)
 
@@ -1140,6 +1148,17 @@ def _set_flow_to(block, target):
 	block.warp.target = target
 
 
+def _set_end(block):
+	target = None
+
+	if block.warp is not None:
+		target = _get_target(block.warp, allow_end=True)
+
+	block.warp = nodes.EndWarp()
+
+	setattr(block.warp, "_target", target)
+
+
 def _is_flow(warp):
 	return isinstance(warp, nodes.UnconditionalWarp)	\
 		and warp.type == nodes.UnconditionalWarp.T_FLOW
@@ -1161,7 +1180,7 @@ def _fix_nested_ifs(blocks, start):
 		_set_flow_to(blocks[-1], last)
 
 	blocks.append(last)
-	last.warp = nodes.EndWarp()
+	_set_end(last)
 
 	for block in blocks[:-1]:
 		target = _get_target(block.warp)
@@ -1238,7 +1257,7 @@ def _unwarp_breaks(start, blocks, next_block):
 		block.contents.append(nodes.Break())
 
 		if i + 1 == len(blocks):
-			block.warp = nodes.EndWarp()
+			_set_end(block)
 		else:
 			_set_flow_to(block, blocks[i + 1])
 
