@@ -820,7 +820,7 @@ def _extract_if_expression(start, body, end, topmost_end):
 	expression = [start] + body[:i]
 	body = body[i:]
 
-	falses = []
+	falses = set()
 
 	for i, block in enumerate(body[:-1]):
 		if not isinstance(block.warp, nodes.UnconditionalWarp):
@@ -832,14 +832,13 @@ def _extract_if_expression(start, body, end, topmost_end):
 		if block.warp.target != end and block.warp.target != topmost_end:
 			continue
 
-		falses.append(body[i + 1])
+		falses.add(body[i + 1])
 
-	falses.append(end)
+	falses.add(end)
 
 	if topmost_end is not None:
-		falses.append(topmost_end)
+		falses.add(topmost_end)
 
-	falses = set(falses)
 	false, end_i = _search_expression_end(expression, falses)
 
 	assert end_i >= 0
