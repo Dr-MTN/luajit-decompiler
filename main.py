@@ -105,13 +105,14 @@ def main():
 
 		# ljd.ast.validator.validate(ast, warped=False)
 
-		ljd.ast.locals.mark_local_definitions(ast)
+		if True:
+			ljd.ast.locals.mark_local_definitions(ast)
 
-		# ljd.ast.validator.validate(ast, warped=False)
+			# ljd.ast.validator.validate(ast, warped=False)
 
-		ljd.ast.mutator.primary_pass(ast)
+			ljd.ast.mutator.primary_pass(ast)
 
-		ljd.ast.validator.validate(ast, warped=False)
+			ljd.ast.validator.validate(ast, warped=False)
 
 	ljd.lua.writer.write(sys.stdout, ast)
 
