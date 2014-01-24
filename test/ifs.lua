@@ -572,5 +572,11 @@ for ins=1, nins do
 	print ("Test")
 end
 
+
+if x == 0 then
+	print ("then")
+else
+end
+
 --[[
 --]]
