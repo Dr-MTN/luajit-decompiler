@@ -361,7 +361,7 @@ def _translate_varg_tailcall(writer, description, addr, line, instruction):
 
 	func_var = _translate(writer, addr, base, ins.T_VAR)
 
-	return description.fnumberormat(
+	return description.format(
 		A=func_var,
 		from_A_plus_one_x_D=", ".join(args)
 	)
