@@ -32,6 +32,7 @@ def unwarp(node):
 	_run_step(_unwarp_loops, node, repeat_until=False)
 
 	_run_step(_unwarp_loops, node, repeat_until=True)
+	_run_step(_unwarp_expressions, node)
 	_run_step(_unwarp_ifs, node)
 
 	_glue_flows(node)
@@ -78,6 +79,58 @@ def _glue_flows(node):
 # ## IFs AND EXPRESSIONs PROCESSING
 # ##
 
+def _unwarp_expressions(blocks):
+	pack = []
+	pack_set = set()
+
+	start_index = 0
+	while start_index < len(blocks) - 1:
+		start = blocks[start_index]
+		warp = start.warp
+
+		if isinstance(warp, nodes.UnconditionalWarp):
+			if warp.type == nodes.UnconditionalWarp.T_FLOW:
+				start_index += 1
+				continue
+
+		body, end, end_index = _extract_if_body(start_index,
+							blocks, None)
+
+		if body is None:
+			raise NotImplementedError("GOTO statements are not"
+								" supported")
+
+		expressions = _find_expressions(start, body, end)
+
+		assert pack_set.isdisjoint(expressions)
+
+		if len(expressions) == 0:
+			start_index += 1
+			continue
+
+		pack += list(reversed(expressions))
+		pack_set.update(expressions)
+
+		endest_end = _find_endest_end(expressions)
+
+		if endest_end != end:
+			end_index = blocks.index(endest_end)
+
+		start_index = end_index
+
+	return _unwarp_expressions_pack(blocks, pack)
+
+
+def _find_endest_end(expressions):
+	endest_end = expressions[0][1]
+
+	for _start, exp_end, _slot, _slot_type in expressions[1:]:
+		if exp_end.index > endest_end.index:
+			endest_end = exp_end
+
+	return endest_end
+
+
 def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 	boundaries = []
 
@@ -101,8 +154,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 
 		is_end = isinstance(body[-1].warp, nodes.EndWarp)
 
-		if not _try_unwarp_logical_expression(start, body, end, end):
-			_unwarp_if_statement(start, body, end, end)
+		_unwarp_if_statement(start, body, end, end)
 
 		if is_end:
 			_set_end(start)
@@ -132,25 +184,31 @@ def _extract_if_body(start_index, blocks, topmost_end):
 	return body, end, end_index
 
 
-def _try_unwarp_logical_expression(start, blocks, end, topmost_end):
-	expressions = _find_expressions(start, blocks, end)
+def _unwarp_expressions_pack(blocks, pack):
+	replacements = {}
 
-	if len(expressions) == 0:
-		return False
+	for start, end, slot, slot_type in reversed(pack):
+		end = replacements.get(end, end)
 
-	blocks = [start] + blocks + [end]
-
-	for start, end, _slot in expressions:
 		start_index = blocks.index(start)
 		end_index = blocks.index(end)
 
 		body = blocks[start_index + 1:end_index]
 
-		_unwarp_logical_expression(start, end, body, topmost_end)
+		_unwarp_logical_expression(start, end, body)
 
-		if isinstance(body[-1].warp, nodes.EndWarp):
-			slotworks.eliminate_temporary(start)
+		statements = start.contents + end.contents
+
+		if slot_type == nodes.Identifier.T_SLOT:
+			min_i = len(start.contents)
+			split_i = _split_by_slot_use(statements, min_i,
+							end.warp, slot)
 		else:
+			split_i = len(start.contents)
+
+		max_i = len(statements)
+
+		if split_i > max_i:
 			end.contents = start.contents + end.contents
 			start.contents = []
 
@@ -158,17 +216,103 @@ def _try_unwarp_logical_expression(start, blocks, end, topmost_end):
 
 			_replace_targets(blocks, start, end)
 
-			slotworks.eliminate_temporary(end)
+			replacements[start] = end
 
-	return True
+			slotworks.eliminate_temporary(end)
+		else:
+			blocks = blocks[:start_index + 1] + blocks[end_index:]
+
+			start.contents = statements[:split_i]
+			end.contents = statements[split_i:]
+
+			slotworks.eliminate_temporary(start)
+
+		_set_flow_to(start, end)
+
+	return blocks
+
+
+def _split_by_slot_use(statements, min_i, warp, slot):
+	known_slots = set([slot])
+
+	split_i = min_i
+
+	for i, statement in enumerate(statements):
+		sets, _uses = _extract_statement_slots(statement)
+
+		if i < min_i:
+			known_slots |= sets
+		else:
+			known_slots -= sets
+
+		if len(known_slots) == 0:
+			break
+
+		split_i = i + 1
+
+	if split_i < len(statements):
+		return split_i
+
+	if isinstance(warp, nodes.ConditionalWarp):
+		known_slots -= _gather_slots(warp)
+
+		if len(known_slots) == 0:
+			split_i += 1
+
+	return split_i
+
+
+def _extract_statement_slots(statement):
+	sets = set()
+	uses = set()
+
+	if isinstance(statement, nodes.Assignment):
+		for node in statement.destinations.contents:
+			if isinstance(node, nodes.Identifier):
+				if node.type == nodes.Identifier.T_SLOT:
+					sets.add(node.slot)
+			else:
+				# Anything else is a use action, not a set action
+				uses.update(_gather_slots(node))
+
+		uses.update(_gather_slots(statement.expressions))
+	elif isinstance(statement, (nodes.IteratorFor, nodes.NumericFor)):
+		uses = _gather_slots(statement.expressions)
+	elif isinstance(statement, nodes.Return):
+		uses = _gather_slots(statement.returns)
+	elif isinstance(statement, nodes.BlackHole):
+		uses = _gather_slots(statement.contents)
+	elif isinstance(statement, nodes.FunctionCall):
+		uses = _gather_slots(statement.arguments)
+		uses.update(_gather_slots(statement.function))
+	elif isinstance(statement, nodes.While):
+		uses = _gather_slots(statement.expression)
+
+	return sets, uses
+
+
+def _gather_slots(node):
+	class Collector(traverse.Visitor):
+		def __init__(self):
+			self.slots = set()
+
+		def visit_identifier(self, node):
+			if node.type == nodes.Identifier.T_SLOT:
+				self.slots.add(node.slot)
+
+	collector = Collector()
+
+	traverse.traverse(collector, node)
+
+	return collector.slots
 
 
 def _find_expressions(start, body, end):
 	# Explicitly allow the local a = x ~= "b" case
-	slot = _get_simple_local_assignment_slot(start, body, end)
+	slot, slot_type = _get_simple_local_assignment_slot(start, body, end)
 
 	if slot >= 0:
-		return [(start, end, slot)]
+		return [(start, end, slot, slot_type)]
 
 	expressions = []
 
@@ -191,16 +335,16 @@ def _find_expressions(start, body, end):
 
 			# Loop? No way!
 			if new_i <= i:
-				return []
+				return expressions
 
 			# It should end with a conditional warp if that's
 			# really a subexpression-as-operand
 			end_warp = endest_end.warp
 
 			if not isinstance(end_warp, nodes.ConditionalWarp):
-				return []
+				return expressions
 
-			expressions += subs
+			expressions = subs + expressions
 			i = new_i
 			continue
 
@@ -211,49 +355,75 @@ def _find_expressions(start, body, end):
 			is_binop = isinstance(condition, nodes.BinaryOperator)
 			block_slot = getattr(block.warp, "_slot", slot)
 
-			if is_end and is_binop:
+			if is_end:
+				if is_binop:
+					return expressions
+				elif slot < 0 and block_slot >= 0:
+					slot = block_slot
+					slot_type = nodes.Identifier.T_SLOT
+					sure_expression = True
+				elif slot != block_slot:
+					return expressions
+				else:
+					sure_expression = True
+		elif isinstance(block.warp, nodes.UnconditionalWarp):
+			if block == start and len(block.contents) == 0:
 				return []
-			elif is_end and slot < 0 and block_slot >= 0:
-				slot = block_slot
-				sure_expression = True
-			elif is_end and slot != block_slot:
-				return []
-			elif is_end:
-				sure_expression = True
 
-		if block == start or len(block.contents) == 0:
+		if len(block.contents) == 0:
 			i += 1
 			continue
 
-		if len(block.contents) > 1:
-			return []
+		if block != start and len(block.contents) > 1:
+			return expressions
 
-		assignment = block.contents[0]
+		assignment = block.contents[-1]
 
 		if not isinstance(assignment, nodes.Assignment):
-			return []
+			if block == start:
+				i += 1
+				continue
+
+			return expressions
 
 		destinations = assignment.destinations.contents
 
 		if len(destinations) != 1:
-			return []
+			if block == start:
+				i += 1
+				continue
+
+			return expressions
 
 		dst = destinations[0]
 
 		if not isinstance(dst, nodes.Identifier):
-			return []
+			if block == start:
+				i += 1
+				continue
+
+			return expressions
 
 		if isinstance(block.warp, nodes.ConditionalWarp):
-			return []
+			if block == start:
+				i += 1
+				continue
+
+			return expressions
 
 		if slot < 0:
 			# If all encounters are locals, which means
 			# that the first encounter is a local
-			if dst.type == nodes.Identifier.T_LOCAL:
+			if dst.type != nodes.Identifier.T_SLOT:
 				is_local = True
 
 			slot = dst.slot
-		elif slot != dst.slot:
+			slot_type = dst.type
+		elif slot == dst.slot:
+			slot_type = dst.type
+		else:
+			assert block != start
+
 			return []
 
 		i += 1
@@ -270,9 +440,9 @@ def _find_expressions(start, body, end):
 		sure_expression = True
 
 	if not sure_expression and is_local:
-		return []
+		return expressions
 
-	return expressions + [(start, end, slot)]
+	return expressions + [(start, end, slot, slot_type)]
 
 
 def _find_subexpressions(start, body):
@@ -290,27 +460,32 @@ def _find_subexpressions(start, body):
 
 def _get_simple_local_assignment_slot(start, body, end):
 	if len(body) != 2:
-		return -1
+		return -1, None
 
 	true, _false, body = _get_terminators(body)
 
 	if true is None:
-		return -1
+		return -1, None
 	else:
-		return true.contents[0].destinations.contents[0].slot
+		slot = true.contents[0].destinations.contents[0]
+		return slot.slot, slot.type
 
 
-def _unwarp_logical_expression(start, end, body, topmost_end):
+def _find_expression_slot(body):
 	slot = None
 
-	# Find the last occurence of the slot - it could be a local variable at
-	# the last occurance
 	for block in reversed(body):
 		if len(block.contents) != 1:
 			continue
 
 		slot = block.contents[0].destinations.contents[0]
 		break
+
+	return slot
+
+
+def _unwarp_logical_expression(start, end, body):
+	slot = _find_expression_slot(body)
 
 	assert slot is not None
 
@@ -543,6 +718,8 @@ def _get_operator(block, true, end):
 			is_true = True
 		elif isinstance(src, nodes.Primitive):
 			is_true = src.type == nodes.Primitive.T_TRUE
+		elif isinstance(src, nodes.Identifier):
+			is_true = True
 		else:
 			assert src is None
 
@@ -888,7 +1065,7 @@ def _find_branching_end(blocks, topmost_end):
 			assert block == end
 			return block
 
-		if _is_flow(warp) and target == end:
+		if isinstance(warp, nodes.UnconditionalWarp) and target == end:
 			return end
 
 		if target.index > end.index:
