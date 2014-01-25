@@ -104,12 +104,16 @@ def _unwarp_expressions(blocks):
 
 		assert pack_set.isdisjoint(expressions)
 
+		expressions_set = set(expressions)
+
+		assert len(expressions_set) == len(expressions)
+
 		if len(expressions) == 0:
 			start_index += 1
 			continue
 
 		pack += list(reversed(expressions))
-		pack_set.update(expressions)
+		pack_set |= expressions_set
 
 		endest_end = _find_endest_end(expressions)
 
@@ -319,7 +323,7 @@ def _find_expressions(start, body, end):
 		subs = _find_subexpressions(block, body[i:])
 
 		if len(subs) != 0:
-			endest_end = subs[-1][1]
+			endest_end = _find_endest_end(subs)
 			new_i = extbody.index(endest_end)
 
 			# Loop? No way!
