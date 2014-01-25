@@ -99,8 +99,19 @@ def _fill_simple_refs(info, simple, tables):
 
 		is_element = isinstance(holder, nodes.TableElement)
 
+		path_index = ref.path.index(holder)
+
+		statement = _get_holder(ref.path[:path_index])
+
+		statement_is_assignment = isinstance(statement, nodes.Assignment)
+
+		if statement_is_assignment:
+			is_dst = statement.destinations.contents[0] == holder
+		else:
+			is_dst = False
+
 		# Could be more then one reference here
-		if src_is_table and is_element:
+		if src_is_table and is_element and is_dst:
 			assert holder.table == ref.identifier
 			tables.append((info, ref))
 		else:
