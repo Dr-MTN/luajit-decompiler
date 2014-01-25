@@ -255,5 +255,18 @@ end
 
 menu.logbook = foo(x or y) or {}
 
+local x, y, bar, do_not_collapse_this_if_please, a
+
+if x then
+	if y then
+		a = {
+			x or y,
+			bar(x or y) .. x or ""
+		}
+	end
+
+	do_not_collapse_this_if_please()
+end
+
 --[[
 --]]
