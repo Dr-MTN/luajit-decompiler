@@ -13,6 +13,12 @@ __SECOND WARNING!__ And, BTW, this all is a one huge prototype. Because the
 "release" version should be written into lua itself. Because it's cool to
 decompile the decompiler - a great test too!
 
+Requirements
+---
+
+Python __3.0+__ from python.org
+
+
 How to use it
 ---
 
@@ -23,6 +29,21 @@ TODO
 ---
 
 There is a lot of work to do, in the order of priority
+
+0. Logical subexpressions in while statements:
+	```lua
+		while x < (xi and 2 or 3) do
+			print ("Hello crazy world!")
+		end
+	```
+
+	Logical subexpressions (the subexpressions used as operands in
+	ariphmetic or comparison operations inside other exrpressions) are
+	currently supported only for ifs. To support them for whiles and
+	repeat untils an expression unwarping logic should be moved at the
+	very beginning. But it won't work without all fixes being done in
+	a loop unwarping logic. So we need to split that and move the fixes 
+	before expressions before loops before ifs. That's not that easy...
 
 1. AST Mutations:
 	1. Use the line information (or common sense if there is no line
@@ -50,6 +71,3 @@ There is a lot of work to do, in the order of priority
 	   The only way to guess them is to watch local variable scopes, which
 	   is simple enough in case of non-stripped bytecode and a bit
 	   harder otherwise.
-
-	   P.S. After a bit more research - it could be hard after all and
-	   I don't see much profit.,, An ultra-low priority
