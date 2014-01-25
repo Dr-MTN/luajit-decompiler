@@ -627,16 +627,14 @@ def _build_binary_expression(state, addr, instruction):
 	operator = nodes.BinaryOperator()
 	opcode = instruction.opcode
 
-	map_index = opcode - ins.ADDVN.opcode
-	map_index %= 5
-	map_index += ins.ADDVN.opcode
-
-	operator.type = _BINARY_OPERATOR_MAP[map_index]
-
-	if operator.type is None:
-		assert opcode == ins.POW.opcode
-
+	if opcode == ins.POW.opcode:
 		operator.type = nodes.BinaryOperator.T_POW
+	else:
+		map_index = opcode - ins.ADDVN.opcode
+		map_index %= 5
+		map_index += ins.ADDVN.opcode
+
+		operator.type = _BINARY_OPERATOR_MAP[map_index]
 
 	if instruction.B_type == ins.T_VAR and instruction.CD_type == ins.T_VAR:
 		operator.left = _build_slot(state, addr, instruction.B)
