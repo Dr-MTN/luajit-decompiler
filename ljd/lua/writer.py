@@ -414,14 +414,22 @@ class Visitor(traverse.Visitor):
 
 			return
 
-		if is_valid_name:
+		base_is_constructor = isinstance(base, nodes.TableConstructor)
+
+		if not base_is_constructor and is_valid_name:
 			self._visit(base)
 			self._write(".")
 
 			self._write(key.value)
 			self._skip(key)
 		else:
+			if base_is_constructor:
+				self._write("(")
+
 			self._visit(base)
+
+			if base_is_constructor:
+				self._write(")")
 
 			self._write("[")
 
