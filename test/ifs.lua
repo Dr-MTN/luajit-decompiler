@@ -569,13 +569,57 @@ for ins=1, nins do
 		snapref = snap and snap[0] or 65536
 	end
 
+	local m, ot, op1, op2, ridsp = traceir(tr, ins)
+	local oidx = shr(ot, 8)*6
+	local t = band(ot, 31)
+	local op = sub(irnames, oidx + 1, oidx + 6)
+
 	print ("Test")
 end
-
 
 if x == 0 then
 	print ("then")
 else
+end
+
+local menu, x, y, test, xi
+
+print("asd")
+
+menu.onUpdate = function ()
+	if x and y then
+		test = x or y
+	
+		print ("test")
+
+		menu.attr = x or foo(y, "macro")
+	end
+
+	return 
+end
+
+if shouldDisplayIcon(onScreen, targetElement.obstructed, (targetElement.outlined or targetElement.surfaceElement or targetElement.crate or targetElement.switchable) and targetElement.messageType ~= "missionobjective", targetElement.messageType == "missionobjective") then
+	print("asd")
+end
+
+
+if test == 3 then
+	print("Just a test")
+else
+end
+
+if x == 2 then
+	print("This may crash the if else above!")
+end
+
+local xi, x, y, z
+
+if xi then
+	z = x or y
+	z = x or y
+	z = x or y
+
+	print ("asd")
 end
 
 --[[

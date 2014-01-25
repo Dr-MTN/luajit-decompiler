@@ -69,6 +69,7 @@ print ("simple and expression with double binary comparison")
 
 b = (x < 100) and (y > 100)
 
+
 print ("(and) or expression")
 
 b = (x and y) or z
@@ -119,6 +120,8 @@ b = (x and z) or (y and z)
 print ("x or string")
 local xi = "nothing"
 xi = x or "something"
+
+local xi
 
 print ("x and string")
 xi = x and "something"
@@ -210,10 +213,10 @@ exists = ffi.string(messageDetails.messageType) ~= ""
 
 local row, cells, rowdata, colspans, noscaling, bgColor
 
-if menu.interactive then
-	row = self:addRow(true, cells, rowdata, colspans, noscaling, bgColor or Helper.defaultArrowRowBackgroundColor, true)
+if is_magic then
+	row = foo(bgColor or Helper.defaultArrowRowBackgroundColor)
 else
-	row = self:addRow(true, cells, rowdata, colspans, noscaling, bgColor)
+	row = bar(bgColor)
 end
 
 local a = 0
@@ -223,7 +226,6 @@ a = z == 3 and (x < ((y == 0 and is_magic) and 3 or 2)) and "a" or "b"
 local a, is_magic, x, y, foo, bar
 
 a = is_magic and foo(x == "station" and y) or bar()
-
 
 local a = (
 	((not commander and true or IsSameComponent(commander, menu.playership))
@@ -235,6 +237,21 @@ local a = isfirst and foo(bar((table[trade.ware] and "-") or "+", 1 < x)) or ""
 local a, x, y, is_magic
 
 a = (not x and ( (x < 50 and x < 100 and z) or (is_magic and 4 or 3) )) or x
+
+setElementPosition(iconelement, x, y, width%2 ~= 0, height%2 ~= 0)
+
+if xi then
+	local unlocked_defence_status = x or ((y or z) < 100)
+
+	bar(x and y or z)
+end
+
+local function foo()
+	return {
+		font = x or y,
+		fontsize = x or y
+	}
+end
 
 --[[
 --]]
