@@ -622,5 +622,11 @@ if xi then
 	print ("asd")
 end
 
+if xi then
+	local unlocked_defence_status = x or (y or z) < 100
+
+	bar((x and y) or z)
+end
+
 --[[
 --]]
