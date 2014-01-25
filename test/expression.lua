@@ -253,5 +253,7 @@ local function foo()
 	}
 end
 
+menu.logbook = foo(x or y) or {}
+
 --[[
 --]]

@@ -219,15 +219,19 @@ def _unwarp_expressions_pack(blocks, pack):
 			replacements[start] = end
 
 			slotworks.eliminate_temporary(end)
+
+			_set_flow_to(start, end)
 		else:
 			blocks = blocks[:start_index + 1] + blocks[end_index:]
 
 			start.contents = statements[:split_i]
 			end.contents = statements[split_i:]
 
-			slotworks.eliminate_temporary(start)
+			# We need to kill the start's warp before slot
+			# elimination or it could result in a cycled AST.
+			_set_flow_to(start, end)
 
-		_set_flow_to(start, end)
+			slotworks.eliminate_temporary(start)
 
 	return blocks
 
