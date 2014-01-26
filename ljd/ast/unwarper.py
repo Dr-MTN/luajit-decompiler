@@ -407,13 +407,18 @@ def _find_expressions(start, body, end):
 		if slot < 0:
 			# If all encounters are locals, which means
 			# that the first encounter is a local
-			if dst.type != nodes.Identifier.T_SLOT:
+			if dst.type == nodes.Identifier.T_LOCAL:
 				is_local = True
+			elif dst.type == nodes.Identifier.T_UPVALUE:
+				return []
 
 			slot = dst.slot
 			slot_type = dst.type
 		elif slot == dst.slot:
 			slot_type = dst.type
+
+			if dst.type == nodes.Identifier.T_UPVALUE:
+				return []
 		else:
 			assert block != start
 
