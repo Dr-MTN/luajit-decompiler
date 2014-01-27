@@ -26,14 +26,28 @@ class FunctionDefinition():
 
 class TableConstructor():
 	def __init__(self):
+		self.array = RecordsList()
 		self.records = RecordsList()
 
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_table_constructor, self)
 
+		visitor._visit(self.array)
 		visitor._visit(self.records)
 
 		visitor._leave_node(visitor.leave_table_constructor, self)
+
+
+class ArrayRecord():
+	def __init__(self):
+		self.value = None
+
+	def _accept(self, visitor):
+		visitor._visit_node(visitor.visit_array_record, self)
+
+		visitor._visit(self.value)
+
+		visitor._leave_node(visitor.leave_array_record, self)
 
 
 class TableRecord():

@@ -724,15 +724,10 @@ def _build_table_copy(state, slot):
 	i = 0
 
 	for value in table.array:
-		if i == 0 and value is None:
-			i += 1
-			continue
-
-		record = nodes.TableRecord()
-		record.key = _build_table_record_item(i)
+		record = nodes.ArrayRecord()
 		record.value = _build_table_record_item(value)
 
-		node.records.contents.append(record)
+		node.array.contents.append(record)
 
 		i += 1
 

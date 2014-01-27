@@ -127,15 +127,36 @@ class Visitor(traverse.Visitor):
 	def visit_table_constructor(self, node):
 		self._write("{")
 
-		if len(node.records.contents) > 0:
+		if len(node.records.contents) + len(node.array.contents) > 0:
 			self._end_line()
 
 			self._start_block()
 
-			self._visit(node.records)
+			array = node.array.contents
+			records = node.records.contents
+
+			all_records = nodes.RecordsList()
+			all_records.contents = array + records
+
+			while len(array) > 0:
+				first = array[0].value
+
+				if not isinstance(first, nodes.Primitive):
+					break
+
+				if first.type == nodes.Primitive.T_NIL:
+					all_records.contents.pop(0)
+
+				break
+
+			self._visit(all_records)
+
+			self._skip(node.array)
+			self._skip(node.records)
 
 			self._end_block()
 		else:
+			self._skip(node.array)
 			self._skip(node.records)
 
 		self._write("}")
@@ -155,6 +176,8 @@ class Visitor(traverse.Visitor):
 			self._write("] = ")
 
 		self._visit(node.value)
+
+	# visit_array_record is a passthough
 
 	# ##
 

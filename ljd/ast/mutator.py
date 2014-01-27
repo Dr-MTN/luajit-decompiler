@@ -5,6 +5,8 @@
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 
+from ljd.ast.helpers import insert_table_record
+
 
 class SimpleLoopWarpSwapper(traverse.Visitor):
 	def visit_statements_list(self, node):
@@ -172,35 +174,10 @@ class MutatorVisitor(traverse.Visitor):
 
 			src = statement.expressions.contents[0]
 
-			self._append_record(constructor, dst.key, src)
+			insert_table_record(constructor, dst.key, src)
 			consumed += 1
 
 		return consumed
-
-	def _append_record(self, constructor, key, value):
-		records = constructor.records.contents
-
-		if isinstance(key, nodes.MULTRES):
-			assert len(records) == 0 \
-				or isinstance(records[-1], nodes.TableRecord)
-
-			records.append(value)
-			return
-
-		record = nodes.TableRecord()
-		record.key = key
-		record.value = value
-
-		if len(records) == 0:
-			records.append(record)
-			return
-
-		last = records[-1]
-
-		if isinstance(last, (nodes.FunctionCall, nodes.Vararg)):
-			records.insert(-1, record)
-		else:
-			records.append(record)
 
 	def _is_equal(self, a, b):
 		if type(a) != type(b):

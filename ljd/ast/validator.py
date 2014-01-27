@@ -92,6 +92,9 @@ class Visitor(traverse.Visitor):
 	def visit_table_constructor(self, node):
 		self._set_restrictions(nodes.RecordsList)
 
+	def visit_array_record(self, node):
+		self._set_restrictions(EXPRESSION_TYPES)
+
 	def visit_table_record(self, node):
 		self._set_restrictions(EXPRESSION_TYPES)
 
@@ -160,11 +163,19 @@ class Visitor(traverse.Visitor):
 
 	def visit_records_list(self, node):
 		self._set_restrictions((nodes.TableRecord,
+					nodes.ArrayRecord,
 					nodes.FunctionCall,
 					nodes.Vararg))
 
+		if len(node.contents) == 0:
+			return
+
+		is_array = isinstance(node.contents[0], nodes.ArrayRecord)
+
 		for i, x in enumerate(node.contents):
-			if not isinstance(x, nodes.TableRecord):
+			if is_array:
+				assert isinstance(x, nodes.ArrayRecord)
+			elif not isinstance(x, nodes.TableRecord):
 				assert i == (len(node.contents) - 1)
 
 	def visit_variables_list(self, node):

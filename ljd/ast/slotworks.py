@@ -4,6 +4,7 @@
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
+from ljd.ast.helpers import insert_table_record
 
 
 def eliminate_temporary(ast):
@@ -163,16 +164,10 @@ def _eliminate_into_table_constructors(tables):
 
 		_mark_invalidated(assignment)
 
+		key = table_element.key
 		value = assignment.expressions.contents[0]
 
-		if isinstance(table_element.key, nodes.MULTRES):
-			record = value
-		else:
-			record = nodes.TableRecord()
-			record.key = table_element.key
-			record.value = value
-
-		constructor.records.contents.append(record)
+		insert_table_record(constructor, key, value)
 
 
 def _eliminate_mass_assignments(massive):

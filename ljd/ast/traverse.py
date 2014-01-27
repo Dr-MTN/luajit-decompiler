@@ -24,6 +24,12 @@ class Visitor():
 	def leave_table_record(self, node):
 		pass
 
+	def visit_array_record(self, node):
+		pass
+
+	def leave_array_record(self, node):
+		pass
+
 	# ##
 
 	def visit_assignment(self, node):
