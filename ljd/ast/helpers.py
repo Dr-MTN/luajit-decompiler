@@ -15,16 +15,25 @@ def insert_table_record(constructor, key, value):
 	while isinstance(key, nodes.Constant)			\
 				and key.type == key.T_INTEGER	\
 				and key.value >= 0:
-		if key.value > len(array):
+		index = key.value
+		
+		if index == 1 and len(array) == 0:
+			record = nodes.ArrayRecord()
+			record.value = nodes.Primitive()
+			record.value.type = nodes.Primitive.T_NIL
+			
+			array.append(record)
+		
+		if (index > len(array)):
 			break
 
 		record = nodes.ArrayRecord()
 		record.value = value
 
-		if key.value == len(array):
+		if len(array) == 0 or index == len(array):
 			array.append(record)
 		else:
-			array[key.value] = record
+			array[index] = record
 
 		return
 
