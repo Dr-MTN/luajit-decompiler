@@ -138,16 +138,20 @@ class Visitor(traverse.Visitor):
 			all_records = nodes.RecordsList()
 			all_records.contents = array + records
 
-			while len(array) > 0:
+			if len(array) > 0:
 				first = array[0].value
+				
+				all_records.contents.pop(0)
 
-				if not isinstance(first, nodes.Primitive):
-					break
-
-				if first.type == nodes.Primitive.T_NIL:
-					all_records.contents.pop(0)
-
-				break
+				if not isinstance(first, nodes.Primitive) \
+						or first.type != first.T_NIL:
+					record = nodes.TableRecord()
+					record.key = nodes.Constant()
+					record.key.type = nodes.Constant.T_INTEGER
+					record.key.value = 0
+					record.value = first
+				
+					all_records.contents.insert(0, record)
 
 			self._visit(all_records)
 
