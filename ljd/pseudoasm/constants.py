@@ -24,7 +24,7 @@ def _write_table(writer, index, table):
 		if i != 0 or element is not None:
 			text = _translate_element(element)
 
-			writer.stream.write_line("[{0}] = {1},", i, text)
+			writer.stream.write_line("#{0}: {1},", i, text)
 
 		i += 1
 
