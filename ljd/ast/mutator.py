@@ -2,10 +2,7 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
-import ljd.ast.nodes as nodes
-import ljd.ast.traverse as traverse
-
-from ljd.ast.helpers import insert_table_record
+from ljd.ast.helpers import *
 
 
 class SimpleLoopWarpSwapper(traverse.Visitor):
@@ -167,30 +164,20 @@ class MutatorVisitor(traverse.Visitor):
 			if not isinstance(dst, nodes.TableElement):
 				break
 
-			if not self._is_equal(dst.table, table):
+			if not is_equal(dst.table, table):
 				break
 
 			assert len(statement.expressions.contents) == 1
 
 			src = statement.expressions.contents[0]
 
+			if has_same_table(src, table):
+				break
+
 			insert_table_record(constructor, dst.key, src)
 			consumed += 1
 
 		return consumed
-
-	def _is_equal(self, a, b):
-		if type(a) != type(b):
-			return False
-
-		if isinstance(a, nodes.Identifier):
-			return a.type == b.type and a.slot == b.slot
-		elif isinstance(a, nodes.TableElement):
-			return self._is_equal(a.table, b.table)		\
-				and self._is_equal(a.key, b.key)
-		else:
-			assert isinstance(a, nodes.Constant)
-			return a.type == b.type and a.value == b.value
 
 
 def pre_pass(ast):
