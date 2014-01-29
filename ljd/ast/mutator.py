@@ -2,6 +2,8 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+import copy
+
 from ljd.ast.helpers import *
 
 
@@ -9,8 +11,14 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 	def visit_statements_list(self, node):
 		blocks = node.contents
 
+		fixed = []
+		index_shift = 0
+
 		for i, block in enumerate(node.contents):
 			warp = block.warp
+			fixed.append(block)
+
+			block.index += index_shift
 
 			if isinstance(warp, nodes.IteratorWarp):
 				self._swap_iterator_warps(blocks, block)
@@ -20,34 +28,82 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 				self._swap_numeric_loop_warps(blocks, block)
 				continue
 
-			if not isinstance(warp, nodes.UnconditionalWarp):
+			if isinstance(warp, nodes.UnconditionalWarp)	\
+							and warp.is_uclo:
+				assert block != node.contents[-1]
+				next_block = node.contents[i + 1]
+				self._fix_uclo_return(block, next_block)
+
+			if not isinstance(warp, nodes.ConditionalWarp):
 				continue
 
-			if not warp.is_uclo:
+			if warp.true_target != warp.false_target:
 				continue
 
-			target = warp.target
+			slot = getattr(warp, "_slot", -1)
 
-			if len(target.contents) != 1:
+			if slot < 0:
 				continue
 
-			statement = target.contents[0]
+			next_index = block.index - index_shift + 1
+			assert block.warp.false_target.index == next_index
 
-			if not isinstance(statement, nodes.Return):
-				continue
+			new_block = self._create_dummy_block(block, slot)
 
-			block.contents.append(statement)
-			statement._addr = block.last_address
-			target.contents = []
+			fixed.append(new_block)
 
-			assert block != node.contents[-1]
+			index_shift += 1
 
-			warp.type = nodes.UnconditionalWarp.T_FLOW
-			warp.target = node.contents[i + 1]
+		node.contents = fixed
+
+	def _create_dummy_block(self, block, slot):
+		new_block = nodes.Block()
+		new_block.first_address = block.last_address
+		new_block.last_address = new_block.first_address
+		new_block.index = block.index + 1
+		new_block.warpins_count = 1
+
+		new_block.warp = nodes.UnconditionalWarp()
+		new_block.warp.type = nodes.UnconditionalWarp.T_FLOW
+		new_block.warp.target = block.warp.false_target
+
+		statement = nodes.Assignment()
+
+		identifier = nodes.Identifier()
+		identifier.type = nodes.Identifier.T_SLOT
+		identifier.slot = slot
+
+		statement.destinations.contents.append(identifier)
+		statement.expressions.contents.append(copy.copy(identifier))
+
+		new_block.contents.append(statement)
+
+		block.warp.true_target = new_block
+
+		return new_block
+
+	def _fix_uclo_return(self, block, next_block):
+		warp = block.warp
+		target = warp.target
+
+		if len(target.contents) != 1:
+			return
+
+		statement = target.contents[0]
+
+		if not isinstance(statement, nodes.Return):
+			return
+
+		block.contents.append(statement)
+		statement._addr = block.last_address
+		target.contents = []
+
+		warp.type = nodes.UnconditionalWarp.T_FLOW
+		warp.target = next_block
 
 	def _swap_iterator_warps(self, blocks, end):
 		warp = end.warp
-		index = warp.body.index
+		index = blocks.index(warp.body)
 
 		assert index > 0
 
@@ -73,7 +129,7 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
 	def _swap_numeric_loop_warps(self, blocks, end):
 		warp = end.warp
-		index = warp.body.index
+		index = blocks.index(warp.body)
 
 		assert index > 0
 
