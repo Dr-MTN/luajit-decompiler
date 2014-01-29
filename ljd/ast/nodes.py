@@ -221,19 +221,6 @@ class MULTRES():
 		visitor._leave_node(visitor.leave_multres, self)
 
 
-# sucks stuff (to eliminate the something from a something or true expressions)
-class BlackHole():
-	def __init__(self):
-		self.contents = []
-
-	def _accept(self, visitor):
-		visitor._visit_node(visitor.visit_blackhole, self)
-
-		visitor._visit_list(self.contents)
-
-		visitor._leave_node(visitor.leave_blackhole, self)
-
-
 class TableElement():
 	def __init__(self):
 		self.table = None

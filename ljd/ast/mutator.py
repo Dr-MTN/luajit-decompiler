@@ -128,9 +128,6 @@ class MutatorVisitor(traverse.Visitor):
 			i += 1
 			statement = node.contents[i]
 
-			if isinstance(statement, nodes.BlackHole):
-				continue
-
 			patched.append(statement)
 
 			if not isinstance(statement, nodes.Assignment):

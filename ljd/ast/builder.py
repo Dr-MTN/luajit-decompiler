@@ -91,12 +91,6 @@ def _build_function_blocks(state, instructions):
 
 			addr += 1
 
-		if len(block.contents) == 0:
-			continue
-
-		if isinstance(block.contents[0], nodes.BlackHole):
-			block.contents.append(block.contents.pop(0))
-
 	return state.blocks
 
 
@@ -251,19 +245,6 @@ def _build_conditional_warp(state, last_addr, instructions):
 	# A condition is inverted during the preparation phase above
 	warp.false_target = state._warp_in_block(destination)
 	warp.true_target = state._warp_in_block(jump_addr + 1)
-
-	# something or true or simply true
-	if warp.false_target == warp.true_target:
-		target = warp.false_target
-
-		black_hole = nodes.BlackHole()
-		black_hole.contents.append(warp.condition)
-
-		state.block.contents.append(black_hole)
-
-		warp = nodes.UnconditionalWarp()
-		warp.type = nodes.UnconditionalWarp.T_FLOW
-		warp.target = target
 
 	return warp, 2
 

@@ -37,8 +37,7 @@ STATEMENT_TYPES = (
 	nodes.Return,
 	nodes.Break,
 	nodes.FunctionCall,
-	nodes.While,
-	nodes.BlackHole
+	nodes.While
 )
 
 EXPRESSION_TYPES = (
@@ -248,10 +247,10 @@ class Visitor(traverse.Visitor):
 		assert node.true_target is not None
 		assert node.false_target is not None
 
-		# It might happen in case of if blabla or true stuff, but
-		# this should be handled by the builder
-		assert node.true_target != node.false_target
-		assert node.true_target.index != node.false_target.index
+		# It might happen in case of if blabla or true stuff
+		# or in case of a = a and foo(a) or a type expression
+		# assert node.true_target != node.false_target
+		# assert node.true_target.index != node.false_target.index
 
 	def visit_iterator_warp(self, node):
 		assert node.body is not None
