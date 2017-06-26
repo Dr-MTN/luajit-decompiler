@@ -61,6 +61,8 @@ def _read_header(parser, header):
 		parser.stream.data_byteorder = 'big'
 	else:
 		parser.stream.data_byteorder = 'little'
+	
+	parser.flags = header.flags
 
 	return True
 
