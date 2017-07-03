@@ -339,6 +339,11 @@ class Visitor(traverse.Visitor):
 			self._write("-")
 		elif node.type == nodes.UnaryOperator.T_NOT:
 			self._write("not ")
+		#TODO
+		elif node.type == nodes.UnaryOperator.T_TOSTRING:
+			self._write("tostring")
+		elif node.type == nodes.UnaryOperator.T_TONUMBER:
+			self._write("tonumber")
 
 		has_subexp = isinstance(node.operand, OPERATOR_TYPES)
 		need_parentheses = has_subexp and node.operand.type < node.type

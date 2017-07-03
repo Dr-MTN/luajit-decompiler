@@ -354,9 +354,9 @@ def _build_statement(state, addr, instruction):
 	elif opcode == ins.GSET.opcode:
 		return _build_global_assignment(state, addr, instruction)
 
-	# ASSIGNMENT starting from TGETV and ending at TGETB
+	# ASSIGNMENT starting from TGETV and ending at TGETR
 
-	elif opcode >= ins.TSETV.opcode and opcode <= ins.TSETB.opcode:
+	elif opcode >= ins.TSETV.opcode and opcode <= ins.TSETR.opcode:
 		return _build_table_assignment(state, addr, instruction)
 
 	elif opcode == ins.TSETM.opcode:
@@ -425,7 +425,7 @@ def _build_var_assignment(state, addr, instruction):
 		expression = _build_global_variable(state, addr, instruction.CD)
 
 	else:
-		assert opcode <= ins.TGETB.opcode
+		assert opcode <= ins.TGETR.opcode
 		expression = _build_table_element(state, addr, instruction)
 
 	assignment.expressions.contents.append(expression)
@@ -812,6 +812,10 @@ def _build_unary_expression(state, addr, instruction):
 		operator.type = nodes.UnaryOperator.T_NOT
 	elif opcode == ins.UNM.opcode:
 		operator.type = nodes.UnaryOperator.T_MINUS
+	elif opcode == ins.ISTYPE.opcode:
+		operator.type = nodes.UnaryOperator.T_TOSTRING
+	elif opcode == ins.ISNUM.opcode:
+		operator.type = nodes.UnaryOperator.T_TONUMBER
 	else:
 		assert opcode == ins.LEN.opcode
 		operator.type = nodes.UnaryOperator.T_LENGTH_OPERATOR

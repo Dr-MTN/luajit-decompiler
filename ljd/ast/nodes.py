@@ -123,6 +123,8 @@ class UnaryOperator():
 	T_NOT = 60  # not operand
 	T_LENGTH_OPERATOR = 61  # #operand
 	T_MINUS = 62  # -operand
+	T_TOSTRING = 63 # tostring()
+	T_TONUMBER = 64 # tonumber()
 
 	def __init__(self):
 		self.type = -1

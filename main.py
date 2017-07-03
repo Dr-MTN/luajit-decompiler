@@ -24,17 +24,8 @@
 #
 
 import sys
-
-import ljd.rawdump.parser
-import ljd.pseudoasm.writer
-import ljd.ast.builder
-import ljd.ast.validator
-import ljd.ast.locals
-import ljd.ast.slotworks
-import ljd.ast.unwarper
-import ljd.ast.mutator
-import ljd.lua.writer
-
+import os
+from optparse import OptionParser
 
 def dump(name, obj, level=0):
 	indent = level * '\t'
@@ -72,14 +63,43 @@ def dump(name, obj, level=0):
 
 
 def main():
-	file_in = sys.argv[1]
+	#parser arguments
+	parser = OptionParser()
+
+	parser.add_option("-f", "--file", \
+		type="string", dest="file_name", default="", \
+	        help="decomplie file name", metavar="FILE")
+	parser.add_option("-j", "--jitverion", \
+		type="string", dest="luajit_version", default="2.1", \
+		help="luajit version, default 2.1, now support 2.0, 2.1")
+
+	(options, args) = parser.parse_args()
+	if options.file_name == "":
+		print(options)
+		parser.error("options -f is required")
+	basepath=os.path.dirname(sys.argv[0])
+	if basepath == "":
+		basepath=".";
+	sys.path.append(basepath + "/ljd/rawdump/luajit/" + options.luajit_version + "/")
+
+	#because luajit version is known after argument parsed, so delay import modules
+	import ljd.rawdump.parser
+	import ljd.pseudoasm.writer
+	import ljd.ast.builder
+	import ljd.ast.validator
+	import ljd.ast.locals
+	import ljd.ast.slotworks
+	import ljd.ast.unwarper
+	import ljd.ast.mutator
+	import ljd.lua.writer
+
+	file_in = options.file_name
 
 	header, prototype = ljd.rawdump.parser.parse(file_in)
 
 	if not prototype:
 		return 1
 
-	# TODO: args
 	# ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
 	ast = ljd.ast.builder.build(prototype)
