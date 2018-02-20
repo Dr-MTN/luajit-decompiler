@@ -68,7 +68,10 @@ def main():
 
 	parser.add_option("-f", "--file", \
 		type="string", dest="file_name", default="", \
-	        help="decomplie file name", metavar="FILE")
+	        help="decompile file name", metavar="FILE")
+	parser.add_option("-o", "--output", \
+		type="string", dest="output_file", default="", \
+			help="output file for writing", metavar="FILE")
 	parser.add_option("-j", "--jitverion", \
 		type="string", dest="luajit_version", default="2.1", \
 		help="luajit version, default 2.1, now support 2.0, 2.1")
@@ -134,7 +137,11 @@ def main():
 
 			ljd.ast.validator.validate(ast, warped=False)
 
-	ljd.lua.writer.write(sys.stdout, ast)
+	if options.output_file:
+		with open(options.output_file, "w", encoding="utf8") as out_file:
+			ljd.lua.writer.write(out_file, ast)
+	else:
+		ljd.lua.writer.write(sys.stdout, ast)
 
 	return 0
 
