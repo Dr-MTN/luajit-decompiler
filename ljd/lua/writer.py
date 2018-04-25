@@ -2,7 +2,7 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
-import re
+import re, sys
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
@@ -333,17 +333,20 @@ class Visitor(traverse.Visitor):
 			self._write(")")
 
 	def visit_unary_operator(self, node):
+		import ljd.config.version_config
+
 		if node.type == nodes.UnaryOperator.T_LENGTH_OPERATOR:
 			self._write("#")
 		elif node.type == nodes.UnaryOperator.T_MINUS:
 			self._write("-")
 		elif node.type == nodes.UnaryOperator.T_NOT:
 			self._write("not ")
-		#TODO
-		elif node.type == nodes.UnaryOperator.T_TOSTRING:
-			self._write("tostring")
-		elif node.type == nodes.UnaryOperator.T_TONUMBER:
-			self._write("tonumber")
+		elif ljd.config.version_config.use_version > 2.0:
+			#TODO
+			if node.type == nodes.UnaryOperator.T_TOSTRING:
+				self._write("tostring")
+			elif node.type == nodes.UnaryOperator.T_TONUMBER:
+				self._write("tonumber")
 
 		has_subexp = isinstance(node.operand, OPERATOR_TYPES)
 		need_parentheses = has_subexp and node.operand.type < node.type
@@ -756,6 +759,11 @@ class Visitor(traverse.Visitor):
 		# "It looks like you forgot about some node changes..."
 
 		self._visited_nodes.append(set())
+		
+		if hasattr(node, "_decompilation_error_here"):
+			self._end_line()
+			self._write("-- decompilation error in this vicinity")
+			self._end_line()
 
 		traverse.Visitor._visit(self, node)
 
@@ -771,6 +779,13 @@ def write(fd, ast):
 
 	_process_queue(fd, visitor.print_queue)
 
+def wrapped_write(fd, *objects, sep=' ', end='\n', file=sys.stdout):
+	enc = file.encoding
+	if enc == 'UTF-8':
+		fd.write(*objects)
+	else:
+		f = lambda obj: str(obj).encode(enc, errors='backslashreplace').decode(enc)
+		fd.write(*map(f, objects))
 
 def _get_next_significant(queue, i):
 	i += 1
@@ -801,7 +816,7 @@ def _process_queue(fd, queue):
 			# assert line_broken
 			pass
 		elif cmd[0] == CMD_END_STATEMENT:
-			fd.write("\n")
+			wrapped_write(fd, "\n")
 			line_broken = True
 
 			next_cmd = _get_next_significant(queue, i)
@@ -812,9 +827,9 @@ def _process_queue(fd, queue):
 				if next_cmd[1] != cmd[1]			\
 						or cmd[1] >= STATEMENT_IF	\
 						or next_cmd[1] >= STATEMENT_IF:
-					fd.write("\n")
+					wrapped_write(fd, "\n")
 		elif cmd[0] == CMD_END_LINE:
-			fd.write("\n")
+			wrapped_write(fd, "\n")
 			line_broken = True
 		elif cmd[0] == CMD_START_BLOCK:
 			indent += 1
@@ -826,7 +841,7 @@ def _process_queue(fd, queue):
 			assert cmd[0] == CMD_WRITE
 
 			if line_broken:
-				fd.write(indent * '\t')
+				wrapped_write(fd, indent * '\t')
 				line_broken = False
 
 			_id, fmt, args, kargs = cmd
@@ -838,4 +853,4 @@ def _process_queue(fd, queue):
 			else:
 				text = str(fmt)
 
-			fd.write(text)
+			wrapped_write(fd, text)

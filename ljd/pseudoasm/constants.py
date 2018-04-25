@@ -47,6 +47,6 @@ def _translate_element(element):
 	elif element is None:
 		return "nil"
 	elif isinstance(element, bytes):
-		return '"' + element.decode("utf8") + '"'
+		return '"' + element.decode("utf-8", "backslashreplace") + '"'
 	else:
 		return str(element)

@@ -168,6 +168,8 @@ class MutatorVisitor(traverse.Visitor):
 			return
 
 		elseif = nodes.ElseIf()
+		if hasattr(subif, "_decompilation_error_here"):
+			setattr(elseif, "_decompilation_error_here", True)
 		elseif.expression = subif.expression
 		elseif.then_block = subif.then_block
 

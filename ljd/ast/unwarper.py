@@ -1,4 +1,5 @@
 import copy
+import sys
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
@@ -6,6 +7,7 @@ import ljd.ast.slotworks as slotworks
 
 binop = nodes.BinaryOperator
 
+catch_asserts = False
 
 # ##
 # ## REMEMBER
@@ -22,20 +24,37 @@ class _StatementsCollector(traverse.Visitor):
 		self.result = []
 
 	def visit_statements_list(self, node):
-		if len(node.contents) > 0:
+		if len(node.contents) > 0 or hasattr(node, "_decompilation_error_here"):
 			self.result.append(node)
 
 
 def unwarp(node):
 	# There could be many negative jumps within while conditions, so
 	# filter them first
-	_run_step(_unwarp_loops, node, repeat_until=False)
+	try:
+		_run_step(_unwarp_loops, node, repeat_until=False)
+	except:
+		print("-- Decompilation Error: _run_step(_unwarp_loops, node, repeat_until=False)\n", file=sys.stdout)
 
-	_run_step(_unwarp_loops, node, repeat_until=True)
-	_run_step(_unwarp_expressions, node)
-	_run_step(_unwarp_ifs, node)
+	try:
+		_run_step(_unwarp_loops, node, repeat_until=True)
+	except:
+		print("-- Decompilation Error: _run_step(_unwarp_loops, node, repeat_until=True)\n", file=sys.stdout)
 
-	_glue_flows(node)
+	try:
+		_run_step(_unwarp_expressions, node)
+	except:
+		print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
+
+	try:
+		_run_step(_unwarp_ifs, node)
+	except:
+		print("-- Decompilation Error: _run_step(_unwarp_ifs, node)\n", file=sys.stdout)
+
+	try:
+		_glue_flows(node)
+	except:
+		print("-- Decompilation Error: _glue_flows(node)\n", file=sys.stdout)
 
 
 def _run_step(step, node, **kargs):
@@ -55,12 +74,23 @@ def _gather_statements_lists(node):
 
 
 def _glue_flows(node):
+	error_pending = False
+	
 	for statements in _gather_statements_lists(node):
 		blocks = statements.contents
 
-		assert isinstance(blocks[-1].warp, nodes.EndWarp)
+		# TODO(yzg): 'Return' object has no attribute 'contents'
+		assert isinstance(blocks[-1], nodes.Return) or isinstance(blocks[-1].warp, nodes.EndWarp)
 
 		for i, block in enumerate(blocks[:-1]):
+			if hasattr(block, "_decompilation_error_here"):
+				error_pending = True
+			if len(block.contents) == 0:
+				continue
+			if error_pending:
+				setattr(block.contents[0], "_decompilation_error_here", True)
+				error_pending = False
+			
 			warp = block.warp
 
 			assert _is_flow(warp)
@@ -72,7 +102,8 @@ def _glue_flows(node):
 			target.contents = block.contents + target.contents
 			block.contents = []
 
-		statements.contents = blocks[-1].contents
+		if hasattr(blocks[-1], "contents"):  # TODO(yzg): 'Return' object has no attribute 'contents'
+			statements.contents = blocks[-1].contents
 
 
 # ##
@@ -100,7 +131,16 @@ def _unwarp_expressions(blocks):
 			raise NotImplementedError("GOTO statements are not"
 								" supported")
 
-		expressions = _find_expressions(start, body, end)
+		try:
+			expressions = _find_expressions(start, body, end)
+		except AttributeError:
+			if catch_asserts:
+				setattr(start, "_decompilation_error_here", True)
+				print("-- WARNING: Error occurred during decompilation.")
+				print("--   Code may be incomplete or incorrect.")
+				expressions = []
+			else:
+				raise
 
 		assert pack_set.isdisjoint(expressions)
 
@@ -153,12 +193,29 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 							blocks, topmost_end)
 
 		if body is None:
-			raise NotImplementedError("GOTO statements are not"
-								" supported")
+			if catch_asserts:
+				setattr(start, "_decompilation_error_here", True)
+				print("-- WARNING: Error occurred during decompilation.")
+				print("--   GOTO statements are not supported")
+				print("--   Code may be incomplete or incorrect.")
+				_set_flow_to(start, blocks[start_index + 1])
+				start_index += 1
+				continue
+			else:
+				raise NotImplementedError("GOTO statements are not"
+ 								" supported")
 
 		is_end = isinstance(body[-1].warp, nodes.EndWarp)
 
-		_unwarp_if_statement(start, body, end, end)
+		try:
+			_unwarp_if_statement(start, body, end, end)
+		except (AssertionError, IndexError):
+			if catch_asserts:
+				setattr(start, "_decompilation_error_here", True)
+				print("-- WARNING: Error occurred during decompilation.")
+				print("--   Code may be incomplete or incorrect.")
+			else:
+				raise
 
 		if is_end:
 			_set_end(start)
@@ -199,7 +256,15 @@ def _unwarp_expressions_pack(blocks, pack):
 
 		body = blocks[start_index + 1:end_index]
 
-		_unwarp_logical_expression(start, end, body)
+		try:
+			_unwarp_logical_expression(start, end, body)
+		except (AssertionError, IndexError):
+			if catch_asserts:
+				setattr(start, "_decompilation_error_here", True)
+				print("-- WARNING: Error occurred during decompilation.")
+				print("--   Code may be incomplete or incorrect.")
+			else:
+				raise
 
 		statements = start.contents + end.contents
 
@@ -619,7 +684,7 @@ def _unwarp_expression(body, end, true, false):
 
 			subexpression = body[i:target_index]
 		else:
-			assert target in terminators
+			##assert target in terminators
 
 			while i < len(body) - 2:
 				next_block = body[i + 1]
@@ -718,8 +783,11 @@ def _get_operator(block, true, end):
 			is_true = src.type == nodes.Primitive.T_TRUE
 		elif isinstance(src, nodes.Identifier):
 			is_true = True
+		#walterr apparently unnecessary?
+		#elif isinstance(src, nodes.NoOp):
+		#	is_true = block.warp.target == end
 		else:
-			assert src is None
+			##assert src is None
 
 			is_true = block.warp.target == true
 
@@ -741,14 +809,32 @@ def _get_last_assignment_source(block):
 		return None
 
 	assignment = block.contents[-1]
-	assert isinstance(assignment, nodes.Assignment)
-	return assignment.expressions.contents[0]
+	# print("\n>>>> block: " + str(block))
+	# print("\n>>>> assignment : " + str(assignment))
+
+	if True:
+		assert isinstance(assignment, nodes.Assignment)  # TODO(yzg) ljd.ast.nodes.FunctionCall
+		return assignment.expressions.contents[0]
+	else:
+		if isinstance(assignment, nodes.Assignment):
+			return assignment.expressions.contents[0]
+		elif isinstance(assignment, nodes.FunctionCall):
+			return None
+		else:
+			assert False
 
 
 def _get_and_remove_last_assignment_source(block):
 	assignment = block.contents.pop()
-	assert isinstance(assignment, nodes.Assignment)
-	return assignment.expressions.contents[0]
+
+	if False:  # TODO(yzg)
+		assert isinstance(assignment, nodes.Assignment)
+		return assignment.expressions.contents[0]
+	else:
+		if isinstance(assignment, nodes.Assignment):
+			return assignment.expressions.contents[0]
+		else:
+			return assignment
 
 
 def _compile_subexpression(subexpression, operator,
@@ -856,7 +942,11 @@ def _get_terminators(body):
 	if len(prev.contents) != 1:
 		return None, None, body
 
-	src = prev.contents[0].expressions.contents[0]
+	# TODO(yzg) origin: src = prev.contents[0].expressions.contents[0]
+	if hasattr(prev.contents[0], "expressions"):
+		src = prev.contents[0].expressions.contents[0]
+	else:
+		src = prev.contents[0]
 
 	if not isinstance(src, nodes.Primitive) or src.type != src.T_FALSE:
 		return None, None, body
@@ -1060,7 +1150,15 @@ def _find_branching_end(blocks, topmost_end):
 		target = _get_target(warp, allow_end=True)
 
 		if isinstance(warp, nodes.EndWarp) and target is None:
-			assert block == end
+			try:
+				assert block == end
+			except (AssertionError):
+				if catch_asserts:
+					setattr(block, "_decompilation_error_here", True)
+					print("-- WARNING: Error occurred during decompilation.")
+					print("--   Code may be incomplete or incorrect.")
+				else:
+					raise
 			return block
 
 		if isinstance(warp, nodes.UnconditionalWarp) and target == end:
@@ -1265,7 +1363,9 @@ def _unwarp_loop(start, end, body):
 			# we are processing loops in the order from innermost
 			# to outermost
 			for i, block in enumerate(body):
-				assert len(block.contents) == 0
+				#walterr seems to be the only actual code change on the
+				# 'experimental' branch.
+				#assert len(block.contents) == 0
 
 				if _is_flow(block.warp):
 					break

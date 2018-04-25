@@ -96,7 +96,7 @@ def _read_counts_and_sizes(parser, prototype):
 	parser.numeric_constants_count = parser.stream.read_uleb128()
 	parser.instructions_count = parser.stream.read_uleb128()
 
-	if parser.flags.is_stripped:
+	if parser.header.flags.is_stripped:
 		parser.debuginfo_size = 0
 	else:
 		parser.debuginfo_size = parser.stream.read_uleb128()

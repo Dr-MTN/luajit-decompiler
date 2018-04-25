@@ -104,8 +104,9 @@ _OPCODES = (
 	(0x3C, 	instructions.TSETV),  # @UndefinedVariable
 	(0x3D, 	instructions.TSETS),  # @UndefinedVariable
 	(0x3E, 	instructions.TSETB),  # @UndefinedVariable
-	(0x3F, 	instructions.TSETR),  # @UndefinedVariable
-	(0x40, 	instructions.TSETM),  # @UndefinedVariable
+
+	(0x3F, 	instructions.TSETM),  # @UndefinedVariable
+	(0x40, 	instructions.TSETR),  # @UndefinedVariable
 
 	# Calls and vararg handling
 

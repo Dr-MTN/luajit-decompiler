@@ -27,6 +27,8 @@ import sys
 import os
 import logging
 from optparse import OptionParser
+from datetime import datetime
+
 
 def dump(name, obj, level=0):
 	indent = level * '\t'
@@ -39,21 +41,21 @@ def dump(name, obj, level=0):
 	if isinstance(obj, (int, float, str)):
 		print(prefix + str(obj))
 	elif isinstance(obj, list):
-		print (prefix + "[")
+		print(prefix + "[")
 
 		for value in obj:
 			dump(None, value, level + 1)
 
-		print (indent + "]")
+		print(indent + "]")
 	elif isinstance(obj, dict):
-		print (prefix + "{")
+		print(prefix + "{")
 
 		for key, value in obj.items():
 			dump(key, value, level + 1)
 
-		print (indent + "}")
+		print(indent + "}")
 	else:
-		print (prefix + obj.__class__.__name__)
+		print(prefix + obj.__class__.__name__)
 
 		for key in dir(obj):
 			if key.startswith("__"):
@@ -62,12 +64,12 @@ def dump(name, obj, level=0):
 			val = getattr(obj, key)
 			dump(key, val, level + 1)
 
-class MakeFileHandler(logging.FileHandler):
-    def __init__(self, filename, *args, **kwargs):
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-        logging.FileHandler.__init__(self, filename, *args, **kwargs)
 
-from datetime import datetime
+class MakeFileHandler(logging.FileHandler):
+	def __init__(self, filename, *args, **kwargs):
+		os.makedirs(os.path.dirname(filename), exist_ok=True)
+		logging.FileHandler.__init__(self, filename, *args, **kwargs)
+
 
 logger = logging.getLogger('LJD')
 logger.setLevel(logging.INFO)
@@ -87,33 +89,40 @@ logger.addHandler(console)
 
 class Main:
 	def main(self):
-		#parser arguments
+		# parser arguments
 		parser = OptionParser()
 
-		parser.add_option("-f", "--file", \
-			type="string", dest="file_name", default="", \
-			help="decompile file name", metavar="FILE")
-		parser.add_option("-o", "--output", \
-			type="string", dest="output_file", default="", \
-			help="output file for writing", metavar="FILE")
-		parser.add_option("-j", "--jitverion", \
-			type="string", dest="luajit_version", default="2.1", \
-			help="luajit version, default 2.1, now support 2.0, 2.1")
-		parser.add_option("-r", "--recursive", \
-			type="string", dest="folder_name", default="", \
-			help="recursive decompile lua files", metavar="FOLDER")
-		parser.add_option("-d", "--dir_out", \
-			type="string", dest="folder_output", default="", \
-			help="directory to output decompiled lua scripts", metavar="FOLDER")
-
+		parser.add_option("-f", "--file",
+						  type="string", dest="file_name", default="",
+						  help="decompile file name", metavar="FILE")
+		parser.add_option("-o", "--output",
+						  type="string", dest="output_file", default="",
+						  help="output file for writing", metavar="FILE")
+		parser.add_option("-j", "--jitverion",
+						  type="string", dest="luajit_version", default="",
+						  help="luajit version, default 2.1, now support 2.0, 2.1")
+		parser.add_option("-r", "--recursive",
+						  type="string", dest="folder_name", default="",
+						  help="recursively decompile lua files", metavar="FOLDER")
+		parser.add_option("-d", "--dir_out",
+						  type="string", dest="folder_output", default="",
+						  help="directory to output decompiled lua scripts", metavar="FOLDER")
+		parser.add_option("-c", "--catchasserts",
+						  action="store_true", dest="catchasserts", default=False,
+						  help="attempt inline error reporting without breaking decompilation")
 
 		(self.options, args) = parser.parse_args()
-		basepath=os.path.dirname(sys.argv[0])
+		basepath = os.path.dirname(sys.argv[0])
 		if basepath == "":
-			basepath=".";
-		sys.path.append(basepath + "/ljd/rawdump/luajit/" + self.options.luajit_version + "/")
+			basepath = ".";
+		if self.options.luajit_version == "":
+			version_required = self.check_for_version_config(self.options.file_name)
+			sys.path.append(basepath + "/ljd/rawdump/luajit/" + str(version_required) + "/")
+		else:
+			self.set_version_config(float(self.options.luajit_version))
+			sys.path.append(basepath + "/ljd/rawdump/luajit/" + self.options.luajit_version + "/")
 
-		#because luajit version is known after argument parsed, so delay import modules
+		# because luajit version is known after argument parsed, so delay import modules
 		import ljd.rawdump.parser
 		import ljd.pseudoasm.writer
 		import ljd.ast.builder
@@ -123,6 +132,11 @@ class Main:
 		import ljd.ast.unwarper
 		import ljd.ast.mutator
 		import ljd.lua.writer
+
+		if self.options.catchasserts:
+			ljd.ast.unwarper.catch_asserts = True
+			ljd.ast.slotworks.catch_asserts = True
+			ljd.ast.validator.catch_asserts = True
 
 		self.ljd = ljd
 
@@ -135,7 +149,8 @@ class Main:
 						logger.info(full_path)
 						try:
 							self.decompile(full_path)
-							new_path = os.path.join(self.options.folder_output, os.path.relpath(full_path, self.options.folder_name))
+							new_path = os.path.join(self.options.folder_output,
+													os.path.relpath(full_path, self.options.folder_name))
 							os.makedirs(os.path.dirname(new_path), exist_ok=True)
 							self.write_file(new_path)
 							logger.info("Success")
@@ -165,7 +180,6 @@ class Main:
 		with open(file_name, "w", encoding="utf8") as out_file:
 			self.ljd.lua.writer.write(out_file, self.ast)
 
-
 	def decompile(self, file_in):
 		header, prototype = self.ljd.rawdump.parser.parse(file_in)
 
@@ -188,7 +202,10 @@ class Main:
 
 		# ljd.ast.validator.validate(ast, warped=True)
 
-		self.ljd.ast.slotworks.eliminate_temporary(self.ast)
+		try:
+			self.ljd.ast.slotworks.eliminate_temporary(self.ast)
+		except:
+			print("-- Decompilation Error: self.ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
 
 		# self.ljd.ast.validator.validate(ast, warped=True)
 
@@ -204,7 +221,22 @@ class Main:
 
 				self.ljd.ast.mutator.primary_pass(self.ast)
 
-				self.ljd.ast.validator.validate(self.ast, warped=False)
+				try:
+					self.ljd.ast.validator.validate(self.ast, warped=False)
+				except:
+					print("-- Decompilation Error: self.ljd.ast.validator.validate(self.ast, warped=False)\n", file=sys.stdout)
+
+
+	def check_for_version_config(self, file_name):
+		import ljd.config.version_config
+		if file_name in ljd.config.version_config._LUA_FILE_VERSIONS:
+			self.set_version_config(ljd.config.version_config._LUA_FILE_VERSIONS[file_name])
+		return ljd.config.version_config.use_version
+
+
+	def set_version_config(self, version_number):
+		import ljd.config.version_config
+		ljd.config.version_config.use_version = version_number
 
 
 if __name__ == "__main__":

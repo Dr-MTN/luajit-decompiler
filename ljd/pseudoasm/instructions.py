@@ -549,6 +549,8 @@ _HANDLERS_MAP = (
 
 	# Unary ops
 
+	(ins.ISTYPE.opcode, 	_translate_normal),
+	(ins.ISNUM.opcode, 	_translate_normal),
 	(ins.MOV.opcode, 	_translate_normal),
 	(ins.NOT.opcode, 	_translate_normal),
 	(ins.UNM.opcode, 	_translate_normal),
@@ -612,12 +614,15 @@ _HANDLERS_MAP = (
 	(ins.TGETV.opcode, 	_translate_normal),
 	(ins.TGETS.opcode, 	_translate_table_str_op),
 	(ins.TGETB.opcode, 	_translate_normal),
+	(ins.TGETR.opcode, 	_translate_normal),
 
 	(ins.TSETV.opcode, 	_translate_normal),
 	(ins.TSETS.opcode, 	_translate_table_str_op),
 	(ins.TSETB.opcode, 	_translate_normal),
 
 	(ins.TSETM.opcode, 	_translate_mass_set),
+
+	(ins.TSETR.opcode, _translate_normal),
 
 	# Calls and vararg handling
 

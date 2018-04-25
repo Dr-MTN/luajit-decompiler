@@ -25,11 +25,26 @@ class FunctionDefinition():
 
 
 class TableConstructor():
+	anti_loop = set()
+	cur_visitor = None
+
 	def __init__(self):
 		self.array = RecordsList()
 		self.records = RecordsList()
 
 	def _accept(self, visitor):
+		if TableConstructor.cur_visitor != None:
+			if TableConstructor.cur_visitor != visitor:
+				TableConstructor.cur_visitor = visitor
+				TableConstructor.anti_loop.clear()
+		else:
+			TableConstructor.cur_visitor = visitor
+
+		if self in TableConstructor.anti_loop:
+			return
+
+		TableConstructor.anti_loop.add(self)
+
 		visitor._visit_node(visitor.visit_table_constructor, self)
 
 		visitor._visit(self.array)
@@ -81,6 +96,13 @@ class Assignment():
 
 		visitor._leave_node(visitor.leave_assignment, self)
 
+	def __str__(self):
+		return "{ Assignement: { destinations: " + str(self.destinations) + ", expressions: " + \
+			   str(self.expressions) + ", type: " + ["T_LOCAL_DEFINITION", "T_NORMAL"][self.type]
+
+	def __repr__(self):
+		return "Assigment{" + str(self.destinations) + " <= " + str(self.expressions)
+
 
 class BinaryOperator():
 	T_LOGICAL_OR = 0  # left or right
@@ -120,11 +142,15 @@ class BinaryOperator():
 
 
 class UnaryOperator():
+	import ljd.config.version_config
+
 	T_NOT = 60  # not operand
 	T_LENGTH_OPERATOR = 61  # #operand
 	T_MINUS = 62  # -operand
-	T_TOSTRING = 63 # tostring()
-	T_TONUMBER = 64 # tonumber()
+
+	if ljd.config.version_config.use_version > 2.0:
+		T_TOSTRING = 63 # tostring()
+		T_TONUMBER = 64 # tonumber()
 
 	def __init__(self):
 		self.type = -1
@@ -215,6 +241,10 @@ class Identifier():
 		visitor._visit_node(visitor.visit_identifier, self)
 		visitor._leave_node(visitor.leave_identifier, self)
 
+	def __str__(self):
+		return "{ Identifier: {name: " + str(self.name) + ", type: " + ["T_SLOT", "T_LOCAL", "T_UPVALUE", "T_BUILTIN"][
+			self.type] + \
+			   ", slot: " + str(self.slot) + "} }"
 
 # helper vararg/varreturn
 
@@ -237,6 +267,11 @@ class TableElement():
 
 		visitor._leave_node(visitor.leave_table_element, self)
 
+	def __str__(self):
+		return str(self.table) + "[" + str(self.key) + "]"
+
+	def __repr__(self):
+		return "{0}@{1}".format(str(self.key), str(self.table))
 
 class Vararg():
 	def _accept(self, visitor):
@@ -256,6 +291,9 @@ class FunctionCall():
 		visitor._visit(self.function)
 
 		visitor._leave_node(visitor.leave_function_call, self)
+
+	def __str__(self):
+		return "{FunctionCall: { function: " + str(self.function) + ", arguments: " + str(self.arguments) + "} }"
 
 
 class If():
@@ -311,6 +349,12 @@ class Block():
 
 		visitor._leave_node(visitor.leave_block, self)
 
+	def __str__(self):
+		return "{Block: {index: " + str(self.index) + ", warp: " + str(self.warp) + ", contents: " + \
+			   str(self.contents) + \
+			   ", first_address: " + str(self.first_address) + ", last_address: " + str(self.last_address) + \
+			   ", warpins_count: " + str(self.warpins_count) + "}}"
+
 
 class UnconditionalWarp():
 	T_JUMP = 0
@@ -328,6 +372,11 @@ class UnconditionalWarp():
 
 		visitor._leave_node(visitor.leave_unconditional_warp, self)
 
+	def __str__(self):
+		return "{UnconditionlWarp: {type: " + ["T_JUMP", "T_FLOW"][self.type] + ", target: " + str(
+			self.target) + ", is_uclo: " + \
+			   str(self.is_uclo) + " }}"
+
 
 class ConditionalWarp():
 	def __init__(self):
@@ -343,6 +392,10 @@ class ConditionalWarp():
 		# DO NOT VISIT self.false_target - warps are not part of the tree
 
 		visitor._leave_node(visitor.leave_conditional_warp, self)
+
+	def __str__(self):
+		return "{ConditionalWarp: { condition: " + str(self.condition) + ", true_target: " + str(self.true_target) + \
+			   ", false_target: " + str(self.false_target) + "} }"
 
 
 class IteratorWarp():
@@ -386,6 +439,8 @@ class EndWarp():
 		visitor._visit_node(visitor.visit_end_warp, self)
 		visitor._leave_node(visitor.leave_end_warp, self)
 
+	def __str__(self):
+		return "EndWarp"
 
 # ##
 
@@ -482,6 +537,9 @@ class Constant():
 		visitor._visit_node(visitor.visit_constant, self)
 		visitor._leave_node(visitor.leave_constant, self)
 
+	def __str__(self):
+		return str(self.value)
+
 
 class Primitive():
 	T_NIL = 0
@@ -494,3 +552,14 @@ class Primitive():
 	def _accept(self, visitor):
 		visitor._visit_node(visitor.visit_primitive, self)
 		visitor._leave_node(visitor.leave_primitive, self)
+
+	def __str__(self):
+		return ["nil", "True", "False"][self.type]
+		
+		
+class NoOp():
+	def __init__(self):
+		pass
+
+	def _accept(self, visitor):
+		pass

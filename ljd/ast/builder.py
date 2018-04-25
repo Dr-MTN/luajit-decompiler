@@ -8,6 +8,7 @@ from ljd.bytecode.helpers import get_jump_destination
 from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
 
 import ljd.ast.nodes as nodes
+import ljd.config.version_config
 
 
 class _State():
@@ -71,6 +72,7 @@ def _build_function_blocks(state, instructions):
 	_establish_warps(state, instructions)
 
 	state.blocks[0].warpins_count = 1
+	prev_block = None
 
 	for block in state.blocks:
 		addr = block.first_address
@@ -90,6 +92,16 @@ def _build_function_blocks(state, instructions):
 				block.contents.append(statement)
 
 			addr += 1
+			
+		#walterr this and other fix maybe belong in mutator.SimpleLoopWarpSwapper?
+		if (len(block.contents) == 0 and
+				isinstance(block.warp, nodes.UnconditionalWarp) and
+				block.warp.type == nodes.UnconditionalWarp.T_JUMP and
+				prev_block is not None and
+				isinstance(prev_block.warp, nodes.ConditionalWarp)):
+			_create_no_op(state, block.first_address, block)
+
+		prev_block = block
 
 	return state.blocks
 
@@ -246,7 +258,34 @@ def _build_conditional_warp(state, last_addr, instructions):
 	warp.false_target = state._warp_in_block(destination)
 	warp.true_target = state._warp_in_block(jump_addr + 1)
 
-	return warp, 2
+	shift = 2
+	if destination == (jump_addr + 1):
+		# This is an empty 'then' or 'else'. The simplest way to handle it is
+		# to insert a Block containing just a no-op statement.
+		block = nodes.Block()
+		block.first_address = jump_addr + 1
+		block.last_address = block.first_address
+		block.index = warp.true_target.index
+		block.warpins_count = 1
+		setattr(block, "_last_body_addr", block.last_address - shift)
+
+		block.warp = nodes.UnconditionalWarp()
+		block.warp.type = nodes.UnconditionalWarp.T_FLOW
+		block.warp.target = warp.true_target
+		setattr(block.warp, "_addr", block.last_address - shift + 1)
+
+		state.blocks.insert(state.blocks.index(warp.true_target), block)
+		warp.true_target = block
+
+		_create_no_op(state, jump_addr, block)
+
+	return warp, shift
+	
+def _create_no_op(state, addr, block):
+	statement = nodes.NoOp()
+	setattr(statement, "_addr", addr)
+	setattr(statement, "_line", state.debuginfo.lookup_line_number(addr))
+	block.contents.append(statement)
 
 
 def _build_unconditional_warp(state, addr, instruction):
@@ -356,7 +395,9 @@ def _build_statement(state, addr, instruction):
 
 	# ASSIGNMENT starting from TGETV and ending at TGETR
 
-	elif opcode >= ins.TSETV.opcode and opcode <= ins.TSETR.opcode:
+	elif opcode >= ins.TSETV.opcode and (opcode <= ins.TSETB.opcode
+										 or (ljd.config.version_config.use_version > 2.0
+											 and opcode == ins.TSETR.opcode)):
 		return _build_table_assignment(state, addr, instruction)
 
 	elif opcode == ins.TSETM.opcode:
@@ -387,8 +428,10 @@ def _build_var_assignment(state, addr, instruction):
 	# Unary assignment operators (A = op D)
 	if opcode == ins.MOV.opcode			\
 			or opcode == ins.NOT.opcode	\
-			or opcode == ins.UNM.opcode	\
-			or opcode == ins.LEN.opcode:
+			or opcode == ins.UNM.opcode \
+            or (ljd.config.version_config.use_version > 2.0 and opcode == ins.ISTYPE.opcode) \
+            or (ljd.config.version_config.use_version > 2.0 and opcode == ins.ISNUM.opcode) \
+            or opcode == ins.LEN.opcode:
 		expression = _build_unary_expression(state, addr, instruction)
 
 	# Binary assignment operators (A = B op C)
@@ -425,8 +468,12 @@ def _build_var_assignment(state, addr, instruction):
 		expression = _build_global_variable(state, addr, instruction.CD)
 
 	else:
-		assert opcode <= ins.TGETR.opcode
-		expression = _build_table_element(state, addr, instruction)
+		if ljd.config.version_config.use_version > 2.0:
+			assert opcode <= ins.TGETR.opcode
+			expression = _build_table_element(state, addr, instruction)
+		else:
+			assert opcode <= ins.TGETB.opcode
+			expression = _build_table_element(state, addr, instruction)
 
 	assignment.expressions.contents.append(expression)
 
@@ -812,9 +859,9 @@ def _build_unary_expression(state, addr, instruction):
 		operator.type = nodes.UnaryOperator.T_NOT
 	elif opcode == ins.UNM.opcode:
 		operator.type = nodes.UnaryOperator.T_MINUS
-	elif opcode == ins.ISTYPE.opcode:
+	elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISTYPE.opcode:
 		operator.type = nodes.UnaryOperator.T_TOSTRING
-	elif opcode == ins.ISNUM.opcode:
+	elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISNUM.opcode:
 		operator.type = nodes.UnaryOperator.T_TONUMBER
 	else:
 		assert opcode == ins.LEN.opcode

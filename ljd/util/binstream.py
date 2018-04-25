@@ -84,6 +84,55 @@ class BinStream():
 					break
 
 		return value
+		
+	def read_uleb128_str(self, length=1):
+            string = ""
+            i = 0
+
+            while length > i:
+                    string += chr(self.read_uleb128())
+                    i = i + 1
+
+            return string
+			
+	def decode_uleb128(self, buff, buff_len):
+            string = ""
+            i = 0
+
+            while buff_len > i:
+                    value = buff[i]
+                    i = i + 1
+
+                    print(str(value))
+                    print(chr(value))
+                    print(value >= 0x80)
+
+                    if value >= 0x80 and buff_len > i:
+                            bitshift = 0
+                            value &= 0x7f
+
+                            print(str(value))
+                            print(chr(value))
+
+                            while buff_len > i:
+                                    byte = buff[i]
+                                    i = i + 1
+
+                                    bitshift += 7
+                                    value |= (byte & 0x7f) << bitshift
+
+                                    if byte < 0x80:
+                                            break
+
+                    print(str(value))
+                    print(chr(value))
+
+                    if value == 0 or value == 128:
+                            string += "\\" + str(value)
+                    else:
+                            string += chr(value)
+
+            return string
 
 	def read_uleb128_from33bit(self):
 		first_byte = self.read_byte()

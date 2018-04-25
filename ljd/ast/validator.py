@@ -5,6 +5,7 @@
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 
+catch_asserts = False
 
 class TypeRestriction():
 	def __init__(self, default, specific):
@@ -23,10 +24,17 @@ class TypeRestriction():
 
 		assert typespec, "Unknown node: {0}".format(node)
 
-		assert isinstance(node, typespec), 		\
-			"Invalid node type: {0} should be: {1}"	\
-			.format(type(node), typespec)
-
+		try:
+			assert isinstance(node, typespec), 		\
+				"Invalid node type: {0} should be: {1}"	\
+				.format(type(node), typespec)
+		except (AssertionError):
+			if catch_asserts:
+				setattr(node, "_decompilation_error_here", True)
+				print("-- WARNING: Error occurred during decompilation.")
+				print("--   Code may be incomplete or incorrect.")
+			else:
+				raise
 
 STATEMENT_TYPES = (
 	nodes.Assignment,
@@ -37,6 +45,7 @@ STATEMENT_TYPES = (
 	nodes.Return,
 	nodes.Break,
 	nodes.FunctionCall,
+	nodes.NoOp,
 	nodes.While
 )
 
@@ -140,11 +149,16 @@ class Visitor(traverse.Visitor):
 			or node.type == nodes.BinaryOperator.T_POW
 
 	def visit_unary_operator(self, node):
+		import ljd.config.version_config
+
 		self._set_restrictions(EXPRESSION_TYPES)
 
-		assert node.type == nodes.UnaryOperator.T_NOT			\
-			or node.type == nodes.UnaryOperator.T_LENGTH_OPERATOR	\
-			or node.type == nodes.UnaryOperator.T_MINUS
+		assert node.type == nodes.UnaryOperator.T_NOT		\
+			or node.type == nodes.UnaryOperator.T_LENGTH_OPERATOR		\
+			or node.type == nodes.UnaryOperator.T_MINUS		\
+            or (ljd.config.version_config.use_version > 2.0
+			and (node.type == nodes.UnaryOperator.T_TOSTRING
+			or node.type == nodes.UnaryOperator.T_TONUMBER))
 
 	# ##
 

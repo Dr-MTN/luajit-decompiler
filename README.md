@@ -25,6 +25,10 @@ How to use it
 There is no argument parsing right now, so comment out things in the ```main.py```
 script and launch it as in ```main.py path/to/file.luac```
 
+IRC:
+---
+```#ljd at freenode```
+
 TODO
 ---
 

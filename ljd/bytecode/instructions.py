@@ -20,6 +20,8 @@
 # 	bar(...)
 #
 
+import ljd.config.version_config
+
 # Argument types
 
 T_VAR = 0  # variable slot number
@@ -109,9 +111,9 @@ ISFC = _IDef("ISFC", 		T_DST, 	None, 	T_VAR, 	"{A} = {D}; if not {D}")
 IST = _IDef("IST", 		None, 	None, 	T_VAR, 	"if {D}")
 ISF = _IDef("ISF", 		None, 	None, 	T_VAR, 	"if not {D}")
 
-# TODO may be description is wrong
-ISTYPE = _IDef("ISTYPE", 	T_VAR,	None,	T_LIT,	"{A} = tostring({D}); if {A}")
-ISNUM = _IDef("ISNUM", 		T_VAR,	None,	T_LIT,	"{A} = tonumber({D}); if {A}")
+if ljd.config.version_config.use_version > 2.0:
+	ISTYPE = _IDef("ISTYPE",	T_VAR,  None,   T_LIT,  "see lj vm source")
+	ISNUM = _IDef("ISNUM",		T_VAR,  None,   T_LIT,  "see lj vm source")
 
 # Unary ops
 
@@ -182,16 +184,20 @@ GSET = _IDef("GSET", 		T_VAR, 	None, 	T_STR, 	"_env[{D}] = {A}")
 TGETV = _IDef("TGETV", 		T_DST, 	T_VAR, 	T_VAR, 	"{A} = {B}[{C}]")
 TGETS = _IDef("TGETS", 		T_DST, 	T_VAR, 	T_STR, 	"{A} = {B}.{C}")
 TGETB = _IDef("TGETB", 		T_DST, 	T_VAR, 	T_LIT, 	"{A} = {B}[{C}]")
-TGETR = _IDef("TGETR", 		T_DST,	T_VAR,	T_VAR,	"{A} = {B}[{C}]")
+
+if ljd.config.version_config.use_version > 2.0:
+	TGETR = _IDef("TGETR",		T_DST,  T_VAR,  T_VAR,  "{A} = {B}[{C}]")
 
 TSETV = _IDef("TSETV", 		T_VAR, 	T_VAR, 	T_VAR, 	"{B}[{C}] = {A}")
 TSETS = _IDef("TSETS", 		T_VAR, 	T_VAR, 	T_STR, 	"{B}.{C} = {A}")
 TSETB = _IDef("TSETB", 		T_VAR, 	T_VAR, 	T_LIT, 	"{B}[{C}] = {A}")
-TSETR = _IDef("TSETR", 		T_VAR,	T_VAR,	T_VAR,	"{B}[{C}] = {A}")
 
 TSETM = _IDef("TSETM", 	 	T_BS, 	None, 	T_NUM,
 		"for i = 0, MULTRES, 1 do"
 		" {A_minus_one}[{D_low} + i] = slot({A} + i)")
+
+if ljd.config.version_config.use_version > 2.0:
+	TSETR = _IDef("TSETR",		T_VAR,  T_VAR,  T_VAR,  "{B}[{C}] = {A}")
 
 # Calls and vararg handling. T = tail call.
 

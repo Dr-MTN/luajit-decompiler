@@ -6,6 +6,7 @@ import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 from ljd.ast.helpers import insert_table_record
 
+catch_asserts = False
 
 def eliminate_temporary(ast):
 	_eliminate_multres(ast)
@@ -144,8 +145,8 @@ def _eliminate_simple_cases(simple):
 		_mark_invalidated(info.assignment)
 
 		if isinstance(holder, LIST_TYPES):
-			nodes = holder.contents
-			found = _replace_node_in_list(nodes, dst, src)
+			conts = holder.contents
+			found = _replace_node_in_list(conts, dst, src)
 		else:
 			found = _replace_node(holder, dst, src)
 
@@ -207,7 +208,16 @@ def _eliminate_iterators(iterators):
 			continue
 
 		for i, slot in enumerate(assignment.destinations.contents):
-			assert warp.controls.contents[i].slot == slot.slot
+			if hasattr(warp.controls.contents[i], "slot"):
+				try:
+					assert warp.controls.contents[i].slot == slot.slot
+				except (AttributeError, AssertionError):
+					if catch_asserts:
+						setattr(assignment, "_decompilation_error_here", True)
+						print("-- WARNING: Error occurred during decompilation.")
+						print("--   Code may be incomplete or incorrect.")
+					else:
+						raise
 
 		warp.controls.contents = [src]
 		processed_warps.add(warp)

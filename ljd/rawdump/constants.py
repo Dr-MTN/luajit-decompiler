@@ -56,8 +56,7 @@ def _read_complex_constants(parser, complex_constants):
 
 			string = parser.stream.read_bytes(length)
 
-			complex_constants.append(string.decode("utf8"))
-
+			complex_constants.append(string.decode("utf-8", "backslashreplace"))
 		elif constant_type == BCDUMP_KGC_TAB:
 			table = ljd.bytecode.constants.Table()
 
@@ -159,7 +158,7 @@ def _read_table_item(parser):
 	if data_type >= BCDUMP_KTAB_STR:
 		length = data_type - BCDUMP_KTAB_STR
 
-		return parser.stream.read_bytes(length).decode("utf8")
+		return parser.stream.read_bytes(length).decode("utf-8", "backslashreplace")
 
 	elif data_type == BCDUMP_KTAB_INT:
 		return _read_signed_int(parser)
