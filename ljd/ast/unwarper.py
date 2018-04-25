@@ -137,7 +137,11 @@ def _unwarp_expressions(blocks):
 		warp = start.warp
 
 		if isinstance(warp, nodes.UnconditionalWarp):
-			if warp.type == nodes.UnconditionalWarp.T_FLOW or warp.type == nodes.UnconditionalWarp.T_JUMP:
+			if warp.type == nodes.UnconditionalWarp.T_FLOW:
+				start_index += 1
+				continue
+			## Logical expressions in the else of an else of an if-else statement need this fix
+			elif start_index > 0 and len(blocks[start_index].contents) > 0:
 				start_index += 1
 				continue
 
@@ -220,7 +224,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 				continue
 			else:
 				raise NotImplementedError("GOTO statements are not"
- 								" supported")
+								" supported")
 
 		is_end = isinstance(body[-1].warp, nodes.EndWarp)
 
@@ -323,7 +327,7 @@ def _unwarp_expressions_pack(blocks, pack):
 
 
 def _split_by_slot_use(statements, min_i, warp, slot):
-	known_slots = set([slot])
+	known_slots = {slot}
 
 	split_i = min_i
 
@@ -433,7 +437,7 @@ def _find_expressions(start, body, end):
 			if is_end:
 				if is_binop:
 					return expressions
-				elif slot < 0 and block_slot >= 0:
+				elif slot < 0 <= block_slot:
 					slot = block_slot
 					slot_type = nodes.Identifier.T_SLOT
 					sure_expression = True
@@ -661,7 +665,7 @@ def _unwarp_expression(body, end, true, false):
 
 		terminator_index = end.index
 
-	terminators = set((true, false, end))
+	terminators = {true, false, end}
 
 	subexpression_start = 0
 
@@ -793,7 +797,7 @@ def _get_operator(block, true, end):
 		src = _get_last_assignment_source(block)
 
 		if isinstance(src, nodes.Constant):
-			is_true = src.value != 0
+			is_true = True
 		elif isinstance(src, nodes.BinaryOperator):
 			is_true = True
 		elif isinstance(src, nodes.Primitive):
@@ -826,19 +830,15 @@ def _get_last_assignment_source(block):
 		return None
 
 	assignment = block.contents[-1]
-	# print("\n>>>> block: " + str(block))
-	# print("\n>>>> assignment : " + str(assignment))
 
-	if True:
-		assert isinstance(assignment, nodes.Assignment)  # TODO(yzg) ljd.ast.nodes.FunctionCall
+	if isinstance(assignment, nodes.Assignment):
 		return assignment.expressions.contents[0]
+	elif isinstance(assignment, nodes.FunctionCall):
+		assert False # TODO(yzg) ljd.ast.nodes.FunctionCall
+	elif isinstance(assignment, nodes.NoOp):
+		return None
 	else:
-		if isinstance(assignment, nodes.Assignment):
-			return assignment.expressions.contents[0]
-		elif isinstance(assignment, nodes.FunctionCall):
-			return None
-		else:
-			assert False
+		assert False
 
 
 def _get_and_remove_last_assignment_source(block):
@@ -974,6 +974,9 @@ def _get_terminators(body):
 def _assemble_expression(parts):
 	if not isinstance(parts, list):
 		return parts
+
+	if len(parts) == 1:
+		return parts[0]
 
 	node = nodes.BinaryOperator()
 	node.left = _assemble_expression(parts[-3])

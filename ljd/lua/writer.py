@@ -404,8 +404,18 @@ class Visitor(traverse.Visitor):
 	# ##
 
 	def visit_identifier(self, node):
+		import ljd.bytecode.instructions as ins
+
 		if node.type == nodes.Identifier.T_SLOT:
-			self._write("slot{0}", node.slot)
+			placeholder_identifier = "slot{0}"
+
+			## Fix placeholder slots before writing
+			if node.slot == ins.SLOT_FALSE:
+				placeholder_identifier = "false"
+			elif node.slot == ins.SLOT_TRUE:
+				placeholder_identifier = "true"
+
+			self._write(placeholder_identifier, node.slot)
 		else:
 			self._write(node.name)
 

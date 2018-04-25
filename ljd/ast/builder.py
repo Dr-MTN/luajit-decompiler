@@ -176,11 +176,28 @@ def _blockenize(state, instructions):
 def _establish_warps(state, instructions):
 	state.blocks[0].warpins_count = 1
 
-	for block in state.blocks[:-1]:
+	for i, block in enumerate(state.blocks[:-1]):
 		state.block = block
 
 		end_addr = block.last_address + 1
 		start_addr = max(block.last_address - 1, block.first_address)
+
+		## Catch triple unconditional jump and form first two into a fake conditional jump.
+		## This is a hacky fix for expressions with 'false' as an operand.
+		if start_addr == (end_addr - 1)\
+				and end_addr < len(instructions) - 2\
+				and instructions[start_addr].opcode == ins.JMP.opcode\
+				and instructions[end_addr].opcode == ins.JMP.opcode \
+				and instructions[end_addr + 1].opcode == ins.JMP.opcode:
+
+			fixed_instruction = ins.ISF()
+			fixed_instruction.CD = ins.SLOT_FALSE
+			instructions[start_addr] = fixed_instruction
+			state.blocks.pop(i+1)
+
+			block.last_address += 1
+			start_addr = max(block.last_address - 1, block.first_address)
+			end_addr = block.last_address + 1
 
 		warp = instructions[start_addr:end_addr]
 
@@ -296,6 +313,7 @@ def _build_unconditional_warp(state, addr, instruction):
 
 	warp.is_uclo = opcode == ins.UCLO.opcode
 
+	shift = 1
 	if warp.is_uclo and instruction.CD == 0:
 		# Not a jump
 		return _build_flow_warp(state, addr, instruction)
@@ -303,7 +321,7 @@ def _build_unconditional_warp(state, addr, instruction):
 		destination = get_jump_destination(addr, instruction)
 		warp.target = state._warp_in_block(destination)
 
-	return warp, 1
+	return warp, shift
 
 
 def _build_iterator_warp(state, last_addr, instructions):
