@@ -664,21 +664,24 @@ def _build_binary_expression(state, addr, instruction):
 
 		operator.type = _BINARY_OPERATOR_MAP[map_index]
 
-	if instruction.B_type == ins.T_VAR and instruction.CD_type == ins.T_VAR:
-		operator.left = _build_slot(state, addr, instruction.B)
-		operator.right = _build_slot(state, addr, instruction.CD)
-	elif instruction.B_type == ins.T_VAR:
-		if opcode < ins.ADDNV.opcode:
-			operator.left = _build_slot(state, addr, instruction.B)
-			operator.right = _build_numeric_constant(state, instruction.CD)
-		else:
-			operator.right = _build_slot(state, addr, instruction.B)
-			operator.left = _build_numeric_constant(state, instruction.CD)
-	else:
-		assert instruction.CD_type == ins.T_VAR
+	assert(ins.ADDVN.opcode <= opcode <= ins.CAT.opcode)
+	assert instruction.B_type == ins.T_VAR
 
+	# VN
+	if opcode < ins.ADDNV.opcode:
+		operator.left = _build_slot(state, addr, instruction.B)
+		operator.right = _build_numeric_constant(state, instruction.CD)
+
+	# NV
+	elif opcode < ins.ADDVV.opcode:
 		operator.right = _build_slot(state, addr, instruction.B)
 		operator.left = _build_numeric_constant(state, instruction.CD)
+
+	# VV
+	else:
+		assert instruction.CD_type == ins.T_VAR
+		operator.left = _build_slot(state, addr, instruction.B)
+		operator.right = _build_slot(state, addr, instruction.CD)
 
 	return operator
 
