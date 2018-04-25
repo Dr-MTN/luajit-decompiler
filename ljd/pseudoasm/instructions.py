@@ -2,13 +2,15 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+import bisect
+
 import ljd.bytecode.instructions as ins
 from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
 
+import ljd.config.version_config
 import ljd.pseudoasm.prototype
 
 _FORMAT = "{addr:3}\t[{line:3}]\t{name:<5}\t{a:3}\t{b}\t{c}\t; {description}"
-
 
 _DESCRIPTION_HANDLERS = [None] * 255
 
@@ -519,7 +521,7 @@ def _translate_iter_loop(writer, description, addr, line, instruction):
 	)
 
 
-_HANDLERS_MAP = (
+_HANDLERS_MAP = [
 	# Comparison ops
 
 	(ins.ISLT.opcode, 	_translate_normal),
@@ -549,8 +551,6 @@ _HANDLERS_MAP = (
 
 	# Unary ops
 
-	(ins.ISTYPE.opcode, 	_translate_normal),
-	(ins.ISNUM.opcode, 	_translate_normal),
 	(ins.MOV.opcode, 	_translate_normal),
 	(ins.NOT.opcode, 	_translate_normal),
 	(ins.UNM.opcode, 	_translate_normal),
@@ -614,15 +614,12 @@ _HANDLERS_MAP = (
 	(ins.TGETV.opcode, 	_translate_normal),
 	(ins.TGETS.opcode, 	_translate_table_str_op),
 	(ins.TGETB.opcode, 	_translate_normal),
-	(ins.TGETR.opcode, 	_translate_normal),
 
 	(ins.TSETV.opcode, 	_translate_normal),
 	(ins.TSETS.opcode, 	_translate_table_str_op),
 	(ins.TSETB.opcode, 	_translate_normal),
 
 	(ins.TSETM.opcode, 	_translate_mass_set),
-
-	(ins.TSETR.opcode, _translate_normal),
 
 	# Calls and vararg handling
 
@@ -676,7 +673,13 @@ _HANDLERS_MAP = (
 
 	(ins.FUNCC.opcode, 	_translate_normal),
 	(ins.FUNCCW.opcode, 	_translate_normal)
-)
+]
+
+if ljd.config.version_config.use_version > 2.0:
+	bisect.insort(_HANDLERS_MAP, (ins.ISTYPE.opcode, _translate_normal))
+	bisect.insort(_HANDLERS_MAP, (ins.ISNUM.opcode, _translate_normal))
+	bisect.insort(_HANDLERS_MAP, (ins.TGETR.opcode, _translate_normal))
+	bisect.insort(_HANDLERS_MAP, (ins.TSETR.opcode, _translate_normal))
 
 
 def _init():
