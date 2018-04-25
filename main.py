@@ -82,9 +82,12 @@ class Main:
         parser.add_option("-o", "--output",
                           type="string", dest="output_file", default="",
                           help="output file for writing", metavar="FILE")
-        parser.add_option("-j", "--jitversion",
+        parser.add_option("-j", "--jit_version",
                           type="string", dest="luajit_version", default="",
-                          help="luajit version, default 2.1, now supports 2.0, 2.1")
+                          help="override LuaJIT version, default 2.1, now supports 2.0, 2.1")
+        parser.add_option("-p", "--version_config_list",
+                          type="string", dest="version_config_list", default="version_default",
+                          help="LuaJIT version config list to use")
         parser.add_option("-r", "--recursive",
                           type="string", dest="folder_name", default="",
                           help="recursively decompile lua files", metavar="FOLDER")
@@ -243,10 +246,28 @@ class Main:
                         raise
 
     def check_for_version_config(self, file_name):
-        import ljd.config.version_config
-        if file_name in ljd.config.version_config._LUA_FILE_VERSIONS:
-            self.set_version_config(ljd.config.version_config._LUA_FILE_VERSIONS[file_name])
-        return ljd.config.version_config.use_version
+        import ljd.config.version_config as version_config_file
+
+        # Transform file_name with present working directory
+        if file_name[0] == ".":
+            file_name = file_name.replace(".", "", 1)
+        file_name = os.getcwd() + "/" + file_name
+        file_name = file_name.replace("\\", "/")
+        file_name = file_name.replace("//", "/")
+
+        # Get version config list or default
+        try:
+            version_list = version_config_file._LUA_FILE_VERSIONS[self.options.version_config_list]
+        except KeyError:
+            version_list = version_config_file._LUA_FILE_VERSIONS["version_default"]
+
+        # Search for a matching entry
+        for config_entry_name in version_list:
+            if config_entry_name in file_name:
+                self.set_version_config(version_list[config_entry_name])
+                break
+
+        return version_config_file.use_version
 
     @staticmethod
     def set_version_config(version_number):
