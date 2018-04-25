@@ -178,7 +178,7 @@ def _lookup_variable_name_step(writer, addr, slot):
 
 		if instruction.opcode == ins.MOV.opcode:
 			# Retry with new addr and slot
-			return addr, instruction.CD
+			return _lookup_variable_name_step(writer, addr, instruction.CD)
 
 		if instruction.opcode == ins.GGET.opcode:
 			binary = constants[instruction.CD]
@@ -191,6 +191,8 @@ def _lookup_variable_name_step(writer, addr, slot):
 
 			if table is None:
 				table = "<unknown table>"
+			elif not isinstance(table, str):
+				table = "<table " + str(table) + ">"
 
 			binary = constants[instruction.CD]
 			return table + "." + binary
