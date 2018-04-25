@@ -668,8 +668,12 @@ def _build_binary_expression(state, addr, instruction):
 		operator.left = _build_slot(state, addr, instruction.B)
 		operator.right = _build_slot(state, addr, instruction.CD)
 	elif instruction.B_type == ins.T_VAR:
-		operator.left = _build_slot(state, addr, instruction.B)
-		operator.right = _build_numeric_constant(state, instruction.CD)
+		if opcode < ins.ADDNV.opcode:
+			operator.left = _build_slot(state, addr, instruction.B)
+			operator.right = _build_numeric_constant(state, instruction.CD)
+		else:
+			operator.right = _build_slot(state, addr, instruction.B)
+			operator.left = _build_numeric_constant(state, instruction.CD)
 	else:
 		assert instruction.CD_type == ins.T_VAR
 

@@ -94,13 +94,13 @@ class Main:
 
 		parser.add_option("-f", "--file",
 						  type="string", dest="file_name", default="",
-						  help="decompile file name", metavar="FILE")
+						  help="input file name", metavar="FILE")
 		parser.add_option("-o", "--output",
 						  type="string", dest="output_file", default="",
 						  help="output file for writing", metavar="FILE")
-		parser.add_option("-j", "--jitverion",
+		parser.add_option("-j", "--jitversion",
 						  type="string", dest="luajit_version", default="",
-						  help="luajit version, default 2.1, now support 2.0, 2.1")
+						  help="luajit version, default 2.1, now supports 2.0, 2.1")
 		parser.add_option("-r", "--recursive",
 						  type="string", dest="folder_name", default="",
 						  help="recursively decompile lua files", metavar="FOLDER")
