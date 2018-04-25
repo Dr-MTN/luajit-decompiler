@@ -664,7 +664,7 @@ def _build_binary_expression(state, addr, instruction):
 
 		operator.type = _BINARY_OPERATOR_MAP[map_index]
 
-	assert(ins.ADDVN.opcode <= opcode <= ins.CAT.opcode)
+	assert(ins.ADDVN.opcode <= opcode <= ins.POW.opcode)
 	assert instruction.B_type == ins.T_VAR
 
 	# VN

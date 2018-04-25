@@ -196,7 +196,7 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 			if catch_asserts:
 				setattr(start, "_decompilation_error_here", True)
 				print("-- WARNING: Error occurred during decompilation.")
-				print("--   GOTO statements are not supported")
+				# print("--   GOTO statements are not supported")
 				print("--   Code may be incomplete or incorrect.")
 				_set_flow_to(start, blocks[start_index + 1])
 				start_index += 1

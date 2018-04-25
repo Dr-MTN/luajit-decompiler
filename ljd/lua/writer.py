@@ -314,11 +314,11 @@ class Visitor(traverse.Visitor):
 			self._write(" - ")
 
 		elif node.type == nodes.BinaryOperator.T_DIVISION:
-			self._write("/")
+			self._write(" / ")
 		elif node.type == nodes.BinaryOperator.T_MULTIPLY:
-			self._write("*")
+			self._write(" * ")
 		elif node.type == nodes.BinaryOperator.T_MOD:
-			self._write("%")
+			self._write(" % ")
 
 		else:
 			assert node.type == nodes.BinaryOperator.T_POW
