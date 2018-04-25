@@ -2,662 +2,649 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
-import ljd.bytecode.instructions as ins
-
-from ljd.bytecode.helpers import get_jump_destination
-from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
-
 import ljd.ast.nodes as nodes
+import ljd.bytecode.instructions as ins
 import ljd.config.version_config
+from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
+from ljd.bytecode.helpers import get_jump_destination
 
 
-class _State():
-	def __init__(self):
-		self.constants = None
-		self.debuginfo = None
-		self.block = None
-		self.blocks = []
-		self.block_starts = {}
+class _State:
+    def __init__(self):
+        self.constants = None
+        self.debuginfo = None
+        self.block = None
+        self.blocks = []
+        self.block_starts = {}
 
-	def _warp_in_block(self, addr):
-		block = self.block_starts[addr]
-		block.warpins_count += 1
-		return block
+    def _warp_in_block(self, addr):
+        block = self.block_starts[addr]
+        block.warpins_count += 1
+        return block
 
 
 def build(prototype):
-	return _build_function_definition(prototype)
+    return _build_function_definition(prototype)
 
 
 def _build_function_definition(prototype):
-	node = nodes.FunctionDefinition()
+    node = nodes.FunctionDefinition()
 
-	state = _State()
+    state = _State()
 
-	state.constants = prototype.constants
-	state.debuginfo = prototype.debuginfo
+    state.constants = prototype.constants
+    state.debuginfo = prototype.debuginfo
 
-	node._upvalues = prototype.constants.upvalue_references
-	node._debuginfo = prototype.debuginfo
-	node._instructions_count = len(prototype.instructions)
+    node._upvalues = prototype.constants.upvalue_references
+    node._debuginfo = prototype.debuginfo
+    node._instructions_count = len(prototype.instructions)
 
-	node.arguments.contents = _build_function_arguments(state, prototype)
+    node.arguments.contents = _build_function_arguments(state, prototype)
 
-	if prototype.flags.is_variadic:
-		node.arguments.contents.append(nodes.Vararg())
+    if prototype.flags.is_variadic:
+        node.arguments.contents.append(nodes.Vararg())
 
-	instructions = prototype.instructions
-	node.statements.contents = _build_function_blocks(state, instructions)
+    instructions = prototype.instructions
+    node.statements.contents = _build_function_blocks(state, instructions)
 
-	return node
+    return node
 
 
 def _build_function_arguments(state, prototype):
-	arguments = []
+    arguments = []
 
-	count = prototype.arguments_count
+    count = prototype.arguments_count
 
-	slot = 0
-	while slot < count:
-		variable = _build_slot(state, 0, slot)
+    slot = 0
+    while slot < count:
+        variable = _build_slot(state, 0, slot)
 
-		arguments.append(variable)
-		slot += 1
+        arguments.append(variable)
+        slot += 1
 
-	return arguments
+    return arguments
 
 
 def _build_function_blocks(state, instructions):
-	_blockenize(state, instructions)
-	_establish_warps(state, instructions)
+    _blockenize(state, instructions)
+    _establish_warps(state, instructions)
 
-	state.blocks[0].warpins_count = 1
-	prev_block = None
+    state.blocks[0].warpins_count = 1
+    prev_block = None
 
-	for block in state.blocks:
-		addr = block.first_address
-		state.block = block
+    for block in state.blocks:
+        addr = block.first_address
+        state.block = block
 
-		while addr <= block._last_body_addr:
-			instruction = instructions[addr]
+        while addr <= block._last_body_addr:
+            instruction = instructions[addr]
 
-			statement = _build_statement(state, addr, instruction)
+            statement = _build_statement(state, addr, instruction)
 
-			if statement is not None:
-				line = state.debuginfo.lookup_line_number(addr)
+            if statement is not None:
+                line = state.debuginfo.lookup_line_number(addr)
 
-				setattr(statement, "_addr", addr)
-				setattr(statement, "_line", line)
+                setattr(statement, "_addr", addr)
+                setattr(statement, "_line", line)
 
-				block.contents.append(statement)
+                block.contents.append(statement)
 
-			addr += 1
-			
-		#walterr this and other fix maybe belong in mutator.SimpleLoopWarpSwapper?
-		if (len(block.contents) == 0 and
-				isinstance(block.warp, nodes.UnconditionalWarp) and
-				block.warp.type == nodes.UnconditionalWarp.T_JUMP and
-				prev_block is not None and
-				isinstance(prev_block.warp, nodes.ConditionalWarp)):
-			_create_no_op(state, block.first_address, block)
+            addr += 1
 
-		prev_block = block
+        # walterr this and other fix maybe belong in mutator.SimpleLoopWarpSwapper?
+        if (len(block.contents) == 0 and
+                isinstance(block.warp, nodes.UnconditionalWarp) and
+                block.warp.type == nodes.UnconditionalWarp.T_JUMP and
+                prev_block is not None and
+                isinstance(prev_block.warp, nodes.ConditionalWarp)):
+            _create_no_op(state, block.first_address, block)
 
-	return state.blocks
+        prev_block = block
 
-
-_JUMP_WARP_INSTRUCTIONS = set((
-	ins.UCLO.opcode,
-	ins.ISNEXT.opcode,
-	ins.JMP.opcode,
-	ins.FORI.opcode,
-	ins.JFORI.opcode
-))
+    return state.blocks
 
 
-_WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | set((
-	ins.FORL.opcode, ins.IFORL.opcode, ins.JFORL.opcode,
-	ins.ITERL.opcode, ins.IITERL.opcode, ins.JITERL.opcode,
-	ins.LOOP.opcode
-))
+_JUMP_WARP_INSTRUCTIONS = {ins.UCLO.opcode, ins.ISNEXT.opcode, ins.JMP.opcode, ins.FORI.opcode, ins.JFORI.opcode}
+
+_WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | {ins.FORL.opcode, ins.IFORL.opcode, ins.JFORL.opcode, ins.ITERL.opcode,
+                                                ins.IITERL.opcode, ins.JITERL.opcode, ins.LOOP.opcode}
 
 
 def _blockenize(state, instructions):
-	addr = 1
+    addr = 1
 
-	# Duplicates are possible and ok, but we need to sort them out
-	last_addresses = set()
+    # Duplicates are possible and ok, but we need to sort them out
+    last_addresses = set()
 
-	while addr < len(instructions):
-		instruction = instructions[addr]
-		opcode = instruction.opcode
+    while addr < len(instructions):
+        instruction = instructions[addr]
+        opcode = instruction.opcode
 
-		if opcode not in _WARP_INSTRUCTIONS:
-			addr += 1
-			continue
+        if opcode not in _WARP_INSTRUCTIONS:
+            addr += 1
+            continue
 
-		if opcode in _JUMP_WARP_INSTRUCTIONS:
-			destination = get_jump_destination(addr, instruction)
+        if opcode in _JUMP_WARP_INSTRUCTIONS:
+            destination = get_jump_destination(addr, instruction)
 
-			if opcode != ins.UCLO.opcode or destination != addr + 1:
-				last_addresses.add(destination - 1)
-				last_addresses.add(addr)
-		else:
-			last_addresses.add(addr)
+            if opcode != ins.UCLO.opcode or destination != addr + 1:
+                last_addresses.add(destination - 1)
+                last_addresses.add(addr)
+        else:
+            last_addresses.add(addr)
 
-		addr += 1
+        addr += 1
 
-	last_addresses = sorted(list(last_addresses))
-	last_addresses.append(len(instructions) - 1)
+    last_addresses = sorted(list(last_addresses))
+    last_addresses.append(len(instructions) - 1)
 
-	# This could happen if something jumps to the first instruction
-	# We don't need "zero block" with function header, so simply ignore
-	# this
-	if last_addresses[0] == 0:
-		last_addresses.pop(0)
+    # This could happen if something jumps to the first instruction
+    # We don't need "zero block" with function header, so simply ignore
+    # this
+    if last_addresses[0] == 0:
+        last_addresses.pop(0)
 
-	previous_last_address = 0
+    previous_last_address = 0
 
-	index = 0
-	for last_address in last_addresses:
-		block = nodes.Block()
-		block.index = index
-		block.first_address = previous_last_address + 1
-		block.last_address = last_address
+    index = 0
+    for last_address in last_addresses:
+        block = nodes.Block()
+        block.index = index
+        block.first_address = previous_last_address + 1
+        block.last_address = last_address
 
-		state.blocks.append(block)
-		state.block_starts[block.first_address] = block
+        state.blocks.append(block)
+        state.block_starts[block.first_address] = block
 
-		previous_last_address = last_address
+        previous_last_address = last_address
 
-		index += 1
+        index += 1
 
 
 def _establish_warps(state, instructions):
-	state.blocks[0].warpins_count = 1
+    state.blocks[0].warpins_count = 1
 
-	for i, block in enumerate(state.blocks[:-1]):
-		state.block = block
+    for i, block in enumerate(state.blocks[:-1]):
+        state.block = block
 
-		end_addr = block.last_address + 1
-		start_addr = max(block.last_address - 1, block.first_address)
+        end_addr = block.last_address + 1
+        start_addr = max(block.last_address - 1, block.first_address)
 
-		## Catch triple unconditional jump and form first two into a fake conditional jump.
-		## This is a hacky fix for expressions with 'false' as an operand.
-		if start_addr == (end_addr - 1)\
-				and end_addr < len(instructions) - 2\
-				and instructions[start_addr].opcode == ins.JMP.opcode\
-				and instructions[end_addr].opcode == ins.JMP.opcode \
-				and instructions[end_addr + 1].opcode == ins.JMP.opcode:
+        # Catch triple unconditional jump and form first two into a fake conditional jump.
+        # This is a hacky fix for expressions with 'false' as an operand.
+        if start_addr == (end_addr - 1) \
+                and end_addr < len(instructions) - 2 \
+                and instructions[start_addr].opcode == ins.JMP.opcode \
+                and instructions[end_addr].opcode == ins.JMP.opcode \
+                and instructions[end_addr + 1].opcode == ins.JMP.opcode:
+            fixed_instruction = ins.ISF()
+            fixed_instruction.CD = ins.SLOT_FALSE
+            instructions[start_addr] = fixed_instruction
+            state.blocks.pop(i + 1)
 
-			fixed_instruction = ins.ISF()
-			fixed_instruction.CD = ins.SLOT_FALSE
-			instructions[start_addr] = fixed_instruction
-			state.blocks.pop(i+1)
+            block.last_address += 1
+            start_addr = max(block.last_address - 1, block.first_address)
+            end_addr = block.last_address + 1
 
-			block.last_address += 1
-			start_addr = max(block.last_address - 1, block.first_address)
-			end_addr = block.last_address + 1
+        warp = instructions[start_addr:end_addr]
 
-		warp = instructions[start_addr:end_addr]
+        block.warp, shift = _build_warp(state, block.last_address, warp)
 
-		block.warp, shift = _build_warp(state, block.last_address, warp)
+        setattr(block, "_last_body_addr", block.last_address - shift)
+        setattr(block.warp, "_addr", block.last_address - shift + 1)
 
-		setattr(block, "_last_body_addr", block.last_address - shift)
-		setattr(block.warp, "_addr", block.last_address - shift + 1)
+    last_block = state.blocks[-1]
+    last_block.warp = nodes.EndWarp()
 
-	last_block = state.blocks[-1]
-	last_block.warp = nodes.EndWarp()
-
-	setattr(last_block, "_last_body_addr", last_block.last_address)
-	setattr(last_block.warp, "_addr", last_block.last_address)
+    setattr(last_block, "_last_body_addr", last_block.last_address)
+    setattr(last_block.warp, "_addr", last_block.last_address)
 
 
 def _build_warp(state, last_addr, instructions):
-	last = instructions[-1]
+    last = instructions[-1]
 
-	if last.opcode in (ins.JMP.opcode, ins.UCLO.opcode, ins.ISNEXT.opcode):
-		return _build_jump_warp(state, last_addr, instructions)
+    if last.opcode in (ins.JMP.opcode, ins.UCLO.opcode, ins.ISNEXT.opcode):
+        return _build_jump_warp(state, last_addr, instructions)
 
-	elif last.opcode >= ins.ITERL.opcode and last.opcode <= ins.JITERL.opcode:
-		assert len(instructions) == 2
-		return _build_iterator_warp(state, last_addr, instructions)
+    elif ins.ITERL.opcode <= last.opcode <= ins.JITERL.opcode:
+        assert len(instructions) == 2
+        return _build_iterator_warp(state, last_addr, instructions)
 
-	elif last.opcode >= ins.FORL.opcode and last.opcode <= ins.JFORL.opcode:
-		return _build_numeric_loop_warp(state, last_addr, last)
+    elif ins.FORL.opcode <= last.opcode <= ins.JFORL.opcode:
+        return _build_numeric_loop_warp(state, last_addr, last)
 
-	else:
-		return _build_flow_warp(state, last_addr, last)
+    else:
+        return _build_flow_warp(state, last_addr, last)
 
 
 def _build_jump_warp(state, last_addr, instructions):
-	last = instructions[-1]
-	opcode = 256 if len(instructions) == 1 else instructions[-2].opcode
+    last = instructions[-1]
+    opcode = 256 if len(instructions) == 1 else instructions[-2].opcode
 
-	if opcode <= ins.ISF.opcode:
-		assert last.opcode != ins.ISNEXT.opcode
-		return _build_conditional_warp(state, last_addr, instructions)
-	else:
-		return _build_unconditional_warp(state, last_addr, last)
+    if opcode <= ins.ISF.opcode:
+        assert last.opcode != ins.ISNEXT.opcode
+        return _build_conditional_warp(state, last_addr, instructions)
+    else:
+        return _build_unconditional_warp(state, last_addr, last)
 
 
 def _build_conditional_warp(state, last_addr, instructions):
-	condition = instructions[-2]
-	condition_addr = last_addr - 1
+    condition = instructions[-2]
+    condition_addr = last_addr - 1
 
-	warp = nodes.ConditionalWarp()
+    warp = nodes.ConditionalWarp()
 
-	if condition.opcode in (ins.ISTC.opcode, ins.ISFC.opcode):
-		expression = _build_unary_expression(state,
-							condition_addr,
-							condition)
+    if condition.opcode in (ins.ISTC.opcode, ins.ISFC.opcode):
+        expression = _build_unary_expression(state,
+                                             condition_addr,
+                                             condition)
 
-		setattr(warp, "_slot", condition.A)
-	elif condition.opcode >= ins.IST.opcode:
-		expression = _build_unary_expression(state,
-							condition_addr,
-							condition)
+        setattr(warp, "_slot", condition.A)
+    elif condition.opcode >= ins.IST.opcode:
+        expression = _build_unary_expression(state,
+                                             condition_addr,
+                                             condition)
 
-		setattr(warp, "_slot", condition.CD)
-	else:
-		expression = _build_comparison_expression(state,
-							condition_addr,
-							condition)
+        setattr(warp, "_slot", condition.CD)
+    else:
+        expression = _build_comparison_expression(state,
+                                                  condition_addr,
+                                                  condition)
 
-	warp.condition = expression
+    warp.condition = expression
 
-	jump = instructions[-1]
-	jump_addr = last_addr
+    jump = instructions[-1]
+    jump_addr = last_addr
 
-	destination = get_jump_destination(jump_addr, jump)
+    destination = get_jump_destination(jump_addr, jump)
 
-	# A condition is inverted during the preparation phase above
-	warp.false_target = state._warp_in_block(destination)
-	warp.true_target = state._warp_in_block(jump_addr + 1)
+    # A condition is inverted during the preparation phase above
+    warp.false_target = state._warp_in_block(destination)
+    warp.true_target = state._warp_in_block(jump_addr + 1)
 
-	shift = 2
-	if destination == (jump_addr + 1):
-		# This is an empty 'then' or 'else'. The simplest way to handle it is
-		# to insert a Block containing just a no-op statement.
-		block = nodes.Block()
-		block.first_address = jump_addr + 1
-		block.last_address = block.first_address
-		block.index = warp.true_target.index
-		block.warpins_count = 1
-		setattr(block, "_last_body_addr", block.last_address - shift)
+    shift = 2
+    if destination == (jump_addr + 1):
+        # This is an empty 'then' or 'else'. The simplest way to handle it is
+        # to insert a Block containing just a no-op statement.
+        block = nodes.Block()
+        block.first_address = jump_addr + 1
+        block.last_address = block.first_address
+        block.index = warp.true_target.index
+        block.warpins_count = 1
+        setattr(block, "_last_body_addr", block.last_address - shift)
 
-		block.warp = nodes.UnconditionalWarp()
-		block.warp.type = nodes.UnconditionalWarp.T_FLOW
-		block.warp.target = warp.true_target
-		setattr(block.warp, "_addr", block.last_address - shift + 1)
+        block.warp = nodes.UnconditionalWarp()
+        block.warp.type = nodes.UnconditionalWarp.T_FLOW
+        block.warp.target = warp.true_target
+        setattr(block.warp, "_addr", block.last_address - shift + 1)
 
-		state.blocks.insert(state.blocks.index(warp.true_target), block)
-		warp.true_target = block
+        state.blocks.insert(state.blocks.index(warp.true_target), block)
+        warp.true_target = block
 
-		_create_no_op(state, jump_addr, block)
+        _create_no_op(state, jump_addr, block)
 
-	return warp, shift
-	
+    return warp, shift
+
+
 def _create_no_op(state, addr, block):
-	statement = nodes.NoOp()
-	setattr(statement, "_addr", addr)
-	setattr(statement, "_line", state.debuginfo.lookup_line_number(addr))
-	block.contents.append(statement)
+    statement = nodes.NoOp()
+    setattr(statement, "_addr", addr)
+    setattr(statement, "_line", state.debuginfo.lookup_line_number(addr))
+    block.contents.append(statement)
 
 
 def _build_unconditional_warp(state, addr, instruction):
-	warp = nodes.UnconditionalWarp()
-	warp.type = nodes.UnconditionalWarp.T_JUMP
+    warp = nodes.UnconditionalWarp()
+    warp.type = nodes.UnconditionalWarp.T_JUMP
 
-	opcode = instruction.opcode
+    opcode = instruction.opcode
 
-	warp.is_uclo = opcode == ins.UCLO.opcode
+    warp.is_uclo = opcode == ins.UCLO.opcode
 
-	shift = 1
-	if warp.is_uclo and instruction.CD == 0:
-		# Not a jump
-		return _build_flow_warp(state, addr, instruction)
-	else:
-		destination = get_jump_destination(addr, instruction)
-		warp.target = state._warp_in_block(destination)
+    shift = 1
+    if warp.is_uclo and instruction.CD == 0:
+        # Not a jump
+        return _build_flow_warp(state, addr, instruction)
+    else:
+        destination = get_jump_destination(addr, instruction)
+        warp.target = state._warp_in_block(destination)
 
-	return warp, shift
+    return warp, shift
 
 
 def _build_iterator_warp(state, last_addr, instructions):
-	iterator = instructions[-2]
-	iterator_addr = last_addr - 1
+    iterator = instructions[-2]
+    iterator_addr = last_addr - 1
 
-	assert iterator.opcode in (ins.ITERC.opcode, ins.ITERN.opcode)
+    assert iterator.opcode in (ins.ITERC.opcode, ins.ITERN.opcode)
 
-	warp = nodes.IteratorWarp()
+    warp = nodes.IteratorWarp()
 
-	base = iterator.A
+    base = iterator.A
 
-	warp.controls.contents = [
-		_build_slot(state, iterator_addr, base - 3),  # generator
-		_build_slot(state, iterator_addr, base - 2),  # state
-		_build_slot(state, iterator_addr, base - 1)  # control
-	]
+    warp.controls.contents = [
+        _build_slot(state, iterator_addr, base - 3),  # generator
+        _build_slot(state, iterator_addr, base - 2),  # state
+        _build_slot(state, iterator_addr, base - 1)  # control
+    ]
 
-	last_slot = base + iterator.B - 2
+    last_slot = base + iterator.B - 2
 
-	slot = base
+    slot = base
 
-	while slot <= last_slot:
-		variable = _build_slot(state, iterator_addr - 1, slot)
-		warp.variables.contents.append(variable)
-		slot += 1
+    while slot <= last_slot:
+        variable = _build_slot(state, iterator_addr - 1, slot)
+        warp.variables.contents.append(variable)
+        slot += 1
 
-	jump = instructions[-1]
-	jump_addr = last_addr
+    jump = instructions[-1]
+    jump_addr = last_addr
 
-	destination = get_jump_destination(jump_addr, jump)
-	warp.way_out = state._warp_in_block(jump_addr + 1)
-	warp.body = state._warp_in_block(destination)
+    destination = get_jump_destination(jump_addr, jump)
+    warp.way_out = state._warp_in_block(jump_addr + 1)
+    warp.body = state._warp_in_block(destination)
 
-	return warp, 2
+    return warp, 2
 
 
 def _build_numeric_loop_warp(state, addr, instruction):
-	warp = nodes.NumericLoopWarp()
+    warp = nodes.NumericLoopWarp()
 
-	base = instruction.A
+    base = instruction.A
 
-	warp.index = _build_slot(state, addr, base + 3)
-	warp.controls.contents = [
-		_build_slot(state, addr, base + 0),  # start
-		_build_slot(state, addr, base + 1),  # limit
-		_build_slot(state, addr, base + 2)  # step
-	]
+    warp.index = _build_slot(state, addr, base + 3)
+    warp.controls.contents = [
+        _build_slot(state, addr, base + 0),  # start
+        _build_slot(state, addr, base + 1),  # limit
+        _build_slot(state, addr, base + 2)  # step
+    ]
 
-	destination = get_jump_destination(addr, instruction)
-	warp.body = state._warp_in_block(destination)
-	warp.way_out = state._warp_in_block(addr + 1)
+    destination = get_jump_destination(addr, instruction)
+    warp.body = state._warp_in_block(destination)
+    warp.way_out = state._warp_in_block(addr + 1)
 
-	return warp, 1
+    return warp, 1
 
 
 def _build_flow_warp(state, addr, instruction):
-	warp = nodes.UnconditionalWarp()
-	warp.type = nodes.UnconditionalWarp.T_FLOW
-	warp.target = state._warp_in_block(addr + 1)
+    warp = nodes.UnconditionalWarp()
+    warp.type = nodes.UnconditionalWarp.T_FLOW
+    warp.target = state._warp_in_block(addr + 1)
 
-	opcode = instruction.opcode
-	shift = 1 if opcode in (ins.FORI.opcode, ins.UCLO.opcode) else 0
+    opcode = instruction.opcode
+    shift = 1 if opcode in (ins.FORI.opcode, ins.UCLO.opcode) else 0
 
-	return warp, shift
+    return warp, shift
 
 
 def _build_statement(state, addr, instruction):
-	opcode = instruction.opcode
-	A_type = instruction.A_type
+    opcode = instruction.opcode
+    A_type = instruction.A_type
 
-	# Generic assignments - handle the ASSIGNMENT stuff below
-	if A_type == ins.T_DST or A_type == ins.T_UV:
-		return _build_var_assignment(state, addr, instruction)
+    # Generic assignments - handle the ASSIGNMENT stuff below
+    if A_type == ins.T_DST or A_type == ins.T_UV:
+        return _build_var_assignment(state, addr, instruction)
 
-	# ASSIGNMENT starting from MOV and ending at KPRI
+    # ASSIGNMENT starting from MOV and ending at KPRI
 
-	elif opcode == ins.KNIL.opcode:
-		return _build_knil(state, addr, instruction)
+    elif opcode == ins.KNIL.opcode:
+        return _build_knil(state, addr, instruction)
 
-	# ASSIGNMENT starting from UGET and ending at USETP
+    # ASSIGNMENT starting from UGET and ending at USETP
 
-	# SKIP UCL0 is handled below
+    # SKIP UCL0 is handled below
 
-	# ASSIGNMENT starting from FNEW and ending at GGET
+    # ASSIGNMENT starting from FNEW and ending at GGET
 
-	elif opcode == ins.GSET.opcode:
-		return _build_global_assignment(state, addr, instruction)
+    elif opcode == ins.GSET.opcode:
+        return _build_global_assignment(state, addr, instruction)
 
-	# ASSIGNMENT starting from TGETV and ending at TGETR
+    # ASSIGNMENT starting from TGETV and ending at TGETR
 
-	elif opcode >= ins.TSETV.opcode and (opcode <= ins.TSETB.opcode
-										 or (ljd.config.version_config.use_version > 2.0
-											 and opcode == ins.TSETR.opcode)):
-		return _build_table_assignment(state, addr, instruction)
+    elif opcode >= ins.TSETV.opcode and (opcode <= ins.TSETB.opcode
+                                         or (ljd.config.version_config.use_version > 2.0
+                                             and opcode == ins.TSETR.opcode)):
+        return _build_table_assignment(state, addr, instruction)
 
-	elif opcode == ins.TSETM.opcode:
-		return _build_table_mass_assignment(state, addr, instruction)
+    elif opcode == ins.TSETM.opcode:
+        return _build_table_mass_assignment(state, addr, instruction)
 
-	elif opcode >= ins.CALLM.opcode and opcode <= ins.CALLT.opcode:
-		return _build_call(state, addr, instruction)
+    elif ins.CALLM.opcode <= opcode <= ins.CALLT.opcode:
+        return _build_call(state, addr, instruction)
 
-	elif opcode == ins.VARG.opcode:
-		return _build_vararg(state, addr, instruction)
+    elif opcode == ins.VARG.opcode:
+        return _build_vararg(state, addr, instruction)
 
-	elif opcode >= ins.RETM.opcode and opcode <= ins.RET1.opcode:
-		return _build_return(state, addr, instruction)
+    elif ins.RETM.opcode <= opcode <= ins.RET1.opcode:
+        return _build_return(state, addr, instruction)
 
-	else:
-		assert opcode == ins.UCLO.opcode or (
-				opcode >= ins.LOOP.opcode
-						and opcode <= ins.JLOOP.opcode)
-		# Noop
-		return None
+    else:
+        assert opcode == ins.UCLO.opcode or (
+                ins.LOOP.opcode <= opcode <= ins.JLOOP.opcode)
+        # NoOp
+        return None
 
 
 def _build_var_assignment(state, addr, instruction):
-	opcode = instruction.opcode
+    opcode = instruction.opcode
 
-	assignment = nodes.Assignment()
+    assignment = nodes.Assignment()
 
-	# Unary assignment operators (A = op D)
-	if opcode == ins.MOV.opcode			\
-			or opcode == ins.NOT.opcode	\
-			or opcode == ins.UNM.opcode \
+    # Unary assignment operators (A = op D)
+    if opcode == ins.MOV.opcode \
+            or opcode == ins.NOT.opcode \
+            or opcode == ins.UNM.opcode \
             or (ljd.config.version_config.use_version > 2.0 and opcode == ins.ISTYPE.opcode) \
             or (ljd.config.version_config.use_version > 2.0 and opcode == ins.ISNUM.opcode) \
             or opcode == ins.LEN.opcode:
-		expression = _build_unary_expression(state, addr, instruction)
+        expression = _build_unary_expression(state, addr, instruction)
 
-	# Binary assignment operators (A = B op C)
-	elif opcode <= ins.POW.opcode:
-		expression = _build_binary_expression(state, addr, instruction)
+    # Binary assignment operators (A = B op C)
+    elif opcode <= ins.POW.opcode:
+        expression = _build_binary_expression(state, addr, instruction)
 
-	# Concat assignment type (A = B .. B + 1 .. ... .. C - 1 .. C)
-	elif opcode == ins.CAT.opcode:
-		expression = _build_concat_expression(state, addr, instruction)
+    # Concat assignment type (A = B .. B + 1 .. ... .. C - 1 .. C)
+    elif opcode == ins.CAT.opcode:
+        expression = _build_concat_expression(state, addr, instruction)
 
-	# Constant assignment operators except KNIL, which is weird anyway
-	elif opcode <= ins.KPRI.opcode:
-		expression = _build_const_expression(state, addr, instruction)
+    # Constant assignment operators except KNIL, which is weird anyway
+    elif opcode <= ins.KPRI.opcode:
+        expression = _build_const_expression(state, addr, instruction)
 
-	elif opcode == ins.UGET.opcode:
-		expression = _build_upvalue(state, addr, instruction.CD)
+    elif opcode == ins.UGET.opcode:
+        expression = _build_upvalue(state, addr, instruction.CD)
 
-	elif opcode == ins.USETV.opcode:
-		expression = _build_slot(state, addr, instruction.CD)
+    elif opcode == ins.USETV.opcode:
+        expression = _build_slot(state, addr, instruction.CD)
 
-	elif opcode <= ins.USETP.opcode:
-		expression = _build_const_expression(state, addr, instruction)
+    elif opcode <= ins.USETP.opcode:
+        expression = _build_const_expression(state, addr, instruction)
 
-	elif opcode == ins.FNEW.opcode:
-		expression = _build_function(state, instruction.CD)
+    elif opcode == ins.FNEW.opcode:
+        expression = _build_function(state, instruction.CD)
 
-	elif opcode == ins.TNEW.opcode:
-		expression = nodes.TableConstructor()
+    elif opcode == ins.TNEW.opcode:
+        expression = nodes.TableConstructor()
 
-	elif opcode == ins.TDUP.opcode:
-		expression = _build_table_copy(state, instruction.CD)
+    elif opcode == ins.TDUP.opcode:
+        expression = _build_table_copy(state, instruction.CD)
 
-	elif opcode == ins.GGET.opcode:
-		expression = _build_global_variable(state, addr, instruction.CD)
+    elif opcode == ins.GGET.opcode:
+        expression = _build_global_variable(state, addr, instruction.CD)
 
-	else:
-		if ljd.config.version_config.use_version > 2.0:
-			assert opcode <= ins.TGETR.opcode
-			expression = _build_table_element(state, addr, instruction)
-		else:
-			assert opcode <= ins.TGETB.opcode
-			expression = _build_table_element(state, addr, instruction)
+    else:
+        if ljd.config.version_config.use_version > 2.0:
+            assert opcode <= ins.TGETR.opcode
+            expression = _build_table_element(state, addr, instruction)
+        else:
+            assert opcode <= ins.TGETB.opcode
+            expression = _build_table_element(state, addr, instruction)
 
-	assignment.expressions.contents.append(expression)
+    assignment.expressions.contents.append(expression)
 
-	if instruction.A_type == ins.T_DST:
-		destination = _build_slot(state, addr, instruction.A)
-	else:
-		assert instruction.A_type == ins.T_UV
+    if instruction.A_type == ins.T_DST:
+        destination = _build_slot(state, addr, instruction.A)
+    else:
+        assert instruction.A_type == ins.T_UV
 
-		destination = _build_upvalue(state, addr, instruction.A)
+        destination = _build_upvalue(state, addr, instruction.A)
 
-	assignment.destinations.contents.append(destination)
+    assignment.destinations.contents.append(destination)
 
-	return assignment
+    return assignment
 
 
 def _build_knil(state, addr, instruction):
-	node = _build_range_assignment(state, addr, instruction.A, instruction.CD)
+    node = _build_range_assignment(state, addr, instruction.A, instruction.CD)
 
-	node.expressions.contents = [_build_primitive(state, None)]
+    node.expressions.contents = [_build_primitive(state, None)]
 
-	return node
+    return node
 
 
 def _build_global_assignment(state, addr, instruction):
-	assignment = nodes.Assignment()
+    assignment = nodes.Assignment()
 
-	variable = _build_global_variable(state, addr, instruction.CD)
-	expression = _build_slot(state, addr, instruction.A)
+    variable = _build_global_variable(state, addr, instruction.CD)
+    expression = _build_slot(state, addr, instruction.A)
 
-	assignment.destinations.contents.append(variable)
-	assignment.expressions.contents.append(expression)
+    assignment.destinations.contents.append(variable)
+    assignment.expressions.contents.append(expression)
 
-	return assignment
+    return assignment
 
 
 def _build_table_assignment(state, addr, instruction):
-	assignment = nodes.Assignment()
+    assignment = nodes.Assignment()
 
-	destination = _build_table_element(state, addr, instruction)
-	expression = _build_slot(state, addr, instruction.A)
+    destination = _build_table_element(state, addr, instruction)
+    expression = _build_slot(state, addr, instruction.A)
 
-	assignment.destinations.contents.append(destination)
-	assignment.expressions.contents.append(expression)
+    assignment.destinations.contents.append(destination)
+    assignment.expressions.contents.append(expression)
 
-	return assignment
+    return assignment
 
 
 def _build_table_mass_assignment(state, addr, instruction):
-	assignment = nodes.Assignment()
+    assignment = nodes.Assignment()
 
-	base = instruction.A
+    base = instruction.A
 
-	destination = nodes.TableElement()
-	destination.key = nodes.MULTRES()
-	destination.table = _build_slot(state, addr, base - 1)
+    destination = nodes.TableElement()
+    destination.key = nodes.MULTRES()
+    destination.table = _build_slot(state, addr, base - 1)
 
-	assignment.destinations.contents = [destination]
-	assignment.expressions.contents = [nodes.MULTRES()]
+    assignment.destinations.contents = [destination]
+    assignment.expressions.contents = [nodes.MULTRES()]
 
-	return assignment
+    return assignment
 
 
 def _build_call(state, addr, instruction):
-	call = nodes.FunctionCall()
-	call.function = _build_slot(state, addr, instruction.A)
-	call.arguments.contents = _build_call_arguments(state, addr, instruction)
+    call = nodes.FunctionCall()
+    call.function = _build_slot(state, addr, instruction.A)
+    call.arguments.contents = _build_call_arguments(state, addr, instruction)
 
-	if instruction.opcode <= ins.CALL.opcode:
-		if instruction.B == 0:
-			node = nodes.Assignment()
-			node.destinations.contents.append(nodes.MULTRES())
-			node.expressions.contents.append(call)
-		elif instruction.B == 1:
-			node = call
-		else:
-			from_slot = instruction.A
-			to_slot = instruction.A + instruction.B - 2
-			node = _build_range_assignment(state, addr, from_slot,
-									to_slot)
-			node.expressions.contents.append(call)
-	else:
-		assert instruction.opcode <= ins.CALLT.opcode
-		node = nodes.Return()
-		node.returns.contents.append(call)
+    if instruction.opcode <= ins.CALL.opcode:
+        if instruction.B == 0:
+            node = nodes.Assignment()
+            node.destinations.contents.append(nodes.MULTRES())
+            node.expressions.contents.append(call)
+        elif instruction.B == 1:
+            node = call
+        else:
+            from_slot = instruction.A
+            to_slot = instruction.A + instruction.B - 2
+            node = _build_range_assignment(state, addr, from_slot,
+                                           to_slot)
+            node.expressions.contents.append(call)
+    else:
+        assert instruction.opcode <= ins.CALLT.opcode
+        node = nodes.Return()
+        node.returns.contents.append(call)
 
-	return node
+    return node
 
 
 def _build_vararg(state, addr, instruction):
-	base = instruction.A
-	last_slot = base + instruction.B - 2
+    base = instruction.A
+    last_slot = base + instruction.B - 2
 
-	if last_slot < base:
-		node = nodes.Assignment()
-		node.destinations.contents.append(nodes.MULTRES())
-		node.expressions.contents.append(nodes.Vararg())
-	else:
-		node = _build_range_assignment(state, addr, base, last_slot)
-		node.expressions.contents.append(nodes.Vararg())
+    if last_slot < base:
+        node = nodes.Assignment()
+        node.destinations.contents.append(nodes.MULTRES())
+        node.expressions.contents.append(nodes.Vararg())
+    else:
+        node = _build_range_assignment(state, addr, base, last_slot)
+        node.expressions.contents.append(nodes.Vararg())
 
-	return node
+    return node
 
 
 def _build_return(state, addr, instruction):
-	node = nodes.Return()
+    node = nodes.Return()
 
-	base = instruction.A
-	last_slot = base + instruction.CD - 1
+    base = instruction.A
+    last_slot = base + instruction.CD - 1
 
-	if instruction.opcode != ins.RETM.opcode:
-		last_slot -= 1
+    if instruction.opcode != ins.RETM.opcode:
+        last_slot -= 1
 
-	slot = base
+    slot = base
 
-	# Negative count for the RETM is OK
-	while slot <= last_slot:
-		variable = _build_slot(state, addr, slot)
-		node.returns.contents.append(variable)
-		slot += 1
+    # Negative count for the RETM is OK
+    while slot <= last_slot:
+        variable = _build_slot(state, addr, slot)
+        node.returns.contents.append(variable)
+        slot += 1
 
-	if instruction.opcode == ins.RETM.opcode:
-		node.returns.contents.append(nodes.MULTRES())
+    if instruction.opcode == ins.RETM.opcode:
+        node.returns.contents.append(nodes.MULTRES())
 
-	return node
+    return node
 
 
 def _build_call_arguments(state, addr, instruction):
-	base = instruction.A
-	last_argument_slot = base + instruction.CD
+    base = instruction.A
+    last_argument_slot = base + instruction.CD
 
-	is_variadic = (instruction.opcode == ins.CALLM.opcode	\
-			or instruction.opcode == ins.CALLMT.opcode)
+    is_variadic = (instruction.opcode == ins.CALLM.opcode
+                   or instruction.opcode == ins.CALLMT.opcode)
 
-	if not is_variadic:
-		last_argument_slot -= 1
+    if not is_variadic:
+        last_argument_slot -= 1
 
-	arguments = []
+    arguments = []
 
-	slot = base + 1
+    slot = base + 1
 
-	while slot <= last_argument_slot:
-		argument = _build_slot(state, addr, slot)
-		arguments.append(argument)
-		slot += 1
+    while slot <= last_argument_slot:
+        argument = _build_slot(state, addr, slot)
+        arguments.append(argument)
+        slot += 1
 
-	if is_variadic:
-		arguments.append(nodes.MULTRES())
+    if is_variadic:
+        arguments.append(nodes.MULTRES())
 
-	return arguments
+    return arguments
 
 
 def _build_range_assignment(state, addr, from_slot, to_slot):
-	assignment = nodes.Assignment()
+    assignment = nodes.Assignment()
 
-	slot = from_slot
+    slot = from_slot
 
-	assert from_slot <= to_slot
+    assert from_slot <= to_slot
 
-	while slot <= to_slot:
-		destination = _build_slot(state, addr, slot)
+    while slot <= to_slot:
+        destination = _build_slot(state, addr, slot)
 
-		assignment.destinations.contents.append(destination)
+        assignment.destinations.contents.append(destination)
 
-		slot += 1
+        slot += 1
 
-	return assignment
+    return assignment
 
 
 _BINARY_OPERATOR_MAP = [None] * 255
@@ -670,154 +657,155 @@ _BINARY_OPERATOR_MAP[ins.MODVN.opcode] = nodes.BinaryOperator.T_MOD
 
 
 def _build_binary_expression(state, addr, instruction):
-	operator = nodes.BinaryOperator()
-	opcode = instruction.opcode
+    operator = nodes.BinaryOperator()
+    opcode = instruction.opcode
 
-	if opcode == ins.POW.opcode:
-		operator.type = nodes.BinaryOperator.T_POW
-	else:
-		map_index = opcode - ins.ADDVN.opcode
-		map_index %= 5
-		map_index += ins.ADDVN.opcode
+    if opcode == ins.POW.opcode:
+        operator.type = nodes.BinaryOperator.T_POW
+    else:
+        map_index = opcode - ins.ADDVN.opcode
+        map_index %= 5
+        map_index += ins.ADDVN.opcode
 
-		operator.type = _BINARY_OPERATOR_MAP[map_index]
+        operator.type = _BINARY_OPERATOR_MAP[map_index]
 
-	assert(ins.ADDVN.opcode <= opcode <= ins.POW.opcode)
-	assert instruction.B_type == ins.T_VAR
+    assert (ins.ADDVN.opcode <= opcode <= ins.POW.opcode)
+    assert instruction.B_type == ins.T_VAR
 
-	# VN
-	if opcode < ins.ADDNV.opcode:
-		operator.left = _build_slot(state, addr, instruction.B)
-		operator.right = _build_numeric_constant(state, instruction.CD)
+    # VN
+    if opcode < ins.ADDNV.opcode:
+        operator.left = _build_slot(state, addr, instruction.B)
+        operator.right = _build_numeric_constant(state, instruction.CD)
 
-	# NV
-	elif opcode < ins.ADDVV.opcode:
-		operator.right = _build_slot(state, addr, instruction.B)
-		operator.left = _build_numeric_constant(state, instruction.CD)
+    # NV
+    elif opcode < ins.ADDVV.opcode:
+        operator.right = _build_slot(state, addr, instruction.B)
+        operator.left = _build_numeric_constant(state, instruction.CD)
 
-	# VV
-	else:
-		assert instruction.CD_type == ins.T_VAR
-		operator.left = _build_slot(state, addr, instruction.B)
-		operator.right = _build_slot(state, addr, instruction.CD)
+    # VV
+    else:
+        assert instruction.CD_type == ins.T_VAR
+        operator.left = _build_slot(state, addr, instruction.B)
+        operator.right = _build_slot(state, addr, instruction.CD)
 
-	return operator
+    return operator
 
 
 def _build_concat_expression(state, addr, instruction):
-	operator = nodes.BinaryOperator()
-	operator.type = nodes.BinaryOperator.T_CONCAT
+    operator = nodes.BinaryOperator()
+    operator.type = nodes.BinaryOperator.T_CONCAT
 
-	slot = instruction.B
+    slot = instruction.B
 
-	operator.left = _build_slot(state, addr, slot)
-	operator.right = _build_slot(state, addr, slot + 1)
+    operator.left = _build_slot(state, addr, slot)
+    operator.right = _build_slot(state, addr, slot + 1)
 
-	slot += 2
+    slot += 2
 
-	while slot <= instruction.CD:
-		upper_operator = nodes.BinaryOperator()
-		upper_operator.left = operator
-		upper_operator.right = _build_slot(state, addr, slot)
-		upper_operator.type = nodes.BinaryOperator.T_CONCAT
+    while slot <= instruction.CD:
+        upper_operator = nodes.BinaryOperator()
+        upper_operator.left = operator
+        upper_operator.right = _build_slot(state, addr, slot)
+        upper_operator.type = nodes.BinaryOperator.T_CONCAT
 
-		operator = upper_operator
+        operator = upper_operator
 
-		slot += 1
+        slot += 1
 
-	return operator
+    return operator
 
 
 def _build_const_expression(state, addr, instruction):
-	CD_type = instruction.CD_type
+    CD_type = instruction.CD_type
 
-	if CD_type == ins.T_STR:
-		return _build_string_constant(state, instruction.CD)
-	elif CD_type == ins.T_CDT:
-		return _build_cdata_constant(state, instruction.CD)
-	elif CD_type == ins.T_SLIT:
-		value = instruction.CD
+    if CD_type == ins.T_STR:
+        return _build_string_constant(state, instruction.CD)
+    elif CD_type == ins.T_CDT:
+        return _build_cdata_constant(state, instruction.CD)
+    elif CD_type == ins.T_SLIT:
+        value = instruction.CD
 
-		if value & 0x8000:
-			value = -0x10000 + value
+        if value & 0x8000:
+            value = -0x10000 + value
 
-		return _build_literal(state, value)
-	elif CD_type == ins.T_LIT:
-		return _build_literal(state, instruction.CD)
-	elif CD_type == ins.T_NUM:
-		return _build_numeric_constant(state, instruction.CD)
-	else:
-		assert CD_type == ins.T_PRI
-		return _build_primitive(state, instruction.CD)
+        return _build_literal(state, value)
+    elif CD_type == ins.T_LIT:
+        return _build_literal(state, instruction.CD)
+    elif CD_type == ins.T_NUM:
+        return _build_numeric_constant(state, instruction.CD)
+    else:
+        assert CD_type == ins.T_PRI
+        return _build_primitive(state, instruction.CD)
 
 
 def _build_table_element(state, addr, instruction):
-	node = nodes.TableElement()
-	node.table = _build_slot(state, addr, instruction.B)
+    node = nodes.TableElement()
+    node.table = _build_slot(state, addr, instruction.B)
 
-	if instruction.CD_type == ins.T_VAR:
-		node.key = _build_slot(state, addr, instruction.CD)
-	else:
-		node.key = _build_const_expression(state, addr, instruction)
+    if instruction.CD_type == ins.T_VAR:
+        node.key = _build_slot(state, addr, instruction.CD)
+    else:
+        node.key = _build_const_expression(state, addr, instruction)
 
-	return node
+    return node
 
 
 def _build_function(state, slot):
-	prototype = state.constants.complex_constants[slot]
+    prototype = state.constants.complex_constants[slot]
 
-	return _build_function_definition(prototype)
+    return _build_function_definition(prototype)
 
 
 def _build_table_copy(state, slot):
-	node = nodes.TableConstructor()
+    node = nodes.TableConstructor()
 
-	table = state.constants.complex_constants[slot]
+    table = state.constants.complex_constants[slot]
 
-	i = 0
+    i = 0
 
-	for value in table.array:
-		record = nodes.ArrayRecord()
-		record.value = _build_table_record_item(value)
+    for value in table.array:
+        record = nodes.ArrayRecord()
+        record.value = _build_table_record_item(value)
 
-		node.array.contents.append(record)
+        node.array.contents.append(record)
 
-		i += 1
+        i += 1
 
-	for key, value in table.dictionary:
-		record = nodes.TableRecord()
-		record.key = _build_table_record_item(key)
-		record.value = _build_table_record_item(value)
+    for key, value in table.dictionary:
+        record = nodes.TableRecord()
+        record.key = _build_table_record_item(key)
+        record.value = _build_table_record_item(value)
 
-		node.records.contents.append(record)
+        node.records.contents.append(record)
 
-	return node
+    return node
 
 
 def _build_table_record_item(value):
-	if value is None:
-		item = nodes.Primitive()
-		item.type = nodes.Primitive.T_NIL
-	elif value is True:
-		item = nodes.Primitive()
-		item.type = nodes.Primitive.T_TRUE
-	elif value is False:
-		item = nodes.Primitive()
-		item.type = nodes.Primitive.T_FALSE
-	elif isinstance(value, int):
-		item = nodes.Constant()
-		item.value = value
-		item.type = nodes.Constant.T_INTEGER
-	elif isinstance(value, float):
-		item = nodes.Constant()
-		item.value = value
-		item.type = nodes.Constant.T_FLOAT
-	elif isinstance(value, str):
-		item = nodes.Constant()
-		item.value = value
-		item.type = nodes.Constant.T_STRING
+    item = None
+    if value is None:
+        item = nodes.Primitive()
+        item.type = nodes.Primitive.T_NIL
+    elif value is True:
+        item = nodes.Primitive()
+        item.type = nodes.Primitive.T_TRUE
+    elif value is False:
+        item = nodes.Primitive()
+        item.type = nodes.Primitive.T_FALSE
+    elif isinstance(value, int):
+        item = nodes.Constant()
+        item.value = value
+        item.type = nodes.Constant.T_INTEGER
+    elif isinstance(value, float):
+        item = nodes.Constant()
+        item.value = value
+        item.type = nodes.Constant.T_FLOAT
+    elif isinstance(value, str):
+        item = nodes.Constant()
+        item.value = value
+        item.type = nodes.Constant.T_STRING
 
-	return item
+    return item
 
 
 _COMPARISON_MAP = [None] * 255
@@ -843,142 +831,142 @@ _COMPARISON_MAP[ins.ISNEP.opcode] = nodes.BinaryOperator.T_EQUAL
 
 
 def _build_comparison_expression(state, addr, instruction):
-	operator = nodes.BinaryOperator()
+    operator = nodes.BinaryOperator()
 
-	operator.left = _build_slot(state, addr, instruction.A)
+    operator.left = _build_slot(state, addr, instruction.A)
 
-	opcode = instruction.opcode
+    opcode = instruction.opcode
 
-	if opcode == ins.ISEQS.opcode or opcode == ins.ISNES.opcode:
-		operator.right = _build_string_constant(state, instruction.CD)
-	elif opcode == ins.ISEQN.opcode or opcode == ins.ISNEN.opcode:
-		operator.right = _build_numeric_constant(state, instruction.CD)
-	elif opcode == ins.ISEQP.opcode or opcode == ins.ISNEP.opcode:
-		operator.right = _build_primitive(state, instruction.CD)
-	else:
-		operator.right = _build_slot(state, addr, instruction.CD)
+    if opcode == ins.ISEQS.opcode or opcode == ins.ISNES.opcode:
+        operator.right = _build_string_constant(state, instruction.CD)
+    elif opcode == ins.ISEQN.opcode or opcode == ins.ISNEN.opcode:
+        operator.right = _build_numeric_constant(state, instruction.CD)
+    elif opcode == ins.ISEQP.opcode or opcode == ins.ISNEP.opcode:
+        operator.right = _build_primitive(state, instruction.CD)
+    else:
+        operator.right = _build_slot(state, addr, instruction.CD)
 
-	operator.type = _COMPARISON_MAP[instruction.opcode]
-	assert operator.type is not None
+    operator.type = _COMPARISON_MAP[instruction.opcode]
+    assert operator.type is not None
 
-	return operator
+    return operator
 
 
 def _build_unary_expression(state, addr, instruction):
-	opcode = instruction.opcode
+    opcode = instruction.opcode
 
-	variable = _build_slot(state, addr, instruction.CD)
+    variable = _build_slot(state, addr, instruction.CD)
 
-	# Mind the inversion
-	if opcode == ins.ISFC.opcode			\
-			or opcode == ins.ISF.opcode	\
-			or opcode == ins.MOV.opcode:
-		return variable
+    # Mind the inversion
+    if opcode == ins.ISFC.opcode \
+            or opcode == ins.ISF.opcode \
+            or opcode == ins.MOV.opcode:
+        return variable
 
-	operator = nodes.UnaryOperator()
-	operator.operand = variable
+    operator = nodes.UnaryOperator()
+    operator.operand = variable
 
-	if opcode == ins.ISTC.opcode			\
-			or opcode == ins.IST.opcode	\
-			or opcode == ins.NOT.opcode:
-		operator.type = nodes.UnaryOperator.T_NOT
-	elif opcode == ins.UNM.opcode:
-		operator.type = nodes.UnaryOperator.T_MINUS
-	elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISTYPE.opcode:
-		operator.type = nodes.UnaryOperator.T_TOSTRING
-	elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISNUM.opcode:
-		operator.type = nodes.UnaryOperator.T_TONUMBER
-	else:
-		assert opcode == ins.LEN.opcode
-		operator.type = nodes.UnaryOperator.T_LENGTH_OPERATOR
+    if opcode == ins.ISTC.opcode \
+            or opcode == ins.IST.opcode \
+            or opcode == ins.NOT.opcode:
+        operator.type = nodes.UnaryOperator.T_NOT
+    elif opcode == ins.UNM.opcode:
+        operator.type = nodes.UnaryOperator.T_MINUS
+    elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISTYPE.opcode:
+        operator.type = nodes.UnaryOperator.T_TOSTRING
+    elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISNUM.opcode:
+        operator.type = nodes.UnaryOperator.T_TONUMBER
+    else:
+        assert opcode == ins.LEN.opcode
+        operator.type = nodes.UnaryOperator.T_LENGTH_OPERATOR
 
-	return operator
+    return operator
 
 
 def _build_slot(state, addr, slot):
-	return _build_identifier(state, addr, slot, nodes.Identifier.T_LOCAL)
+    return _build_identifier(state, addr, slot, nodes.Identifier.T_LOCAL)
 
 
 def _build_upvalue(state, addr, slot):
-	return _build_identifier(state, addr, slot, nodes.Identifier.T_UPVALUE)
+    return _build_identifier(state, addr, slot, nodes.Identifier.T_UPVALUE)
 
 
 def _build_identifier(state, addr, slot, want_type):
-	node = nodes.Identifier()
-	setattr(node, "_addr", addr)
+    node = nodes.Identifier()
+    setattr(node, "_addr", addr)
 
-	node.slot = slot
-	node.type = nodes.Identifier.T_SLOT
+    node.slot = slot
+    node.type = nodes.Identifier.T_SLOT
 
-	if want_type == nodes.Identifier.T_UPVALUE:
-		name = state.debuginfo.lookup_upvalue_name(slot)
+    if want_type == nodes.Identifier.T_UPVALUE:
+        name = state.debuginfo.lookup_upvalue_name(slot)
 
-		if name is not None:
-			node.name = name
-			node.type = want_type
+        if name is not None:
+            node.name = name
+            node.type = want_type
 
-	return node
+    return node
 
 
 def _build_global_variable(state, addr, slot):
-	node = nodes.TableElement()
-	node.table = nodes.Identifier()
-	node.table.type = nodes.Identifier.T_BUILTIN
-	node.table.name = "_env"
+    node = nodes.TableElement()
+    node.table = nodes.Identifier()
+    node.table.type = nodes.Identifier.T_BUILTIN
+    node.table.name = "_env"
 
-	node.key = _build_string_constant(state, slot)
+    node.key = _build_string_constant(state, slot)
 
-	return node
+    return node
 
 
 def _build_string_constant(state, index):
-	node = nodes.Constant()
-	node.type = nodes.Constant.T_STRING
-	node.value = state.constants.complex_constants[index]
+    node = nodes.Constant()
+    node.type = nodes.Constant.T_STRING
+    node.value = state.constants.complex_constants[index]
 
-	return node
+    return node
 
 
 def _build_cdata_constant(state, index):
-	node = nodes.Constant()
-	node.type = nodes.Constant.T_CDATA
-	node.value = state.constants.complex_constants[index]
+    node = nodes.Constant()
+    node.type = nodes.Constant.T_CDATA
+    node.value = state.constants.complex_constants[index]
 
-	return node
+    return node
 
 
 def _build_numeric_constant(state, index):
-	number = state.constants.numeric_constants[index]
+    number = state.constants.numeric_constants[index]
 
-	node = nodes.Constant()
-	node.value = number
+    node = nodes.Constant()
+    node.value = number
 
-	if isinstance(number, int):
-		node.type = nodes.Constant.T_INTEGER
-	else:
-		node.type = nodes.Constant.T_FLOAT
+    if isinstance(number, int):
+        node.type = nodes.Constant.T_INTEGER
+    else:
+        node.type = nodes.Constant.T_FLOAT
 
-	return node
+    return node
 
 
 def _build_primitive(state, value):
-	node = nodes.Primitive()
+    node = nodes.Primitive()
 
-	if value is True or value == T_TRUE:
-		node.type = nodes.Primitive.T_TRUE
-	elif value is False or value == T_FALSE:
-		node.type = nodes.Primitive.T_FALSE
-	else:
-		assert value is None or value == T_NIL
+    if value is True or value == T_TRUE:
+        node.type = nodes.Primitive.T_TRUE
+    elif value is False or value == T_FALSE:
+        node.type = nodes.Primitive.T_FALSE
+    else:
+        assert value is None or value == T_NIL
 
-		node.type = nodes.Primitive.T_NIL
+        node.type = nodes.Primitive.T_NIL
 
-	return node
+    return node
 
 
 def _build_literal(state, value):
-	node = nodes.Constant()
-	node.value = value
-	node.type = nodes.Constant.T_INTEGER
+    node = nodes.Constant()
+    node.value = value
+    node.type = nodes.Constant.T_INTEGER
 
-	return node
+    return node

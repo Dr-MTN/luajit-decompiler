@@ -23,231 +23,238 @@
 # SOFTWARE.
 #
 
-import sys
-import os
 import logging
-from optparse import OptionParser
+import os
+import sys
 from datetime import datetime
+from optparse import OptionParser
 
 
 def dump(name, obj, level=0):
-	indent = level * '\t'
+    indent = level * '\t'
 
-	if name is not None:
-		prefix = indent + name + " = "
-	else:
-		prefix = indent
+    if name is not None:
+        prefix = indent + name + " = "
+    else:
+        prefix = indent
 
-	if isinstance(obj, (int, float, str)):
-		print(prefix + str(obj))
-	elif isinstance(obj, list):
-		print(prefix + "[")
+    if isinstance(obj, (int, float, str)):
+        print(prefix + str(obj))
+    elif isinstance(obj, list):
+        print(prefix + "[")
 
-		for value in obj:
-			dump(None, value, level + 1)
+        for value in obj:
+            dump(None, value, level + 1)
 
-		print(indent + "]")
-	elif isinstance(obj, dict):
-		print(prefix + "{")
+        print(indent + "]")
+    elif isinstance(obj, dict):
+        print(prefix + "{")
 
-		for key, value in obj.items():
-			dump(key, value, level + 1)
+        for key, value in obj.items():
+            dump(key, value, level + 1)
 
-		print(indent + "}")
-	else:
-		print(prefix + obj.__class__.__name__)
+        print(indent + "}")
+    else:
+        print(prefix + obj.__class__.__name__)
 
-		for key in dir(obj):
-			if key.startswith("__"):
-				continue
+        for key in dir(obj):
+            if key.startswith("__"):
+                continue
 
-			val = getattr(obj, key)
-			dump(key, val, level + 1)
+            val = getattr(obj, key)
+            dump(key, val, level + 1)
 
 
 class MakeFileHandler(logging.FileHandler):
-	def __init__(self, filename, *args, **kwargs):
-		os.makedirs(os.path.dirname(filename), exist_ok=True)
-		logging.FileHandler.__init__(self, filename, *args, **kwargs)
-
-
-logger = logging.getLogger('LJD')
-logger.setLevel(logging.INFO)
-
-fh = MakeFileHandler(f'logs/{datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log')
-fh.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
-console.setFormatter(formatter)
-logger.addHandler(console)
+    def __init__(self, filename, *args, **kwargs):
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        logging.FileHandler.__init__(self, filename, *args, **kwargs)
 
 
 class Main:
-	def main(self):
-		# parser arguments
-		parser = OptionParser()
+    def main(self):
+        # parser arguments
+        parser = OptionParser()
 
-		parser.add_option("-f", "--file",
-						  type="string", dest="file_name", default="",
-						  help="input file name", metavar="FILE")
-		parser.add_option("-o", "--output",
-						  type="string", dest="output_file", default="",
-						  help="output file for writing", metavar="FILE")
-		parser.add_option("-j", "--jitversion",
-						  type="string", dest="luajit_version", default="",
-						  help="luajit version, default 2.1, now supports 2.0, 2.1")
-		parser.add_option("-r", "--recursive",
-						  type="string", dest="folder_name", default="",
-						  help="recursively decompile lua files", metavar="FOLDER")
-		parser.add_option("-d", "--dir_out",
-						  type="string", dest="folder_output", default="",
-						  help="directory to output decompiled lua scripts", metavar="FOLDER")
-		parser.add_option("-c", "--catchasserts",
-						  action="store_true", dest="catchasserts", default=False,
-						  help="attempt inline error reporting without breaking decompilation")
+        parser.add_option("-f", "--file",
+                          type="string", dest="file_name", default="",
+                          help="input file name", metavar="FILE")
+        parser.add_option("-o", "--output",
+                          type="string", dest="output_file", default="",
+                          help="output file for writing", metavar="FILE")
+        parser.add_option("-j", "--jitversion",
+                          type="string", dest="luajit_version", default="",
+                          help="luajit version, default 2.1, now supports 2.0, 2.1")
+        parser.add_option("-r", "--recursive",
+                          type="string", dest="folder_name", default="",
+                          help="recursively decompile lua files", metavar="FOLDER")
+        parser.add_option("-d", "--dir_out",
+                          type="string", dest="folder_output", default="",
+                          help="directory to output decompiled lua scripts", metavar="FOLDER")
+        parser.add_option("-c", "--catch_asserts",
+                          action="store_true", dest="catch_asserts", default=False,
+                          help="attempt inline error reporting without breaking decompilation")
+        parser.add_option("-l", "--enable_logging",
+                          action="store_true", dest="enable_logging", default=False,
+                          help="log info and exceptions to external file while decompiling")
 
-		(self.options, args) = parser.parse_args()
-		basepath = os.path.dirname(sys.argv[0])
-		if basepath == "":
-			basepath = ".";
-		if self.options.luajit_version == "":
-			version_required = self.check_for_version_config(self.options.file_name)
-			sys.path.append(basepath + "/ljd/rawdump/luajit/" + str(version_required) + "/")
-		else:
-			self.set_version_config(float(self.options.luajit_version))
-			sys.path.append(basepath + "/ljd/rawdump/luajit/" + self.options.luajit_version + "/")
+        (self.options, args) = parser.parse_args()
+        basepath = os.path.dirname(sys.argv[0])
+        if basepath == "":
+            basepath = "."
+        if self.options.luajit_version == "":
+            version_required = self.check_for_version_config(self.options.file_name)
+            sys.path.append(basepath + "/ljd/rawdump/luajit/" + str(version_required) + "/")
+        else:
+            self.set_version_config(float(self.options.luajit_version))
+            sys.path.append(basepath + "/ljd/rawdump/luajit/" + self.options.luajit_version + "/")
 
-		# because luajit version is known after argument parsed, so delay import modules
-		import ljd.rawdump.parser
-		import ljd.pseudoasm.writer
-		import ljd.ast.builder
-		import ljd.ast.validator
-		import ljd.ast.locals
-		import ljd.ast.slotworks
-		import ljd.ast.unwarper
-		import ljd.ast.mutator
-		import ljd.lua.writer
+        # LuaJIT version is known after the argument is parsed, so delay module import
+        import ljd.rawdump.parser
+        import ljd.pseudoasm.writer
+        import ljd.ast.builder
+        import ljd.ast.validator
+        import ljd.ast.locals
+        import ljd.ast.slotworks
+        import ljd.ast.unwarper
+        import ljd.ast.mutator
+        import ljd.lua.writer
 
-		if self.options.catchasserts:
-			ljd.ast.unwarper.catch_asserts = True
-			ljd.ast.slotworks.catch_asserts = True
-			ljd.ast.validator.catch_asserts = True
+        if self.options.catch_asserts:
+            ljd.ast.unwarper.catch_asserts = True
+            ljd.ast.slotworks.catch_asserts = True
+            ljd.ast.validator.catch_asserts = True
 
-		self.ljd = ljd
+        self.ljd = ljd
 
-		if self.options.folder_name:
-			for path, _, filenames in os.walk(self.options.folder_name):
-				for file in filenames:
-					if file.endswith('.lua'):
-						full_path = os.path.join(path, file)
+        if self.options.enable_logging:
+            logger = logging.getLogger('LJD')
+            logger.setLevel(logging.INFO)
 
-						logger.info(full_path)
-						try:
-							self.decompile(full_path)
-							new_path = os.path.join(self.options.folder_output,
-													os.path.relpath(full_path, self.options.folder_name))
-							os.makedirs(os.path.dirname(new_path), exist_ok=True)
-							self.write_file(new_path)
-							logger.info("Success")
-						except KeyboardInterrupt:
-							logger.info("Exit")
-							return 0
-						except:
-							logger.info("Exception")
-							logger.debug('', exc_info=True)
+            fh = MakeFileHandler(f'logs/{datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log')
+            fh.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
 
-			return 0
+            console = logging.StreamHandler()
+            console.setLevel(logging.INFO)
+            formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+            console.setFormatter(formatter)
+            logger.addHandler(console)
+        else:
+            logger = None
 
-		if self.options.file_name == "":
-			print(self.options)
-			parser.error("options -f is required")
+        if self.options.folder_name:
+            for path, _, filenames in os.walk(self.options.folder_name):
+                for file in filenames:
+                    if file.endswith('.lua'):
+                        full_path = os.path.join(path, file)
 
-		self.decompile(self.options.file_name)
+                        if self.options.enable_logging:
+                            logger.info(full_path)
+                        try:
+                            self.decompile(full_path)
+                            new_path = os.path.join(self.options.folder_output,
+                                                    os.path.relpath(full_path, self.options.folder_name))
+                            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                            self.write_file(new_path)
+                            if self.options.enable_logging:
+                                logger.info("Success")
+                        except KeyboardInterrupt:
+                            if self.options.enable_logging:
+                                logger.info("Exit")
+                            return 0
+                        except:
+                            if self.options.enable_logging:
+                                logger.info("Exception")
+                                logger.debug('', exc_info=True)
 
-		if self.options.output_file:
-			self.write_file(self.options.output_file)
-		else:
-			self.ljd.lua.writer.write(sys.stdout, self.ast)
+            return 0
 
-		return 0
+        if self.options.file_name == "":
+            print(self.options)
+            parser.error("options -f is required")
 
-	def write_file(self, file_name):
-		with open(file_name, "w", encoding="utf8") as out_file:
-			self.ljd.lua.writer.write(out_file, self.ast)
+        self.decompile(self.options.file_name)
 
-	def decompile(self, file_in):
-		header, prototype = self.ljd.rawdump.parser.parse(file_in)
+        if self.options.output_file:
+            self.write_file(self.options.output_file)
+        else:
+            self.ljd.lua.writer.write(sys.stdout, self.ast)
 
-		if not prototype:
-			return 1
+        return 0
 
-		# self.ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
+    def write_file(self, file_name):
+        with open(file_name, "w", encoding="utf8") as out_file:
+            self.ljd.lua.writer.write(out_file, self.ast)
 
-		self.ast = self.ljd.ast.builder.build(prototype)
+    def decompile(self, file_in):
+        header, prototype = self.ljd.rawdump.parser.parse(file_in)
 
-		assert self.ast is not None
+        if not prototype:
+            return 1
 
-		self.ljd.ast.validator.validate(self.ast, warped=True)
+        # self.ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
-		self.ljd.ast.mutator.pre_pass(self.ast)
+        self.ast = self.ljd.ast.builder.build(prototype)
 
-		# self.ljd.ast.validator.validate(self.ast, warped=True)
+        assert self.ast is not None
 
-		self.ljd.ast.locals.mark_locals(self.ast)
+        self.ljd.ast.validator.validate(self.ast, warped=True)
 
-		# self.ljd.ast.validator.validate(self.ast, warped=True)
+        self.ljd.ast.mutator.pre_pass(self.ast)
 
-		try:
-			self.ljd.ast.slotworks.eliminate_temporary(self.ast)
-		except:
-			if self.options.catchasserts:
-				print("-- Decompilation Error: self.ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
-			else:
-				raise
+        # self.ljd.ast.validator.validate(self.ast, warped=True)
 
-		# self.ljd.ast.validator.validate(self.ast, warped=True)
+        self.ljd.ast.locals.mark_locals(self.ast)
 
-		if True:
-			self.ljd.ast.unwarper.unwarp(self.ast)
+        # self.ljd.ast.validator.validate(self.ast, warped=True)
 
-			# self.ljd.ast.validator.validate(self.ast, warped=False)
+        try:
+            self.ljd.ast.slotworks.eliminate_temporary(self.ast)
+        except:
+            if self.options.catch_asserts:
+                print("-- Decompilation Error: self.ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
+            else:
+                raise
 
-			if True:
-				self.ljd.ast.locals.mark_local_definitions(self.ast)
+        # self.ljd.ast.validator.validate(self.ast, warped=True)
 
-				# self.ljd.ast.validator.validate(self.ast, warped=False)
+        if True:
+            self.ljd.ast.unwarper.unwarp(self.ast)
 
-				self.ljd.ast.mutator.primary_pass(self.ast)
+            # self.ljd.ast.validator.validate(self.ast, warped=False)
 
-				try:
-					self.ljd.ast.validator.validate(self.ast, warped=False)
-				except:
-					if self.options.catchasserts:
-						print("-- Decompilation Error: self.ljd.ast.validator.validate(self.ast, warped=False)\n", file=sys.stdout)
-					else:
-						raise
+            if True:
+                self.ljd.ast.locals.mark_local_definitions(self.ast)
 
+                # self.ljd.ast.validator.validate(self.ast, warped=False)
 
-	def check_for_version_config(self, file_name):
-		import ljd.config.version_config
-		if file_name in ljd.config.version_config._LUA_FILE_VERSIONS:
-			self.set_version_config(ljd.config.version_config._LUA_FILE_VERSIONS[file_name])
-		return ljd.config.version_config.use_version
+                self.ljd.ast.mutator.primary_pass(self.ast)
 
+                try:
+                    self.ljd.ast.validator.validate(self.ast, warped=False)
+                except:
+                    if self.options.catch_asserts:
+                        print("-- Decompilation Error: self.ljd.ast.validator.validate(self.ast, warped=False)\n",
+                              file=sys.stdout)
+                    else:
+                        raise
 
-	def set_version_config(self, version_number):
-		import ljd.config.version_config
-		ljd.config.version_config.use_version = version_number
+    def check_for_version_config(self, file_name):
+        import ljd.config.version_config
+        if file_name in ljd.config.version_config._LUA_FILE_VERSIONS:
+            self.set_version_config(ljd.config.version_config._LUA_FILE_VERSIONS[file_name])
+        return ljd.config.version_config.use_version
+
+    @staticmethod
+    def set_version_config(version_number):
+        import ljd.config.version_config
+        ljd.config.version_config.use_version = version_number
 
 
 if __name__ == "__main__":
-	main_obj = Main()
-	retval = main_obj.main()
-	sys.exit(retval)
-
-# vim: ts=8 noexpandtab nosmarttab softtabstop=8 shiftwidth=8
+    main_obj = Main()
+    retval = main_obj.main()
+    sys.exit(retval)

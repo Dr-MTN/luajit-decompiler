@@ -6,15 +6,15 @@ import sys
 
 
 def errprint(*args):
-	fmt = None
+    fmt = None
 
-	args = list(args)
+    args = list(args)
 
-	if isinstance(args[0], str):
-		fmt = args.pop(0)
+    if isinstance(args[0], str):
+        fmt = args.pop(0)
 
-	if fmt:
-		print(fmt.format(*args), file=sys.stderr)
-	else:
-		strs = [repr(x) for x in args]
-		print(" ".join(strs), file=sys.stderr)
+    if fmt:
+        print(fmt.format(*args), file=sys.stderr)
+    else:
+        strs = [repr(x) for x in args]
+        print(" ".join(strs), file=sys.stderr)
