@@ -833,7 +833,7 @@ def _build_comparison_expression(state, addr, instruction):
 
 	if opcode == ins.ISEQS.opcode or opcode == ins.ISNES.opcode:
 		operator.right = _build_string_constant(state, instruction.CD)
-	elif opcode == ins.ISEQN.opcode	or opcode == ins.ISNEN.opcode:
+	elif opcode == ins.ISEQN.opcode or opcode == ins.ISNEN.opcode:
 		operator.right = _build_numeric_constant(state, instruction.CD)
 	elif opcode == ins.ISEQP.opcode or opcode == ins.ISNEP.opcode:
 		operator.right = _build_primitive(state, instruction.CD)

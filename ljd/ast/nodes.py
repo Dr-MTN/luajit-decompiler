@@ -97,11 +97,11 @@ class Assignment():
 		visitor._leave_node(visitor.leave_assignment, self)
 
 	def __str__(self):
-		return "{ Assignement: { destinations: " + str(self.destinations) + ", expressions: " + \
+		return "{ Assignment: { destinations: " + str(self.destinations) + ", expressions: " + \
 			   str(self.expressions) + ", type: " + ["T_LOCAL_DEFINITION", "T_NORMAL"][self.type]
 
 	def __repr__(self):
-		return "Assigment{" + str(self.destinations) + " <= " + str(self.expressions)
+		return "Assignment{" + str(self.destinations) + " <= " + str(self.expressions)
 
 
 class BinaryOperator():
