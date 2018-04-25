@@ -34,27 +34,42 @@ def unwarp(node):
 	try:
 		_run_step(_unwarp_loops, node, repeat_until=False)
 	except:
-		print("-- Decompilation Error: _run_step(_unwarp_loops, node, repeat_until=False)\n", file=sys.stdout)
+		if catch_asserts:
+			print("-- Decompilation Error: _run_step(_unwarp_loops, node, repeat_until=False)\n", file=sys.stdout)
+		else:
+			raise
 
 	try:
 		_run_step(_unwarp_loops, node, repeat_until=True)
 	except:
-		print("-- Decompilation Error: _run_step(_unwarp_loops, node, repeat_until=True)\n", file=sys.stdout)
+		if catch_asserts:
+			print("-- Decompilation Error: _run_step(_unwarp_loops, node, repeat_until=True)\n", file=sys.stdout)
+		else:
+			raise
 
 	try:
 		_run_step(_unwarp_expressions, node)
 	except:
-		print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
+		if catch_asserts:
+			print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
+		else:
+			raise
 
 	try:
 		_run_step(_unwarp_ifs, node)
 	except:
-		print("-- Decompilation Error: _run_step(_unwarp_ifs, node)\n", file=sys.stdout)
+		if catch_asserts:
+			print("-- Decompilation Error: _run_step(_unwarp_ifs, node)\n", file=sys.stdout)
+		else:
+			raise
 
 	try:
 		_glue_flows(node)
 	except:
-		print("-- Decompilation Error: _glue_flows(node)\n", file=sys.stdout)
+		if catch_asserts:
+			print("-- Decompilation Error: _glue_flows(node)\n", file=sys.stdout)
+		else:
+			raise
 
 
 def _run_step(step, node, **kargs):
@@ -64,7 +79,9 @@ def _run_step(step, node, **kargs):
 	# Fix block indices in case anything was moved
 	for statements in _gather_statements_lists(node):
 		for i, block in enumerate(statements.contents):
-			block.index = i
+			if block.index != i:
+				block.former_index = block.index
+				block.index = i
 
 
 def _gather_statements_lists(node):
@@ -120,7 +137,7 @@ def _unwarp_expressions(blocks):
 		warp = start.warp
 
 		if isinstance(warp, nodes.UnconditionalWarp):
-			if warp.type == nodes.UnconditionalWarp.T_FLOW:
+			if warp.type == nodes.UnconditionalWarp.T_FLOW or warp.type == nodes.UnconditionalWarp.T_JUMP:
 				start_index += 1
 				continue
 
@@ -1152,7 +1169,7 @@ def _find_branching_end(blocks, topmost_end):
 		if isinstance(warp, nodes.EndWarp) and target is None:
 			try:
 				assert block == end
-			except (AssertionError):
+			except AssertionError:
 				if catch_asserts:
 					setattr(block, "_decompilation_error_here", True)
 					print("-- WARNING: Error occurred during decompilation.")

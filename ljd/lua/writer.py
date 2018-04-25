@@ -762,7 +762,7 @@ class Visitor(traverse.Visitor):
 		
 		if hasattr(node, "_decompilation_error_here"):
 			self._end_line()
-			self._write("-- decompilation error in this vicinity")
+			self._write("-- Decompilation error in this vicinity:")
 			self._end_line()
 
 		traverse.Visitor._visit(self, node)

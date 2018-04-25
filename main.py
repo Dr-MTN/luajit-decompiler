@@ -200,19 +200,22 @@ class Main:
 
 		self.ljd.ast.locals.mark_locals(self.ast)
 
-		# ljd.ast.validator.validate(ast, warped=True)
+		# self.ljd.ast.validator.validate(self.ast, warped=True)
 
 		try:
 			self.ljd.ast.slotworks.eliminate_temporary(self.ast)
 		except:
-			print("-- Decompilation Error: self.ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
+			if self.options.catchasserts:
+				print("-- Decompilation Error: self.ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
+			else:
+				raise
 
-		# self.ljd.ast.validator.validate(ast, warped=True)
+		# self.ljd.ast.validator.validate(self.ast, warped=True)
 
 		if True:
 			self.ljd.ast.unwarper.unwarp(self.ast)
 
-			# self.ljd.ast.validator.validate(ast, warped=False)
+			# self.ljd.ast.validator.validate(self.ast, warped=False)
 
 			if True:
 				self.ljd.ast.locals.mark_local_definitions(self.ast)
@@ -224,7 +227,10 @@ class Main:
 				try:
 					self.ljd.ast.validator.validate(self.ast, warped=False)
 				except:
-					print("-- Decompilation Error: self.ljd.ast.validator.validate(self.ast, warped=False)\n", file=sys.stdout)
+					if self.options.catchasserts:
+						print("-- Decompilation Error: self.ljd.ast.validator.validate(self.ast, warped=False)\n", file=sys.stdout)
+					else:
+						raise
 
 
 	def check_for_version_config(self, file_name):

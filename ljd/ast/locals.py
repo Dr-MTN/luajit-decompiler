@@ -112,7 +112,7 @@ class _LocalsMarker(traverse.Visitor):
 			self._process_slots(addr)
 
 	# We need to process slots twice as it could be the last
-	# statement in the function/block and it could be anassignment
+	# statement in the function/block and it could be an assignment
 	# as well so we need to process slots before the reset
 
 	def _leave_node(self, handler, node):

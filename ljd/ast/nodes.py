@@ -373,7 +373,7 @@ class UnconditionalWarp():
 		visitor._leave_node(visitor.leave_unconditional_warp, self)
 
 	def __str__(self):
-		return "{UnconditionlWarp: {type: " + ["T_JUMP", "T_FLOW"][self.type] + ", target: " + str(
+		return "{UnconditionalWarp: {type: " + ["T_JUMP", "T_FLOW"][self.type] + ", target: " + str(
 			self.target) + ", is_uclo: " + \
 			   str(self.is_uclo) + " }}"
 
