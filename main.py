@@ -73,35 +73,52 @@ class MakeFileHandler(logging.FileHandler):
 
 class Main:
     def main(self):
-        # parser arguments
+        # Parser arguments
         parser = OptionParser()
 
+        # Single file input target. Not to be used with -r
         parser.add_option("-f", "--file",
                           type="string", dest="file_name", default="",
                           help="input file name", metavar="FILE")
+
+        # Single file output destination. Not to be used with -r
         parser.add_option("-o", "--output",
                           type="string", dest="output_file", default="",
                           help="output file for writing", metavar="FILE")
-        parser.add_option("-j", "--jit_version",
-                          type="string", dest="luajit_version", default="",
-                          help="override LuaJIT version, default 2.1, now supports 2.0, 2.1")
-        parser.add_option("-p", "--version_config_list",
-                          type="string", dest="version_config_list", default="version_default",
-                          help="LuaJIT version config list to use")
+
+        # Directory in which to recurse and process all files. Not to be used with -f
         parser.add_option("-r", "--recursive",
                           type="string", dest="folder_name", default="",
                           help="recursively decompile lua files", metavar="FOLDER")
+
+        # Directory to output processed files during recursion. Not to be used with -f
         parser.add_option("-d", "--dir_out",
                           type="string", dest="folder_output", default="",
                           help="directory to output decompiled lua scripts", metavar="FOLDER")
+
+        # Global override of LuaJIT version, ignores -j
+        parser.add_option("-j", "--jit_version",
+                          type="string", dest="luajit_version", default="",
+                          help="override LuaJIT version, default 2.1, now supports 2.0, 2.1")
+
+        # 'Profiles' that hardcode LuaJIT versions per file
+        parser.add_option("-v", "--version_config_list",
+                          type="string", dest="version_config_list", default="version_default",
+                          help="LuaJIT version config list to use")
+
+        # Prevent most integrity asserts from canceling decompilation
         parser.add_option("-c", "--catch_asserts",
                           action="store_true", dest="catch_asserts", default=False,
                           help="attempt inline error reporting without breaking decompilation")
+
+        # Output a log of exceptions and information during decompilation
         parser.add_option("-l", "--enable_logging",
                           action="store_true", dest="enable_logging", default=False,
                           help="log info and exceptions to external file while decompiling")
 
         (self.options, args) = parser.parse_args()
+
+        # Initialize opcode set for required LuaJIT version
         basepath = os.path.dirname(sys.argv[0])
         if basepath == "":
             basepath = "."
@@ -112,7 +129,7 @@ class Main:
             self.set_version_config(float(self.options.luajit_version))
             sys.path.append(basepath + "/ljd/rawdump/luajit/" + self.options.luajit_version + "/")
 
-        # LuaJIT version is known after the argument is parsed, so delay module import
+        # LuaJIT version is known after the argument is parsed, so delay module import.
         import ljd.rawdump.parser
         import ljd.pseudoasm.writer
         import ljd.ast.builder
@@ -123,6 +140,7 @@ class Main:
         import ljd.ast.mutator
         import ljd.lua.writer
 
+        # Send assert catch argument to modules
         if self.options.catch_asserts:
             ljd.ast.unwarper.catch_asserts = True
             ljd.ast.slotworks.catch_asserts = True
@@ -130,6 +148,7 @@ class Main:
 
         self.ljd = ljd
 
+        # Start logging if required
         if self.options.enable_logging:
             logger = logging.getLogger('LJD')
             logger.setLevel(logging.INFO)
@@ -148,7 +167,15 @@ class Main:
         else:
             logger = None
 
+        # Recursive batch processing
         if self.options.folder_name:
+            if self.options.version_config_list != "version_default":
+                print(self.options)
+                print("Version config lists are not supported in recursive directory mode.")
+                if self.options.enable_logging:
+                    logger.info("Exit")
+                return 0
+
             for path, _, filenames in os.walk(self.options.folder_name):
                 for file in filenames:
                     if file.endswith('.lua'):
@@ -175,9 +202,11 @@ class Main:
 
             return 0
 
+        # Single file processing
         if self.options.file_name == "":
             print(self.options)
-            parser.error("options -f is required")
+            parser.error("Options -f or -r are required.")
+            return 0
 
         self.decompile(self.options.file_name)
 
