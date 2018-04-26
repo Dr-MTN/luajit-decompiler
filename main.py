@@ -249,7 +249,7 @@ class Main:
         import ljd.config.version_config as version_config_file
 
         # Transform file_name with present working directory
-        if file_name[0] == ".":
+        if len(file_name) > 0 and file_name[0] == ".":
             file_name = file_name.replace(".", "", 1)
         file_name = os.getcwd() + "/" + file_name
         file_name = file_name.replace("\\", "/")
