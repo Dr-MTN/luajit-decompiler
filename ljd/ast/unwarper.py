@@ -142,7 +142,7 @@ def _unwarp_expressions(blocks):
             if warp.type == nodes.UnconditionalWarp.T_FLOW:
                 start_index += 1
                 continue
-            # Logical expressions in the else of an else of an if-else statement need this fix
+            # TODO Logical expressions in the else of an else of an if-else statement need this fix
             elif start_index > 0 and len(blocks[start_index].contents) > 0:
                 start_index += 1
                 continue

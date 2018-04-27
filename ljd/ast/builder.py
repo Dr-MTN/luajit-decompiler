@@ -164,34 +164,55 @@ def _blockenize(state, instructions):
 def _establish_warps(state, instructions):
     state.blocks[0].warpins_count = 1
 
-    for i, block in enumerate(state.blocks[:-1]):
+    enumerated_blocks = enumerate(state.blocks[:-1])
+    for i, block in enumerated_blocks:
+        if state.blocks.__contains__(block) is None:
+            continue
+
         state.block = block
 
         end_addr = block.last_address + 1
         start_addr = max(block.last_address - 1, block.first_address)
 
-        # Catch certain triple unconditional jump for logical false in expression:
+        # Catch certain double unconditional jumps for logical false in expression:
         if start_addr == (end_addr - 1) \
-                and end_addr < len(instructions) - 2 \
+                and end_addr + 1 < len(instructions) \
                 and instructions[start_addr].opcode == ins.JMP.opcode \
-                and instructions[start_addr + 1].opcode == ins.JMP.opcode \
-                and instructions[start_addr + 2].opcode == ins.JMP.opcode:
+                and instructions[end_addr].opcode == ins.JMP.opcode \
+                and instructions[start_addr].A == instructions[end_addr].A \
+                and instructions[start_addr].CD == 0:
 
-            # 'False' in if-statement
-            if not start_addr + instructions[start_addr].CD + 1 == start_addr + instructions[start_addr + 2].CD + 3:
-            # if start_addr + instructions[start_addr].CD + 1 \
-            #         < start_addr + instructions[start_addr + 1].CD + 2 \
-            #         < start_addr + instructions[start_addr + 2].CD + 3:
-                fixed_instruction = ins.ISF()
-                fixed_instruction.CD = ins.SLOT_FALSE
+            end_instruction_destination = end_addr + instructions[end_addr].CD + 1
+            target_instruction_A = instructions[start_addr].A
+            exit_instruction_found = False
+
+            # When two consecutive jumps are found with the same A operand, lookahead for the end jump.
+            for j, instruction in enumerate(instructions[end_addr + 1:-1]):
+                if instruction.opcode == ins.JMP.opcode \
+                        and instruction.A == target_instruction_A:
+                    exit_instruction_found = True
+                    break
+
+            # If we find the exit jump and we're not skipping it (if true then break else),
+            #  form the original two jumps into a fake conditional warp.
+            if exit_instruction_found \
+                    and end_instruction_destination <= j + instruction.CD + end_addr + 2:
+
+                # Go to else (false and ...)
+                if end_instruction_destination > j + end_addr + 1:
+                    fixed_instruction = ins.ISF()
+                    fixed_instruction.CD = ins.SLOT_FALSE
+                # Go to if-body (true or ...)
+                else:
+                    fixed_instruction = ins.IST()
+                    fixed_instruction.CD = ins.SLOT_TRUE
+
                 instructions[start_addr] = fixed_instruction
-                state.blocks.pop(i + 1)
+                state.blocks.pop(state.blocks.index(block) + 1)
 
                 block.last_address += 1
                 start_addr = max(block.last_address - 1, block.first_address)
                 end_addr = block.last_address + 1
-
-
 
         warp = instructions[start_addr:end_addr]
 
