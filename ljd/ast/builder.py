@@ -170,21 +170,28 @@ def _establish_warps(state, instructions):
         end_addr = block.last_address + 1
         start_addr = max(block.last_address - 1, block.first_address)
 
-        # Catch triple unconditional jump and form first two into a fake conditional jump.
-        # This is a hacky fix for expressions with 'false' as an operand.
+        # Catch certain triple unconditional jump for logical false in expression:
         if start_addr == (end_addr - 1) \
                 and end_addr < len(instructions) - 2 \
                 and instructions[start_addr].opcode == ins.JMP.opcode \
-                and instructions[end_addr].opcode == ins.JMP.opcode \
-                and instructions[end_addr + 1].opcode == ins.JMP.opcode:
-            fixed_instruction = ins.ISF()
-            fixed_instruction.CD = ins.SLOT_FALSE
-            instructions[start_addr] = fixed_instruction
-            state.blocks.pop(i + 1)
+                and instructions[start_addr + 1].opcode == ins.JMP.opcode \
+                and instructions[start_addr + 2].opcode == ins.JMP.opcode:
 
-            block.last_address += 1
-            start_addr = max(block.last_address - 1, block.first_address)
-            end_addr = block.last_address + 1
+            # 'False' in if-statement
+            if not start_addr + instructions[start_addr].CD + 1 == start_addr + instructions[start_addr + 2].CD + 3:
+            # if start_addr + instructions[start_addr].CD + 1 \
+            #         < start_addr + instructions[start_addr + 1].CD + 2 \
+            #         < start_addr + instructions[start_addr + 2].CD + 3:
+                fixed_instruction = ins.ISF()
+                fixed_instruction.CD = ins.SLOT_FALSE
+                instructions[start_addr] = fixed_instruction
+                state.blocks.pop(i + 1)
+
+                block.last_address += 1
+                start_addr = max(block.last_address - 1, block.first_address)
+                end_addr = block.last_address + 1
+
+
 
         warp = instructions[start_addr:end_addr]
 
