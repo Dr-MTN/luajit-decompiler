@@ -1586,7 +1586,8 @@ def _unwarp_breaks(start, blocks, next_block):
 
         assert target in ends, "GOTO statements are not supported"
 
-        if block.warpins_count != 0:
+        if block.warpins_count != 0 \
+                and not (len(block.contents) == 1 and isinstance(block.contents[0], nodes.NoOp)):
             new_block = _create_next_block(block)
             new_block.warpins_count = block.warpins_count
             _set_flow_to(block, new_block)
