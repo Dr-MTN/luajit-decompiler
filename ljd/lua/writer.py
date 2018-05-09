@@ -112,6 +112,12 @@ class Visitor(traverse.Visitor):
 
         self._end_line()
 
+        # Syntactic Sugar: Cull empty returns at the end of function
+        if len(node.statements.contents) > 1:
+            end_node = node.statements.contents[-1]
+            if isinstance(end_node, nodes.Return) and len(end_node.returns.contents) == 0:
+                node.statements.contents.pop(-1)
+
         self._visit(node.statements)
 
         self._write("end")
@@ -643,7 +649,10 @@ class Visitor(traverse.Visitor):
     def visit_return(self, node):
         self._start_statement(STATEMENT_RETURN)
 
-        self._write("return ")
+        if len(node.returns.contents) > 0:
+            self._write("return ")
+        else:
+            self._write("return")
 
         self._visit(node.returns)
 
