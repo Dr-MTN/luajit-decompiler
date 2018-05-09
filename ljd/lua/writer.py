@@ -7,6 +7,7 @@ import sys
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
+from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 
 CMD_START_STATEMENT = 0
 CMD_END_STATEMENT = 1
@@ -194,28 +195,36 @@ class Visitor(traverse.Visitor):
         dsts = node.destinations.contents
         srcs = node.expressions.contents
 
-        if len(dsts) == 1 and len(srcs) == 1:
+        num_dsts = len(dsts)
+        num_srcs = len(srcs)
+
+        src_is_function = False
+        if num_dsts == 1 and num_srcs == 1:
             dst = dsts[0]
             src = srcs[0]
 
             src_is_function = isinstance(src, nodes.FunctionDefinition)
             dst_is_simple = self._is_variable(dst)
 
-            if src_is_function and dst_is_simple:
-                self._state().function_name = dst
-                self._state().function_local = is_local
+            if src_is_function:
+                if dst_is_simple:
+                    self._state().function_name = dst
+                    self._state().function_local = is_local
 
-                self._visit(src)
+                    self._visit(src)
 
-                self._skip(node.destinations)
-                self._skip(node.expressions)
+                    self._skip(node.destinations)
+                    self._skip(node.expressions)
 
-                return
+                    return
 
         if is_local:
             self._write("local ")
 
-        self._start_statement(STATEMENT_ASSIGNMENT)
+        if src_is_function:
+            self._start_statement(STATEMENT_FUNCTION)
+        else:
+            self._start_statement(STATEMENT_ASSIGNMENT)
 
         self._visit(node.destinations)
 
@@ -223,7 +232,10 @@ class Visitor(traverse.Visitor):
 
         self._visit(node.expressions)
 
-        self._end_statement(STATEMENT_ASSIGNMENT)
+        if src_is_function:
+            self._end_statement(STATEMENT_FUNCTION)
+        else:
+            self._end_statement(STATEMENT_ASSIGNMENT)
 
     def _is_variable(self, node):
         if isinstance(node, nodes.Identifier):
@@ -411,8 +423,6 @@ class Visitor(traverse.Visitor):
     # ##
 
     def visit_identifier(self, node):
-        from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
-
         if node.type == nodes.Identifier.T_SLOT:
             placeholder_identifier = "slot{0}"
 
