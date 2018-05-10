@@ -498,7 +498,13 @@ class Visitor(traverse.Visitor):
             first_arg = node.arguments.contents[0]
 
             if self._is_valid_name(node.function.key):
-                is_method = table == first_arg
+                if hasattr(table, "name") and isinstance(first_arg, nodes.Identifier):
+                    if table.name == first_arg.name \
+                            and table.slot == first_arg.slot \
+                            and table.type == first_arg.type:
+                        is_method = True
+                else:
+                    is_method = table == first_arg
 
         if is_method:
             self._visit(node.function.table)
