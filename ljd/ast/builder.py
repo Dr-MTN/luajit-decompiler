@@ -5,7 +5,7 @@
 import ljd.ast.nodes as nodes
 import ljd.bytecode.instructions as ins
 import ljd.config.version_config
-from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
+from ljd.bytecode.constants import T_FALSE, T_NIL, T_TRUE
 from ljd.bytecode.helpers import get_jump_destination
 
 
@@ -116,6 +116,50 @@ def _blockenize(state, instructions):
     # Duplicates are possible and ok, but we need to sort them out
     last_addresses = set()
 
+    # Fix "var_1 = var_1 [comparison] var_2 and (operation) var_1 or var_1" edge case
+    enumerated_instructions = enumerate(instructions)
+    for i, instruction in enumerated_instructions:
+        if i > 2 and instruction.opcode == ins.ISTC.opcode \
+                and ins.ADDVN.opcode <= instructions[i - 1].opcode <= ins.CAT.opcode:
+
+            # Search for a jump that precedes the ISTC op
+            leading_jump_found = False
+            for j in range(1, i):
+                if instructions[i - j].opcode == ins.JMP.opcode:
+                    leading_jump_found = True
+                    break
+                elif instructions[i - j].opcode not in range(ins.ADDVN.opcode, ins.CAT.opcode):
+                    break
+
+            # Make sure the preceding jump matches the destination of the ISTC op
+            instruction_destination = get_jump_destination(i + 1, instructions[i + 1])
+            if instruction_destination == i + 2 and leading_jump_found:
+                # @TODO: Strange additional jump edge case of an edge case
+                if not instruction_destination == get_jump_destination(i - j, instructions[i - j]):
+
+                    if instructions[i + 2].opcode == ins.JMP.opcode:
+                        instruction_destination = get_jump_destination(i + 2, instructions[i + 2])
+
+                        if instruction_destination == get_jump_destination(i - j, instructions[i - j]):
+                            # Remove the ISTC op and correct the destinations
+                            instructions[i - 1].A = instruction.A
+                            instructions.pop(i + 2)
+                            instructions.pop(i)
+                            shift = -2
+
+                            # Update the warp destinations with regards to the removed instructions
+                            _shift_warp_destinations(state, instructions, shift, i, instruction_destination)
+
+                else:
+                    # Remove the ISTC op and correct the destinations
+                    instructions[i - 1].A = instruction.A
+                    instructions.pop(i + 1)
+                    instructions.pop(i)
+                    shift = -2
+
+                    # Update the warp destinations with regards to the removed instructions
+                    _shift_warp_destinations(state, instructions, shift, i, instruction_destination)
+
     while addr < len(instructions):
         instruction = instructions[addr]
         opcode = instruction.opcode
@@ -174,7 +218,7 @@ def _establish_warps(state, instructions):
         end_addr = block.last_address + 1
         start_addr = max(block.last_address - 1, block.first_address)
 
-        # Catch certain double unconditional jumps for logical false in expression:
+        # Catch certain double unconditional jumps caused by logical primitives in expressions:
         if start_addr == (end_addr - 1) \
                 and end_addr + 1 < len(instructions) \
                 and instructions[start_addr].opcode == ins.JMP.opcode \
@@ -998,3 +1042,19 @@ def _build_literal(state, value):
     node.type = nodes.Constant.T_INTEGER
 
     return node
+
+
+def _shift_warp_destinations(state, instructions, shift, removed_index, removed_destination):
+    for current_index, moved_instruction in enumerate(instructions):
+        opcode = moved_instruction.opcode
+
+        if (removed_index and removed_destination) is not None:
+            if current_index < removed_index and opcode in _JUMP_WARP_INSTRUCTIONS:
+                destination = get_jump_destination(current_index, moved_instruction)
+                if destination >= removed_destination:
+                    moved_instruction.CD += shift
+
+            elif opcode in _WARP_INSTRUCTIONS and moved_instruction.CD < 0:
+                destination = current_index + moved_instruction.CD - shift + 1
+                if destination < removed_destination:
+                    moved_instruction.CD -= shift

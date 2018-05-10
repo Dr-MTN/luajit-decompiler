@@ -113,7 +113,7 @@ class Visitor(traverse.Visitor):
 
         self._end_line()
 
-        # Syntactic Sugar: Cull empty returns at the end of function
+        # Syntactic Sugar: Cull empty returns at the ends of functions
         if len(node.statements.contents) > 1:
             end_node = node.statements.contents[-1]
             if isinstance(end_node, nodes.Return) and len(end_node.returns.contents) == 0:
