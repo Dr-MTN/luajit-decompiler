@@ -1056,7 +1056,57 @@ def _fix_broken_repeat_until_loops(state, instructions):
                             # If the destination would've been moved
                             if checked_instruction.CD >= shift \
                                     and checked_instruction_destination == insertion_index + shift:
-                                checked_instruction.CD -= shift
+
+                                # Check for an inverted jump pair
+                                next_index = j + 1
+                                following_instruction = instructions[next_index]
+                                if following_instruction.opcode == ins.JMP.opcode:
+                                    following_destination \
+                                        = get_jump_destination(next_index, following_instruction)
+
+                                    # e.g. goto 277 followed directly by goto 176
+                                    if following_destination < checked_instruction_destination:
+                                        leading_jump = True
+                                        continue
+
+                                    # e.g. goto 277 followed directly by goto 277
+                                    elif following_destination == checked_instruction_destination:
+                                        leading_jump = False
+                                        continue
+
+                                # Check for else-break-end following this jump
+                                following_else_break_found = False
+                                prev_jump = False
+                                for k in range(next_index, insertion_index):
+                                    following_instruction = instructions[k]
+                                    if following_instruction.opcode == ins.JMP.opcode:
+                                        if not prev_jump:
+                                            prev_jump = True
+
+                                        else:
+                                            following_destination \
+                                                = get_jump_destination(k, following_instruction)
+
+                                            # Don't adjust the checked jump, it's probably a break
+                                            if following_instruction.CD >= shift \
+                                                    and following_destination \
+                                                    == checked_instruction_destination:
+                                                following_else_break_found = True
+                                                break
+
+                                            prev_jump = False
+
+                                    else:
+                                        if prev_jump:
+                                            last_destination \
+                                                = get_jump_destination(k - 1, instructions[k - 1])
+                                            # We can adjust, it's probably not a break
+                                            if last_destination < checked_instruction_destination:
+                                                break
+                                        prev_jump = False
+
+                                if not following_else_break_found:
+                                    checked_instruction.CD -= shift
                         leading_jump = True
 
                     else:
