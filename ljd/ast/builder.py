@@ -111,54 +111,16 @@ _WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | {ins.FORL.opcode, ins.IFORL.opcod
 
 
 def _blockenize(state, instructions):
+    # Fix "repeat until true" encapsulated by another loop
+    _fix_broken_repeat_until_loops(state, instructions)
+
+    # Fix "var_1 = var_1 [comparison] var_2 and (operation) var_1 or var_1" edge case
+    _fix_broken_unary_expressions(state, instructions)
+
     addr = 1
 
     # Duplicates are possible and ok, but we need to sort them out
     last_addresses = set()
-
-    # Fix "var_1 = var_1 [comparison] var_2 and (operation) var_1 or var_1" edge case
-    enumerated_instructions = enumerate(instructions)
-    for i, instruction in enumerated_instructions:
-        if i > 2 and instruction.opcode == ins.ISTC.opcode \
-                and ins.ADDVN.opcode <= instructions[i - 1].opcode <= ins.CAT.opcode:
-
-            # Search for a jump that precedes the ISTC op
-            leading_jump_found = False
-            for j in range(1, i):
-                if instructions[i - j].opcode == ins.JMP.opcode:
-                    leading_jump_found = True
-                    break
-                elif instructions[i - j].opcode not in range(ins.ADDVN.opcode, ins.CAT.opcode):
-                    break
-
-            # Make sure the preceding jump matches the destination of the ISTC op
-            instruction_destination = get_jump_destination(i + 1, instructions[i + 1])
-            if instruction_destination == i + 2 and leading_jump_found:
-                # @TODO: Strange additional jump edge case of an edge case
-                if not instruction_destination == get_jump_destination(i - j, instructions[i - j]):
-
-                    if instructions[i + 2].opcode == ins.JMP.opcode:
-                        instruction_destination = get_jump_destination(i + 2, instructions[i + 2])
-
-                        if instruction_destination == get_jump_destination(i - j, instructions[i - j]):
-                            # Remove the ISTC op and correct the destinations
-                            instructions[i - 1].A = instruction.A
-                            instructions.pop(i + 2)
-                            instructions.pop(i)
-                            shift = -2
-
-                            # Update the warp destinations with regards to the removed instructions
-                            _shift_warp_destinations(state, instructions, shift, i, instruction_destination)
-
-                else:
-                    # Remove the ISTC op and correct the destinations
-                    instructions[i - 1].A = instruction.A
-                    instructions.pop(i + 1)
-                    instructions.pop(i)
-                    shift = -2
-
-                    # Update the warp destinations with regards to the removed instructions
-                    _shift_warp_destinations(state, instructions, shift, i, instruction_destination)
 
     while addr < len(instructions):
         instruction = instructions[addr]
@@ -1044,17 +1006,188 @@ def _build_literal(state, value):
     return node
 
 
-def _shift_warp_destinations(state, instructions, shift, removed_index, removed_destination):
+def _fix_broken_repeat_until_loops(state, instructions):
+    enumerated_instructions = enumerate(instructions)
+    for i, instruction in enumerated_instructions:
+        if instruction.opcode == ins.LOOP.opcode:
+
+            # Check for the failed-condition jump that restarts the loop
+            loop_exit_addr = get_jump_destination(i, instruction)
+            loop_condition_addr = loop_exit_addr - 1
+            loop_condition_instruction = instructions[loop_condition_addr]
+            if not loop_condition_instruction.opcode == ins.JMP.opcode:
+                if get_jump_destination(loop_condition_addr, loop_condition_instruction) <= i:
+                    continue
+
+                # Fake conditional that is treated as 'true' by the writer
+                fixed_cond_instruction = ins.ISF()
+                fixed_cond_instruction.CD = ins.SLOT_TRUE
+
+                # Resulting jump to the loop starting point
+                fixed_jump_instruction = ins.JMP()
+                fixed_jump_instruction.CD = i - loop_condition_addr - 1
+
+                line_mapping = state.debuginfo.addr_to_line_map[i]
+
+                # Add JMP instruction
+                insertion_index = loop_condition_addr + 1
+                instructions.insert(insertion_index, fixed_jump_instruction)
+                state.debuginfo.addr_to_line_map.insert(i, line_mapping)
+
+                # Add fake conditional instruction
+                instructions.insert(insertion_index, fixed_cond_instruction)
+                state.debuginfo.addr_to_line_map.insert(i, line_mapping)
+
+                shift = 2
+
+                # Fix warp destinations in the instruction set
+                _shift_warp_destinations(state, instructions, shift, insertion_index)
+
+                # Fix variable info range
+                _shift_debug_variable_info(state, shift, insertion_index)
+
+                # Fix non-break destinations within the loop
+                # Breaks in the broken loop points towards the same destination
+                # as non-breaks, so we'll have to search for a pattern of jumps.
+
+                excluded_jumps = []
+                last_A_value = -1
+                last_A_value_index = None
+
+                for j in range(i + 1, insertion_index):
+                    checked_instruction = instructions[j]
+
+                    # Look for exiting JMP instructions
+                    if checked_instruction.opcode == ins.JMP.opcode:
+                        checked_instruction_destination \
+                            = get_jump_destination(j, checked_instruction)
+
+                        if checked_instruction.CD >= shift \
+                                and checked_instruction_destination == insertion_index + shift:
+                            # Initial case
+                            if last_A_value == -1:
+                                last_A_value = checked_instruction.A
+                                last_A_value_index = j
+
+                            # Exiting JMP has lower or equivalent A instruction, probably a break
+                            elif last_A_value >= checked_instruction.A:
+                                excluded_jumps.append(instructions[last_A_value_index])
+                                last_A_value = checked_instruction.A
+                                last_A_value_index = j
+
+                            # If the chain carries to the end, it might be an if-else block
+                            else:
+                                last_A_value = checked_instruction.A
+                                last_A_value_index = j
+
+                # Continue adjusting destinations with breaks excluded
+                leading_jump = False
+                for j in range(i + 1, insertion_index):
+                    checked_instruction = instructions[j]
+
+                    # Look for following JMP instructions
+                    if checked_instruction.opcode == ins.JMP.opcode:
+
+                        # Leading jump indicates this is a break?
+                        if not leading_jump:
+                            checked_instruction_destination \
+                                = get_jump_destination(j, checked_instruction)
+
+                            # If the destination would've been moved
+                            if checked_instruction.CD >= shift \
+                                    and checked_instruction_destination == insertion_index + shift \
+                                    and checked_instruction not in excluded_jumps:
+                                checked_instruction.CD -= shift
+                        leading_jump = True
+
+                    else:
+                        leading_jump = False
+
+
+def _fix_broken_unary_expressions(state, instructions):
+    enumerated_instructions = enumerate(instructions)
+    for i, instruction in enumerated_instructions:
+        if i > 2 and instruction.opcode == ins.ISTC.opcode \
+                and ins.ADDVN.opcode <= instructions[i - 1].opcode <= ins.CAT.opcode:
+
+            # Search for a jump that precedes the ISTC op
+            leading_jump_found = False
+            for j in range(1, i):
+                if instructions[i - j].opcode == ins.JMP.opcode:
+                    leading_jump_found = True
+                    break
+                elif instructions[i - j].opcode not in range(ins.ADDVN.opcode, ins.CAT.opcode):
+                    break
+
+            # Make sure the preceding jump matches the destination of the ISTC op
+            instruction_destination = get_jump_destination(i + 1, instructions[i + 1])
+            if instruction_destination == i + 2 and leading_jump_found:
+                # @TODO: Strange additional jump edge case of an edge case
+                if not instruction_destination == get_jump_destination(i - j, instructions[i - j]):
+
+                    if instructions[i + 2].opcode == ins.JMP.opcode:
+                        instruction_destination = get_jump_destination(i + 2, instructions[i + 2])
+
+                        if instruction_destination == get_jump_destination(i - j, instructions[i - j]):
+                            # Remove the ISTC op and correct the destinations
+                            instructions[i - 1].A = instruction.A
+
+                            instructions.pop(i + 2)
+                            state.debuginfo.addr_to_line_map.pop(i + 2)
+
+                            instructions.pop(i)
+                            state.debuginfo.addr_to_line_map.pop(i)
+
+                            shift = -2
+
+                            # Update the warp destinations with regards to the removed instructions
+                            _shift_warp_destinations(state, instructions, shift, i)
+
+                            # Fix variable info range
+                            _shift_debug_variable_info(state, shift, i)
+
+                else:
+                    instructions[i - 1].A = instruction.A
+
+                    # Remove the JMP instruction
+                    instructions.pop(i + 1)
+                    state.debuginfo.addr_to_line_map.pop(i + 1)
+
+                    # Remove the broken condition
+                    instructions.pop(i)
+                    state.debuginfo.addr_to_line_map.pop(i)
+                    shift = -2
+
+                    # Update the warp destinations with regards to the removed instructions
+                    _shift_warp_destinations(state, instructions, shift, i)
+
+                    # Fix variable info range
+                    _shift_debug_variable_info(state, shift, i)
+
+
+def _shift_warp_destinations(state, instructions, shift, modified_index):
     for current_index, moved_instruction in enumerate(instructions):
         opcode = moved_instruction.opcode
 
-        if (removed_index and removed_destination) is not None:
-            if current_index < removed_index and opcode in _JUMP_WARP_INSTRUCTIONS:
+        if opcode in _WARP_INSTRUCTIONS:
+            if current_index < modified_index and moved_instruction.CD >= 0:
                 destination = get_jump_destination(current_index, moved_instruction)
-                if destination >= removed_destination:
+                if destination > modified_index or (destination == modified_index and shift > 0):
                     moved_instruction.CD += shift
 
-            elif opcode in _WARP_INSTRUCTIONS and moved_instruction.CD < 0:
+            elif current_index >= modified_index and moved_instruction.CD < 0:
                 destination = current_index + moved_instruction.CD - shift + 1
-                if destination < removed_destination:
+                if destination < modified_index or (destination == modified_index and shift > 0):
                     moved_instruction.CD -= shift
+
+
+def _shift_debug_variable_info(state, shift, modified_index):
+    for variable_info in state.debuginfo.variable_info:
+
+        if variable_info.end_addr > modified_index \
+                or (shift > 0 and variable_info.end_addr == modified_index):
+            variable_info.end_addr += shift
+
+        if variable_info.start_addr > modified_index \
+                or (shift > 0 and variable_info.start_addr == modified_index):
+            variable_info.start_addr += shift

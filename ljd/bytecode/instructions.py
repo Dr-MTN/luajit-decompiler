@@ -276,7 +276,7 @@ IITERL = _IDef("IITERL", T_BS, None, T_JMP,
 JITERL = _IDef("JITERL", T_BS, None, T_LIT,
                "{A_minus_one} = {A}; if {A} != nil goto {D}")
 
-LOOP = _IDef("LOOP", T_RBS, None, T_JMP, "Noop")
+LOOP = _IDef("LOOP", T_RBS, None, T_JMP, "Loop start, exit goto {D}")
 ILOOP = _IDef("ILOOP", T_RBS, None, T_JMP, "Noop")
 JLOOP = _IDef("JLOOP", T_RBS, None, T_LIT, "Noop")
 

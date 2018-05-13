@@ -1328,7 +1328,8 @@ def _replace_targets(blocks, original, replacement):
             if warp.true_target == original:
                 warp.true_target = replacement
 
-            if warp.false_target == original:
+            if warp.false_target == original \
+                    and warp.false_target.last_address > block.last_address:
                 warp.false_target = replacement
         elif isinstance(warp, nodes.EndWarp):
             pass
@@ -1448,6 +1449,8 @@ def _unwarp_loop(start, end, body):
         if _is_jump(first.warp):
             # Don't append to the body - it already has it
             expression.pop(0)
+            if len(body[-1].contents) == 1 and isinstance(body[-1].contents, nodes.NoOp):
+                body[-1].contents = []
             body[-1].contents.append(nodes.Break())
 
         false = body[0]
@@ -1599,6 +1602,8 @@ def _unwarp_breaks(start, blocks, next_block):
         else:
             patched.append(block)
 
+        if len(block.contents) == 1 and isinstance(block.contents[0], nodes.NoOp):
+            block.contents = []
         block.contents.append(nodes.Break())
 
         if i + 1 == len(blocks):
@@ -1614,7 +1619,7 @@ def _unwarp_breaks(start, blocks, next_block):
         return
 
     breaks_stack = []
-    warpsout = []
+    warps_out = []
     pending_break = None
 
     for i, block in enumerate(reversed(blocks)):
@@ -1653,12 +1658,12 @@ def _unwarp_breaks(start, blocks, next_block):
             if top_break[0] == BREAK_ONE_USE:
                 pending_break = breaks_stack.pop()
 
-                warpsout = []
+                warps_out = []
             else:
-                warpsout.append(block)
+                warps_out.append(block)
         else:
             _set_target(warp, pending_break[1])
-            warpsout.append(block)
+            warps_out.append(block)
 
         if len(block.contents) > 0:
             pending_break = None
@@ -1667,8 +1672,8 @@ def _unwarp_breaks(start, blocks, next_block):
         breaks_stack.pop()
 
     # And pray for the best...
-    while len(warpsout) > 0 and len(breaks_stack) > 0:
-        _set_target(warpsout.pop().warp, breaks_stack.pop()[1])
+    while len(warps_out) > 0 and len(breaks_stack) > 0:
+        _set_target(warps_out.pop().warp, breaks_stack.pop()[1])
 
 
 #
