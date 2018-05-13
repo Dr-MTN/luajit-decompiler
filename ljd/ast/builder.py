@@ -1011,7 +1011,7 @@ def _fix_broken_repeat_until_loops(state, instructions):
     for i, instruction in enumerated_instructions:
         if instruction.opcode == ins.LOOP.opcode:
 
-            # Check for the failed-condition jump that restarts the loop
+            # Check for the conditional jump that restarts the loop
             loop_exit_addr = get_jump_destination(i, instruction)
             loop_condition_addr = loop_exit_addr - 1
             loop_condition_instruction = instructions[loop_condition_addr]
@@ -1019,7 +1019,9 @@ def _fix_broken_repeat_until_loops(state, instructions):
                 if get_jump_destination(loop_condition_addr, loop_condition_instruction) <= i:
                     continue
 
-                # Fake conditional that is treated as 'true' by the writer
+                # It's not there, so this is probably a repeat-until true loop.
+
+                # We need a fake conditional warp that is treated as 'true' by the writer
                 fixed_cond_instruction = ins.ISF()
                 fixed_cond_instruction.CD = ins.SLOT_TRUE
 
@@ -1047,42 +1049,12 @@ def _fix_broken_repeat_until_loops(state, instructions):
                 _shift_debug_variable_info(state, shift, insertion_index)
 
                 # Fix non-break destinations within the loop
-                # Breaks in the broken loop points towards the same destination
+                # Breaks in the empty-condition loop point towards the same exit destination
                 # as non-breaks, so we'll have to search for a pattern of jumps.
 
-                excluded_jumps = []
-                last_A_value = -1
-                last_A_value_index = None
-
-                for j in range(i + 1, insertion_index):
-                    checked_instruction = instructions[j]
-
-                    # Look for exiting JMP instructions
-                    if checked_instruction.opcode == ins.JMP.opcode:
-                        checked_instruction_destination \
-                            = get_jump_destination(j, checked_instruction)
-
-                        if checked_instruction.CD >= shift \
-                                and checked_instruction_destination == insertion_index + shift:
-                            # Initial case
-                            if last_A_value == -1:
-                                last_A_value = checked_instruction.A
-                                last_A_value_index = j
-
-                            # Exiting JMP has lower or equivalent A instruction, probably a break
-                            elif last_A_value >= checked_instruction.A:
-                                excluded_jumps.append(instructions[last_A_value_index])
-                                last_A_value = checked_instruction.A
-                                last_A_value_index = j
-
-                            # If the chain carries to the end, it might be an if-else block
-                            else:
-                                last_A_value = checked_instruction.A
-                                last_A_value_index = j
-
-                # Continue adjusting destinations with breaks excluded
                 leading_jump = False
-                for j in range(i + 1, insertion_index):
+                start_index = i + 1
+                for j in range(start_index, insertion_index):
                     checked_instruction = instructions[j]
 
                     # Look for following JMP instructions
@@ -1095,8 +1067,7 @@ def _fix_broken_repeat_until_loops(state, instructions):
 
                             # If the destination would've been moved
                             if checked_instruction.CD >= shift \
-                                    and checked_instruction_destination == insertion_index + shift \
-                                    and checked_instruction not in excluded_jumps:
+                                    and checked_instruction_destination == insertion_index + shift:
                                 checked_instruction.CD -= shift
                         leading_jump = True
 
@@ -1122,22 +1093,22 @@ def _fix_broken_unary_expressions(state, instructions):
             # Make sure the preceding jump matches the destination of the ISTC op
             instruction_destination = get_jump_destination(i + 1, instructions[i + 1])
             if instruction_destination == i + 2 and leading_jump_found:
-                # @TODO: Strange additional jump edge case of an edge case
+                # Additional jump edge case of an edge case when expression is in an else body
                 if not instruction_destination == get_jump_destination(i - j, instructions[i - j]):
 
                     if instructions[i + 2].opcode == ins.JMP.opcode:
                         instruction_destination = get_jump_destination(i + 2, instructions[i + 2])
 
                         if instruction_destination == get_jump_destination(i - j, instructions[i - j]):
-                            # Remove the ISTC op and correct the destinations
                             instructions[i - 1].A = instruction.A
 
-                            instructions.pop(i + 2)
-                            state.debuginfo.addr_to_line_map.pop(i + 2)
+                            # Remove the JMP instruction
+                            instructions.pop(i + 1)
+                            state.debuginfo.addr_to_line_map.pop(i + 1)
 
+                            # Remove the broken condition
                             instructions.pop(i)
                             state.debuginfo.addr_to_line_map.pop(i)
-
                             shift = -2
 
                             # Update the warp destinations with regards to the removed instructions
