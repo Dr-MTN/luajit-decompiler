@@ -1029,24 +1029,12 @@ def _fix_broken_repeat_until_loops(state, instructions):
                 fixed_jump_instruction = ins.JMP()
                 fixed_jump_instruction.CD = i - loop_condition_addr - 1
 
-                line_mapping = state.debuginfo.addr_to_line_map[i]
-
-                # Add JMP instruction
+                # Add fake conditional instructions
                 insertion_index = loop_condition_addr + 1
-                instructions.insert(insertion_index, fixed_jump_instruction)
-                state.debuginfo.addr_to_line_map.insert(i, line_mapping)
-
-                # Add fake conditional instruction
-                instructions.insert(insertion_index, fixed_cond_instruction)
-                state.debuginfo.addr_to_line_map.insert(i, line_mapping)
+                _insert_instruction(state, instructions, insertion_index, fixed_jump_instruction)
+                _insert_instruction(state, instructions, insertion_index, fixed_cond_instruction)
 
                 shift = 2
-
-                # Fix warp destinations in the instruction set
-                _shift_warp_destinations(state, instructions, shift, insertion_index)
-
-                # Fix variable info range
-                _shift_debug_variable_info(state, shift, insertion_index)
 
                 # Fix non-break destinations within the loop
                 # Breaks in the empty-condition loop point towards the same exit destination
@@ -1102,38 +1090,51 @@ def _fix_broken_unary_expressions(state, instructions):
                         if instruction_destination == get_jump_destination(i - j, instructions[i - j]):
                             instructions[i - 1].A = instruction.A
 
-                            # Remove the JMP instruction
-                            instructions.pop(i + 1)
-                            state.debuginfo.addr_to_line_map.pop(i + 1)
-
                             # Remove the broken condition
-                            instructions.pop(i)
-                            state.debuginfo.addr_to_line_map.pop(i)
-                            shift = -2
-
-                            # Update the warp destinations with regards to the removed instructions
-                            _shift_warp_destinations(state, instructions, shift, i)
-
-                            # Fix variable info range
-                            _shift_debug_variable_info(state, shift, i)
+                            _remove_instruction(state, instructions, i + 1)
+                            _remove_instruction(state, instructions, i)
 
                 else:
                     instructions[i - 1].A = instruction.A
 
-                    # Remove the JMP instruction
-                    instructions.pop(i + 1)
-                    state.debuginfo.addr_to_line_map.pop(i + 1)
-
                     # Remove the broken condition
-                    instructions.pop(i)
-                    state.debuginfo.addr_to_line_map.pop(i)
-                    shift = -2
+                    _remove_instruction(state, instructions, i + 1)
+                    _remove_instruction(state, instructions, i)
 
-                    # Update the warp destinations with regards to the removed instructions
-                    _shift_warp_destinations(state, instructions, shift, i)
 
-                    # Fix variable info range
-                    _shift_debug_variable_info(state, shift, i)
+def _insert_instruction(state, instructions, index, new_instruction):
+    preceding_index = index - 1
+    line_mapping = state.debuginfo.addr_to_line_map[preceding_index]
+
+    instructions.insert(index, new_instruction)
+    state.debuginfo.addr_to_line_map.insert(index, line_mapping)
+
+    # Offset
+    shift = 1
+
+    # Update warp destinations with regards to the inserted instruction
+    _shift_warp_destinations(state, instructions, shift, index)
+
+    # Update variable info ranges
+    _shift_debug_variable_info(state, shift, index)
+
+    return
+
+
+def _remove_instruction(state, instructions, index):
+    removed_instruction = instructions.pop(index)
+    state.debuginfo.addr_to_line_map.pop(index)
+
+    # Offset
+    shift = -1
+
+    # Update warp destinations with regards to the removed instruction
+    _shift_warp_destinations(state, instructions, shift, index)
+
+    # Update variable info ranges
+    _shift_debug_variable_info(state, shift, index)
+
+    return removed_instruction
 
 
 def _shift_warp_destinations(state, instructions, shift, modified_index):
