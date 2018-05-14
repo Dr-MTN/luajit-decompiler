@@ -31,7 +31,8 @@ class TypeRestriction:
                     .format(type(node), typespec)
         except AssertionError:
             if catch_asserts:
-                setattr(node, "_decompilation_error_here", True)
+                if node is not None:
+                    setattr(node, "_decompilation_error_here", True)
                 print("-- WARNING: Error occurred during decompilation.")
                 print("--   Code may be incomplete or incorrect.")
             else:

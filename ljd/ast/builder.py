@@ -193,25 +193,21 @@ def _establish_warps(state, instructions):
             exit_instruction_found = False
 
             # When two consecutive jumps are found with the same A operand, lookahead for the end jump.
-            for j, instruction in enumerate(instructions[end_addr + 1:-1]):
-                if instruction.opcode == ins.JMP.opcode \
-                        and instruction.A == target_instruction_A:
-                    exit_instruction_found = True
-                    break
+            following_destination = -1
+            for j in range(end_addr + 1, len(instructions) - 1):
+                following_instruction = instructions[j]
+                if following_instruction.opcode == ins.JMP.opcode:
+                    if following_instruction.A == target_instruction_A:
+                        following_destination = get_jump_destination(j, following_instruction)
+                        exit_instruction_found = True
+                        break
 
             # If we find the exit jump and we're not skipping it (if true then break else),
             #  form the original two jumps into a fake conditional warp.
             if exit_instruction_found \
-                    and end_instruction_destination <= j + instruction.CD + end_addr + 2:
-
-                # Go to else (false and ...)
-                if end_instruction_destination > j + end_addr + 1:
-                    fixed_instruction = ins.ISF()
-                    fixed_instruction.CD = ins.SLOT_FALSE
-                # Go to if-body (true or ...)
-                else:
-                    fixed_instruction = ins.IST()
-                    fixed_instruction.CD = ins.SLOT_TRUE
+                    and end_instruction_destination <= following_destination:
+                fixed_instruction = ins.ISF()
+                fixed_instruction.CD = ins.SLOT_FALSE
 
                 instructions[start_addr] = fixed_instruction
                 state.blocks.pop(state.blocks.index(block) + 1)

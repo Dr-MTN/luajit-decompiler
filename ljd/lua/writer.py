@@ -359,7 +359,13 @@ class Visitor(traverse.Visitor):
         elif node.type == nodes.UnaryOperator.T_MINUS:
             self._write("-")
         elif node.type == nodes.UnaryOperator.T_NOT:
-            self._write("not ")
+            if hasattr(node.operand, "slot"):
+                if not node.operand.slot == SLOT_FALSE:
+                    self._write("not ")
+                else:
+                    node.operand.slot = SLOT_TRUE
+            else:
+                self._write("not ")
         elif ljd.config.version_config.use_version > 2.0:
             # TODO
             if node.type == nodes.UnaryOperator.T_TOSTRING:
