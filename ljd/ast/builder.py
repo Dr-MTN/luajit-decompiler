@@ -111,6 +111,9 @@ _WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | {ins.FORL.opcode, ins.IFORL.opcod
 
 
 def _blockenize(state, instructions):
+    # Fix inverted comparison expressions (e.g. 0 < variable):
+    _fix_inverted_comparison_expressions(state, instructions)
+
     # Fix "repeat until true" encapsulated by another loop
     _fix_broken_repeat_until_loops(state, instructions)
 
@@ -1002,6 +1005,41 @@ def _build_literal(state, value):
     return node
 
 
+def _fix_inverted_comparison_expressions(state, instructions):
+    for i, instruction in enumerate(instructions):
+        if ins.ISLT.opcode <= instruction.opcode <= ins.ISGT.opcode:
+            left_slot = instruction.A
+            right_slot = instruction.CD
+
+            is_inverted = False
+            if i > 0:
+                preceding_instruction = instructions[i - 1]
+
+                # Matching A slot for left slot
+                if hasattr(preceding_instruction, "A") and preceding_instruction.A == left_slot:
+                    opcode = preceding_instruction.opcode
+
+                    # Previous instruction is likely a number assignment to left slot
+                    if ins.UNM.opcode <= opcode <= ins.POW.opcode \
+                            or ins.KSHORT.opcode <= opcode <= ins.KNUM.opcode:
+                        is_inverted = True
+
+            # Invert order of slots
+            if is_inverted:
+                instruction.A = right_slot
+                instruction.CD = left_slot
+
+                if instruction.opcode == ins.ISGT.opcode:
+                    instruction.opcode = ins.ISLT.opcode
+                elif instruction.opcode == ins.ISGE.opcode:
+                    instruction.opcode = ins.ISLE.opcode
+
+                elif instruction.opcode == ins.ISLT.opcode:
+                    instruction.opcode = ins.ISGT.opcode
+                elif instruction.opcode == ins.ISLE.opcode:
+                    instruction.opcode = ins.ISGE.opcode
+
+
 def _fix_broken_repeat_until_loops(state, instructions):
     enumerated_instructions = enumerate(instructions)
     for i, instruction in enumerated_instructions:
@@ -1163,8 +1201,6 @@ def _insert_instruction(state, instructions, index, new_instruction):
 
     # Update variable info ranges
     _shift_debug_variable_info(state, shift, index)
-
-    return
 
 
 def _remove_instruction(state, instructions, index):
