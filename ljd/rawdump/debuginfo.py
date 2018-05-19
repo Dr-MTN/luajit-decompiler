@@ -75,7 +75,7 @@ def _read_variable_infos(parser, infos):
             suffix = parser.stream.read_zstring()
 
             info.name = (prefix + suffix).decode("utf-8", "backslashreplace")
-            info.type = info.T_VISIBILE
+            info.type = info.T_VISIBLE
 
         elif internal_vartype == VARNAME_END:
             break

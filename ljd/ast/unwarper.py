@@ -555,7 +555,10 @@ def _get_simple_local_assignment_slot(start, body, end):
         return -1, None
     else:
         slot = true.contents[0].destinations.contents[0]
-        return slot.slot, slot.type
+        if not isinstance(slot, nodes.TableElement):
+            return slot.slot, slot.type
+        else:
+            return slot.table.slot, slot.table.type
 
 
 def _find_expression_slot(body):
@@ -839,6 +842,8 @@ def _get_last_assignment_source(block):
         assert False  # TODO(yzg) ljd.ast.nodes.FunctionCall
     elif isinstance(assignment, nodes.NoOp):
         return None
+    elif isinstance(assignment, nodes.Return):
+        return assignment.returns.contents[0]
     else:
         assert False
 

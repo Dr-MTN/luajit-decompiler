@@ -4,7 +4,7 @@
 
 
 class VariableInfo:
-    T_VISIBILE = 0
+    T_VISIBLE = 0
     T_INTERNAL = 1
 
     def __init__(self):
