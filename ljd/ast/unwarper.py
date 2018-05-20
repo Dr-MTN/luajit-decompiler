@@ -134,6 +134,7 @@ def _unwarp_expressions(blocks):
     pack_set = set()
 
     start_index = 0
+    end_index = 0
     while start_index < len(blocks) - 1:
         start = blocks[start_index]
         warp = start.warp
@@ -142,10 +143,17 @@ def _unwarp_expressions(blocks):
             if warp.type == nodes.UnconditionalWarp.T_FLOW:
                 start_index += 1
                 continue
-            # TODO Logical expressions in the else of an else of an if-else statement need this fix
-            elif start_index > 0 and len(blocks[start_index].contents) > 0:
-                start_index += 1
-                continue
+            elif start_index > 0 and len(start.contents) > 0:
+                # Don't continue in the 'false and false' / 'true or true' cases
+                if start_index != end_index \
+                        or not (isinstance(start.contents[-1], nodes.Assignment)
+                                and len(start.contents[-1].expressions.contents) > 0
+                                and isinstance(start.contents[-1].expressions.contents[-1],
+                                nodes.Primitive)):
+                    if start_index == end_index:
+                        end_index += 1
+                    start_index += 1
+                    continue
 
         body, end, end_index = _extract_if_body(start_index,
                                                 blocks, None)
@@ -314,6 +322,14 @@ def _unwarp_expressions_pack(blocks, pack):
 
             _set_flow_to(start, end)
         else:
+            if start_index > 0:
+                preceding_block = blocks[start_index - 1]
+                if hasattr(preceding_block, "warp") \
+                        and isinstance(preceding_block.warp, nodes.UnconditionalWarp):
+                    target_index = blocks.index(_get_target(preceding_block.warp))
+                    if target_index in range(start_index + 1, end_index - 1):
+                        continue
+
             blocks = blocks[:start_index + 1] + blocks[end_index:]
 
             start.contents = statements[:split_i]
@@ -1134,6 +1150,13 @@ def _extract_if_expression(start, body, end, topmost_end):
 
     false, end_i = _search_expression_end(expression, falses)
 
+    if false is None:
+        unpacked_falses = sorted(falses,
+                                 key=lambda unpacked_false: unpacked_false.index)
+        false = unpacked_falses[-1]
+        end_i = len(expression)
+
+    assert false is not None
     assert end_i >= 0
 
     body = expression[end_i:] + body
@@ -1153,7 +1176,7 @@ def _search_expression_end(expression, falses):
     false = None
 
     for i, block in enumerate(expression):
-        target = _get_target(block.warp)
+        target = _get_target(block.warp, True)
 
         if target not in falses:
             continue
@@ -1163,8 +1186,6 @@ def _search_expression_end(expression, falses):
             expression_end = i + 1
         else:
             break
-
-    assert false is not None
 
     return false, expression_end
 
@@ -1185,6 +1206,8 @@ def _find_branching_end(blocks, topmost_end):
                     setattr(block, "_decompilation_error_here", True)
                     print("-- WARNING: Error occurred during decompilation.")
                     print("--   Code may be incomplete or incorrect.")
+                    if hasattr(end, "warp") and _get_target(end.warp) == block:
+                        return end
                 else:
                     raise
             return block
