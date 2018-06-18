@@ -285,7 +285,10 @@ class Visitor(traverse.Visitor):
                                                and node.type <= binop.T_LOGICAL_AND)
                                    ) and node.left.type != node.type
             else:
-                left_parentheses = node.left.type < node.type
+                left_parentheses = (
+                        node.left.type < node.type
+                        or (node.left.type == node.type == node.T_POW)
+                )
 
         if is_right_op:
             if node.type <= nodes.BinaryOperator.T_LOGICAL_AND:
@@ -295,7 +298,11 @@ class Visitor(traverse.Visitor):
                                                 and node.type <= binop.T_LOGICAL_AND)
                                     ) and node.right.type != node.type
             else:
-                right_parentheses = node.right.type < node.type
+                right_parentheses = (
+                        node.right.type < node.type
+                        or (node.right.type == node.type
+                            and node.type in (node.T_DIVISION, node.T_SUBTRACT))
+                )
 
         if left_parentheses:
             self._write("(")
