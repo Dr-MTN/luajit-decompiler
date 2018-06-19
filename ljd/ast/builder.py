@@ -296,7 +296,8 @@ def _build_conditional_warp(state, last_addr, instructions):
     warp.true_target = state._warp_in_block(jump_addr + 1)
 
     shift = 2
-    if destination == (jump_addr + 1):
+    if destination == (jump_addr + 1) \
+            and condition.opcode not in (ins.ISTC.opcode, ins.ISFC.opcode):
         # This is an empty 'then' or 'else'. The simplest way to handle it is
         # to insert a Block containing just a no-op statement.
         block = nodes.Block()
@@ -1007,6 +1008,7 @@ def _build_literal(state, value):
 
 def _fix_inverted_comparison_expressions(state, instructions):
     for i, instruction in enumerate(instructions):
+
         if ins.ISLT.opcode <= instruction.opcode <= ins.ISGT.opcode:
             left_slot = instruction.A
             right_slot = instruction.CD
@@ -1043,6 +1045,7 @@ def _fix_inverted_comparison_expressions(state, instructions):
 def _fix_broken_repeat_until_loops(state, instructions):
     enumerated_instructions = enumerate(instructions)
     for i, instruction in enumerated_instructions:
+
         if instruction.opcode == ins.LOOP.opcode:
 
             # Check for the conditional jump that restarts the loop

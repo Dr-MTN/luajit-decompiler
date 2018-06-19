@@ -92,6 +92,77 @@ local point_nine = 0.9
 local two = 2
 local three = 3
 
+local a = {}
+local b = {}
+
+a[#a + 1] = 1 + two + three
+a[#a + 1] = 1 + two - three
+a[#a + 1] = 1 + two * three
+a[#a + 1] = 1 + two / three
+a[#a + 1] = 1 + two^three
+
+b[#b + 1] = 1 + (two + three)
+b[#b + 1] = 1 + (two - three)
+b[#b + 1] = 1 + (two * three)
+b[#b + 1] = 1 + (two / three)
+b[#b + 1] = 1 + (two^three)
+
+a[#a + 1] = 1 - two + three
+a[#a + 1] = 1 - two - three
+a[#a + 1] = 1 - two * three
+a[#a + 1] = 1 - two / three
+a[#a + 1] = 1 - two^three
+
+b[#b + 1] = 1 - (two + three)
+b[#b + 1] = 1 - (two - three)
+b[#b + 1] = 1 - (two * three)
+b[#b + 1] = 1 - (two / three)
+b[#b + 1] = 1 - (two^three)
+
+a[#a + 1] = 1 * two + three
+a[#a + 1] = 1 * two - three
+a[#a + 1] = 1 * two * three
+a[#a + 1] = 1 * two / three
+a[#a + 1] = 1 * two^three
+
+b[#b + 1] = 1 * (two + three)
+b[#b + 1] = 1 * (two - three)
+b[#b + 1] = 1 * (two * three)
+b[#b + 1] = 1 * (two / three)
+b[#b + 1] = 1 * (two^three)
+
+a[#a + 1] = 1 / two + three
+a[#a + 1] = 1 / two - three
+a[#a + 1] = 1 / two * three
+a[#a + 1] = 1 / two / three
+a[#a + 1] = 1 / two^three
+
+b[#b + 1] = 1 / (two + three)
+b[#b + 1] = 1 / (two - three)
+b[#b + 1] = 1 / (two * three)
+b[#b + 1] = 1 / (two / three)
+b[#b + 1] = 1 / (two^three)
+
+a[#a + 1] = 2^two + three
+a[#a + 1] = 2^two - three
+a[#a + 1] = 2^two * three
+a[#a + 1] = 2^two / three
+a[#a + 1] = 2^two^three
+
+b[#b + 1] = (2^two) + three
+b[#b + 1] = (2^two) - three
+b[#b + 1] = (2^two) * three
+b[#b + 1] = (2^two) / three
+b[#b + 1] = (2^two)^three
+
+for i = 1, #a do
+	print("a[" .. tostring(i) .. "]: " .. tostring(a[i]))
+end
+
+for j = 1, #b do
+	print("b[" .. tostring(j) .. "]: " .. tostring(b[j]))
+end
+
 local powers_a = point_nine^two^two^three
 local powers_b = point_nine^(two^(two^three))
 local powers_c = ((point_nine^two)^two)^three
