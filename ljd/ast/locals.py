@@ -190,7 +190,14 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 
     def visit_assignment(self, node):
         dst = node.destinations.contents[0]
+
         addr = self._state().addr
+        dst_addr = getattr(dst, "_addr", addr)
+
+        # Update address if necessary
+        if addr != dst_addr:
+            self._state().addr = dst_addr
+            addr = dst_addr
 
         if not isinstance(dst, nodes.Identifier):
             return
