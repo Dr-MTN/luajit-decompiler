@@ -204,7 +204,7 @@ class Visitor(traverse.Visitor):
             src = srcs[0]
 
             src_is_function = isinstance(src, nodes.FunctionDefinition)
-            dst_is_simple = self._is_variable(dst)
+            dst_is_simple = self._is_acceptable_func_dst(dst)
 
             if src_is_function:
                 if dst_is_simple:
@@ -248,6 +248,36 @@ class Visitor(traverse.Visitor):
             return self._is_builtin(node.table)
 
         return False
+
+    def _is_acceptable_func_dst(self, dst):
+        # If this is an identifier, we're fine
+        if isinstance(dst, nodes.Identifier):
+            return True
+
+        # Otherwise, it must be a table element
+        if not isinstance(dst, nodes.TableElement):
+            return False
+
+        # It's key must be a constant
+        if not isinstance(dst.key, nodes.Constant):
+            return False
+
+        # Ensure the key is a string
+        if dst.key.type != nodes.Constant.T_STRING:
+            return False
+
+        # Ensure the key is alphanumeric, and the first character is a letter
+        key = dst.key.value
+        if key[0].isdigit():
+            # TODO I don't think the code in this generator checks this - so you can end up with a.1234.b
+            return False
+
+        for char in key:
+            if not char.isalnum() and char != "_":
+                return False
+
+        # Finally, recurse up the chain
+        return self._is_acceptable_func_dst(dst.table)
 
     @staticmethod
     def _is_builtin(node):
