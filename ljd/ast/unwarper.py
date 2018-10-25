@@ -1,5 +1,6 @@
 import copy
 import sys
+import pprint
 
 import ljd.ast.nodes as nodes
 import ljd.ast.slotworks as slotworks
@@ -31,6 +32,27 @@ class _StatementsCollector(traverse.Visitor):
 
 
 def unwarp(node):
+
+    try:
+        _run_step(_fix_loops, node)
+        pass
+    except:
+        if catch_asserts:
+            print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
+        else:
+            raise
+
+    try:
+        _run_step(_unwarp_expressions, node)
+        pass
+    except:
+        if catch_asserts:
+            print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
+        else:
+            raise
+
+    #sys.exit(0)
+
     # There could be many negative jumps within while conditions, so
     # filter them first
     try:
@@ -49,13 +71,19 @@ def unwarp(node):
         else:
             raise
 
+
     try:
-        _run_step(_unwarp_expressions, node)
+        # _run_step(_unwarp_expressions, node)
+        pass
     except:
         if catch_asserts:
             print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
         else:
             raise
+
+
+
+    #sys.exit(0)
 
     try:
         _run_step(_unwarp_ifs, node)
@@ -130,6 +158,10 @@ def _glue_flows(node):
 # ##
 
 def _unwarp_expressions(blocks):
+    print("Blocks:")
+    for b in blocks:
+        pprint.pprint(vars(b))
+
     pack = []
     pack_set = set()
 
@@ -154,6 +186,8 @@ def _unwarp_expressions(blocks):
                         end_index += 1
                     start_index += 1
                     continue
+
+        #print("Start at " + str(start_index))
 
         body, end, end_index = _extract_if_body(start_index,
                                                 blocks, None)
@@ -1190,7 +1224,7 @@ def _search_expression_end(expression, falses):
     return false, expression_end
 
 
-def _find_branching_end(blocks, topmost_end):
+def _find_branching_end(blocks, topmost_end, loop_start=None):
     end = blocks[0]
 
     for block in blocks:
@@ -1243,9 +1277,112 @@ def _remove_processed_blocks(blocks, boundaries):
 # ## LOOPS PROCESSING
 # ##
 
+#def _fix_loops(blocks):
+#    # For now, only process for loops
+#    #  as they seem to have trouble here
+#
+#    # Debugging
+#    #return blocks
+#
+#    loops = _find_all_loops(blocks, repeat_until=False)
+#
+#    if len(loops) == 0:
+#        return blocks
+#
+#    fixed = _cleanup_breaks_and_if_ends(loops, blocks)
+#
+#    for start, end in fixed:
+#        start_index = blocks.index(start)
+#        end_index = blocks.index(end)
+#
+#        assert end_index > start_index
+#
+#        # Find the last block that's part of the loop
+#        #  (note that end is one past the end of the loop)
+#        last_index = end_index - 1
+#        assert last_index > start_index
+#        last = blocks[last_index]
+#
+#        # For now, only process for loops as they
+#        #  cause the expression fixer to choke
+#        # if not isinstance(start.warp, nodes.IteratorWarp):
+#        #    continue
+#
+#        # What we need to do is add a new block at the end of the
+#        #  loop, and anything that jumps to the start of the loop should
+#        #  be sent over there.
+#
+#        # TODO handle if the last block jumps back but one before it exists the loop, and just reuse that
+#
+#        block = nodes.Block()
+#
+#        # Remove the last address from the last block, as it must contain a jump we can reuse
+#        assert _get_target(last.warp) == start
+#        jmp_address = last.last_address
+#        last.last_address -= 1
+#        block.first_address = jmp_address
+#        block.last_address = jmp_address
+#
+#        # This block now has the index of the previous last block
+#        block.index = end_index
+#
+#        block.warp = nodes.UnconditionalWarp()
+#        block.warp.type = nodes.UnconditionalWarp.T_FLOW
+#        block.warp.target = start
+#
+#        loop = blocks[start_index:end_index]
+#        _replace_targets(loop, start, block, allow_add_jumpback=True)
+#
+#        blocks = blocks[:end_index] + [block] + blocks[end_index:]
+#
+#    return blocks
 
-def _unwarp_loops(blocks, repeat_until):
-    loops = _find_all_loops(blocks, repeat_until)
+
+#def _fix_loops(blocks):
+#    loops = []
+#    for block in blocks:
+#        if block.loop_last_address is None:
+#            continue
+#
+#        end = None
+#        for b in blocks:
+#            if b.first_address == block.loop_last_address:
+#                end = b
+#
+#        assert end
+#
+#        loops.append((block, end))
+#
+#    for start, end in loops:
+#        start_index = blocks.index(start)
+#        end_index = blocks.index(end)
+#
+#        body = blocks[start_index + 1:end_index]
+#
+#        loop = _unwarp_loop(start, end, body)
+#        body = loop.statements.contents
+#
+#        block = nodes.Block()
+#        block.first_address = body[0].first_address
+#        block.last_address = body[-1].last_address
+#        block.index = start.index + 1
+#        block.contents.append(loop)
+#
+#        block.warp = nodes.UnconditionalWarp()
+#        block.warp.type = nodes.UnconditionalWarp.T_FLOW
+#        block.warp.target = end
+#
+#        _replace_targets(blocks, body[0], block)
+#
+#        _set_end(body[-1])
+#        _unwarp_breaks(start, body, end)
+#
+#        blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
+#
+#    return blocks
+
+def _fix_loops(blocks):
+    loops = _find_all_loops(blocks, repeat_until=False)
 
     if len(loops) == 0:
         return blocks
@@ -1256,18 +1393,26 @@ def _unwarp_loops(blocks, repeat_until):
         start_index = blocks.index(start)
         end_index = blocks.index(end)
 
-        if repeat_until:
-            body = blocks[start_index:end_index]
-        else:
-            body = blocks[start_index + 1:end_index]
+        loop_block = None
+        for block in blocks[start_index:end_index]:
+            if block.loop is not None:
+                loop_block = block
 
-        loop = _unwarp_loop(start, end, body)
+        if not loop_block:
+            blocks = _handle_single_loop(start, end, blocks, False)
+            continue
+
+        assert loop_block
+
+        body_start_index = blocks.index(loop_block)
+
+        loop = _unwarp_loop(start, end, expr_body=blocks[start_index:body_start_index], body=blocks[body_start_index:end_index])
         body = loop.statements.contents
 
         block = nodes.Block()
         block.first_address = body[0].first_address
         block.last_address = body[-1].last_address
-        block.index = start.index + 1
+        block.index = body_start_index
         block.contents.append(loop)
 
         block.warp = nodes.UnconditionalWarp()
@@ -1279,10 +1424,80 @@ def _unwarp_loops(blocks, repeat_until):
         _set_end(body[-1])
         _unwarp_breaks(start, body, end)
 
-        blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
+        blocks = blocks[:body_start_index] + [block] + blocks[end_index:]
+
+        for i, block in enumerate(body):
+            warp = block.warp
+
+            if _is_flow(warp):
+                assert _get_target(warp) == body[i + 1]
+
+            if isinstance(warp, nodes.ConditionalWarp):
+                assert warp.true_target in body
+                assert warp.false_target in body
+            else:
+                target = _get_target(warp, True)
+                if target:
+                    assert target in body
+
+    for i, block in enumerate(blocks):
+        warp = block.warp
+
+        if _is_flow(warp):
+            assert _get_target(warp) == blocks[i + 1]
+
+        if isinstance(warp, nodes.ConditionalWarp):
+            assert warp.true_target in blocks
+            assert warp.false_target in blocks
+        else:
+            target = _get_target(warp, True)
+            if target:
+                assert target in blocks
 
     return blocks
 
+def _unwarp_loops(blocks, repeat_until):
+    loops = _find_all_loops(blocks, repeat_until)
+
+    if len(loops) == 0:
+        return blocks
+
+    fixed = _cleanup_breaks_and_if_ends(loops, blocks)
+
+    for start, end in fixed:
+        blocks = _handle_single_loop(start, end, blocks, repeat_until)
+
+    return blocks
+
+def _handle_single_loop(start, end, blocks, repeat_until):
+    start_index = blocks.index(start)
+    end_index = blocks.index(end)
+
+    if repeat_until:
+        body = blocks[start_index:end_index]
+    else:
+        body = blocks[start_index + 1:end_index]
+
+    loop = _unwarp_loop(start, end, body)
+    body = loop.statements.contents
+
+    block = nodes.Block()
+    block.first_address = body[0].first_address
+    block.last_address = body[-1].last_address
+    block.index = start.index + 1
+    block.contents.append(loop)
+
+    block.warp = nodes.UnconditionalWarp()
+    block.warp.type = nodes.UnconditionalWarp.T_FLOW
+    block.warp.target = end
+
+    _replace_targets(blocks, body[0], block)
+
+    _set_end(body[-1])
+    _unwarp_breaks(start, body, end)
+
+    blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
+    return blocks
 
 def _cleanup_breaks_and_if_ends(loops, blocks):
     outer_start_index = -1
@@ -1345,7 +1560,7 @@ def _cleanup_breaks_and_if_ends(loops, blocks):
     return fixed
 
 
-def _replace_targets(blocks, original, replacement):
+def _replace_targets(blocks, original, replacement, allow_add_jumpback=False):
     for block in blocks:
         warp = block.warp
 
@@ -1357,7 +1572,7 @@ def _replace_targets(blocks, original, replacement):
                 warp.true_target = replacement
 
             if warp.false_target == original \
-                    and warp.false_target.last_address > block.last_address:
+                    and (warp.false_target.last_address > block.last_address or allow_add_jumpback):
                 warp.false_target = replacement
         elif isinstance(warp, nodes.EndWarp):
             pass
@@ -1369,7 +1584,7 @@ def _replace_targets(blocks, original, replacement):
                 warp.body = replacement
 
 
-def _unwarp_loop(start, end, body):
+def _unwarp_loop(start, end, body, expr_body=None):
     if len(body) > 0:
         last = body[-1]
     else:
@@ -1425,11 +1640,12 @@ def _unwarp_loop(start, end, body):
 
             assert i < len(body)
 
-            expression = [start] + body[:i]
+            expression = expr_body + body[:i]
             body = body[i:]
 
             # Sometimes expression may decide to jump to the
             # outer loop start instead
+            # FIXME Disabled for debugging
             _fix_expression(expression, start, end)
 
             true = body[0]
@@ -1444,9 +1660,11 @@ def _unwarp_loop(start, end, body):
             loop.expression = expression
             loop.statements.contents = body
 
+        # FIXME Disabled for debugging
         _fix_nested_ifs(body, start)
 
-        _set_flow_to(start, body[0])
+        condition_end = expr_body[-1] if expr_body else start
+        _set_flow_to(condition_end, body[0])
 
     # Repeat until
     else:
