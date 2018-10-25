@@ -89,6 +89,23 @@ def _build_function_blocks(state, instructions):
 
                 block.contents.append(statement)
 
+            #if ins.JLOOP.opcode == opcode:
+            #    raise Exception("JLOOP not yet supported!")
+            #elif ins.LOOP.opcode <= opcode <= ins.JLOOP.opcode:
+            #    assert instruction.CD_type == ins.T_JMP
+            #    block.loop = get_jump_destination(addr, instruction)
+
+            opcode = instruction.opcode
+
+            if ins.LOOP.opcode <= opcode <= ins.JLOOP.opcode:
+                block.loop = True
+
+            elif ins.FORI.opcode <= opcode <= ins.JFORI.opcode:
+                block.loop = True
+
+            elif ins.ISNEXT.opcode == opcode:
+                block.loop = True
+
             addr += 1
 
         # walterr this and other fix maybe belong in mutator.SimpleLoopWarpSwapper?

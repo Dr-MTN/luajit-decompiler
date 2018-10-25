@@ -343,6 +343,7 @@ class Block:
         self.first_address = 0
         self.last_address = 0
         self.warpins_count = 0
+        self.loop = None
 
     def _accept(self, visitor):
         visitor._visit_node(visitor.visit_block, self)
@@ -356,7 +357,8 @@ class Block:
         return "{Block: {index: " + str(self.index) + ", warp: " + str(self.warp) + ", contents: " + \
                str(self.contents) + \
                ", first_address: " + str(self.first_address) + ", last_address: " + str(self.last_address) + \
-               ", warpins_count: " + str(self.warpins_count) + "}}"
+               ", warpins_count: " + str(self.warpins_count) + \
+               ", loop: " + str(self.loop) + "}}"
 
 
 class UnconditionalWarp:
@@ -397,8 +399,9 @@ class ConditionalWarp:
         visitor._leave_node(visitor.leave_conditional_warp, self)
 
     def __str__(self):
-        return "{ConditionalWarp: { condition: " + str(self.condition) + ", true_target: " + str(self.true_target) + \
-               ", false_target: " + str(self.false_target) + "} }"
+        return "{ConditionalWarp: { condition: " + str(self.condition) + ", true_target: " + str(
+            self.true_target.__class__) + \
+               ", false_target: " + str(self.false_target.__class__) + "} }"
 
 
 class IteratorWarp:
