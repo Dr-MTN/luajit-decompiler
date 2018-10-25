@@ -42,6 +42,7 @@ class _State:
         self.current_statement = STATEMENT_NONE
         self.function_name = None
         self.function_local = False
+        self.function_method = False
 
 
 class Visitor(traverse.Visitor):
@@ -90,6 +91,7 @@ class Visitor(traverse.Visitor):
 
     def visit_function_definition(self, node):
         is_statement = self._state().function_name is not None
+        is_method = self._state().function_method
 
         if is_statement:
             self._start_statement(STATEMENT_FUNCTION)
@@ -99,7 +101,13 @@ class Visitor(traverse.Visitor):
 
             self._write("function ")
 
-            self._visit(self._state().function_name)
+            fn = self._state().function_name
+            if is_method:
+                self._visit(fn.table)
+                self._write(":")
+                self._write(fn.key)
+            else:
+                self._visit(fn)
 
             self._write("(")
 
@@ -107,7 +115,18 @@ class Visitor(traverse.Visitor):
         else:
             self._write("function (")
 
-        self._visit(node.arguments)
+        args = node.arguments
+
+        # If this is a method, remove the "self" argument
+        if is_method:
+            # AFAIK we don't ever use the args again, and if we
+            #  use a new args object then the original one gets written later on
+            orig = args.contents
+            args.contents = orig[1:]
+
+            assert orig[0].name == "self"
+
+        self._visit(args)
 
         self._write(")")
 
@@ -210,6 +229,7 @@ class Visitor(traverse.Visitor):
                 if dst_is_simple:
                     self._state().function_name = dst
                     self._state().function_local = is_local
+                    self._state().function_method = self._is_method(dst, src)
 
                     self._visit(src)
 
@@ -278,6 +298,21 @@ class Visitor(traverse.Visitor):
 
         # Finally, recurse up the chain
         return self._is_acceptable_func_dst(dst.table)
+
+    def _is_method(self, dst, func):
+        if not func.arguments.contents:
+            return False
+
+        selfarg = func.arguments.contents[0]
+
+        if selfarg.name != "self":
+            return False
+
+        # Ensure the destination is on a table
+        if not isinstance(dst, nodes.TableElement):
+            return False
+
+        return True
 
     @staticmethod
     def _is_builtin(node):
