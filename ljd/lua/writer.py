@@ -342,32 +342,23 @@ class Visitor(traverse.Visitor):
 
         binop = nodes.BinaryOperator
 
+        # Rules for braces:
+        #  * A group MUST be braced if it is of a lower precedence (eg, if a * has a +, then the + must be braced)
+        #  * Braces are unnecessary if the group has a higher precedence
+        #  * If a group is of the same precedence, it must be braced if it is not on the associative side - so
+        #     `(a * b) / (c * d)` comes out to `a * b / (c * d)`
+
         if is_left_op:
-            if node.type <= binop.T_LOGICAL_AND:
-                left_parentheses = (
-                                           node.left.type <= node.type
-                                           or (node.left.type <= binop.T_LOGICAL_AND
-                                               and node.type <= binop.T_LOGICAL_AND)
-                                   ) and node.left.type != node.type
+            if node.is_right_associative():
+                left_parentheses = node.left.precedence() <= node.precedence()
             else:
-                left_parentheses = (
-                        node.left.type < node.type
-                        or (node.left.type == node.type == node.T_POW)
-                )
+                left_parentheses = node.left.precedence() < node.precedence()
 
         if is_right_op:
-            if node.type <= nodes.BinaryOperator.T_LOGICAL_AND:
-                right_parentheses = (
-                                            node.right.type <= node.type
-                                            or (node.right.type <= binop.T_LOGICAL_AND
-                                                and node.type <= binop.T_LOGICAL_AND)
-                                    ) and node.right.type != node.type
+            if node.is_right_associative():
+                right_parentheses = node.right.precedence() < node.precedence()
             else:
-                right_parentheses = (
-                        node.right.type < node.type
-                        or (node.right.type == node.type
-                            and node.type in (node.T_DIVISION, node.T_SUBTRACT))
-                )
+                right_parentheses = node.right.precedence() <= node.precedence()
 
         if left_parentheses:
             self._write("(")
