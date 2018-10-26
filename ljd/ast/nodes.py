@@ -204,8 +204,11 @@ class BinaryOperator:
         elif self.type <= self.T_CONCAT:
             return False
 
-        elif self.type <= self.T_SUBTRACT:
+        elif self.type <= self.T_ADD:
             return True
+
+        elif self.type <= self.T_SUBTRACT:
+            return False
 
         elif self.type <= self.T_MULTIPLY:
             return True
