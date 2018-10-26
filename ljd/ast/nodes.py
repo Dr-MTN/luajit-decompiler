@@ -127,6 +127,16 @@ class BinaryOperator:
 
     T_POW = 70  # left ^ right
 
+    # Precedences are shared with UnaryOperator
+    PR_OR = 1
+    PR_AND = 2
+    PR_COMPARISON = 3
+    PR_CONCATENATE = 4
+    PR_MATH_ADDSUB = 5
+    PR_MATH = 6
+    PR_UNARY = 7
+    PR_EXPONENT = 8
+
     def __init__(self):
         self.type = -1
         self.left = None
@@ -139,6 +149,71 @@ class BinaryOperator:
         visitor._visit(self.right)
 
         visitor._leave_node(visitor.leave_binary_operator, self)
+
+    # Use this instead of the type field, as stuff like + and - have the same precedence this way
+    def precedence(self):
+        # Note that print(1 or 2 and false) prints 1
+        if self.type <= self.T_LOGICAL_OR:
+            return BinaryOperator.PR_OR
+
+        elif self.type <= self.T_LOGICAL_AND:
+            return BinaryOperator.PR_AND
+
+        elif self.type <= self.T_EQUAL:
+            return BinaryOperator.PR_COMPARISON
+
+        elif self.type <= self.T_CONCAT:
+            return BinaryOperator.PR_CONCATENATE
+
+        elif self.type <= self.T_SUBTRACT:
+            return BinaryOperator.PR_MATH_ADDSUB
+
+        elif self.type <= self.T_MOD:
+            return BinaryOperator.PR_MATH
+
+        elif self.type <= self.T_POW:
+            return BinaryOperator.PR_EXPONENT
+
+        else:
+            assert False
+
+    def is_right_associative(self):
+        if self.type == self.T_CONCAT:
+            return True
+
+        elif self.type == self.T_POW:
+            return True
+
+        else:
+            return False
+
+    def is_commutative(self):
+        if self.type <= self.T_LOGICAL_AND:
+            return True
+
+        elif self.type <= self.T_GREATER_OR_EQUAL:
+            return False
+
+        elif self.type <= self.T_EQUAL:
+            return True
+
+        elif self.type <= self.T_CONCAT:
+            return False
+
+        elif self.type <= self.T_SUBTRACT:
+            return True
+
+        elif self.type <= self.T_MULTIPLY:
+            return True
+
+        elif self.type <= self.T_MOD:
+            return False
+
+        elif self.type <= self.T_POW:
+            return False
+
+        else:
+            assert False
 
 
 class UnaryOperator:
@@ -162,6 +237,9 @@ class UnaryOperator:
         visitor._visit(self.operand)
 
         visitor._leave_node(visitor.leave_unary_operator, self)
+
+    def precedence(self):
+        return BinaryOperator.PR_UNARY
 
 
 class StatementsList:
