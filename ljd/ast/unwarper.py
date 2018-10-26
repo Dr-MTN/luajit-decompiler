@@ -650,7 +650,62 @@ def _compile_expression(body, end, true, false):
         return parts[0]
 
     explicit_parts = _make_explicit_subexpressions(parts)
-    return _assemble_expression(explicit_parts)
+    expr = _assemble_expression(explicit_parts)
+    expr = _optimise_expression(expr)
+    return expr
+
+
+# Rearrange the contents of the expression (without changing it's meaning), to make it easier for the writer
+#  to write without adding unnecessary braces. To do that, ensure that chains of operators appear in the
+#  correct direction - eg, make (1 + (2 + 3)) into ((1 + 2) + 3). This can't be done on non-commutative
+#  operators.
+def _optimise_expression(expr, skip_type=None):
+    if not isinstance(expr, nodes.BinaryOperator):
+        return expr
+
+    type = expr.type
+
+    expr.left = _optimise_expression(expr.left, skip_type=type)
+    expr.right = _optimise_expression(expr.right, skip_type=type)
+
+    # Don't reorganise children of a top-level node that's already being reorganised
+    if skip_type == expr.type:
+        return expr
+
+    # If this operator isn't commutative, we can't rearrange anything for it
+    if not expr.is_commutative():
+        return expr
+
+    # While == and != are commutative, we can't swap them around like this
+    if nodes.BinaryOperator.T_NOT_EQUAL <= expr.type <= nodes.BinaryOperator.T_EQUAL:
+        return expr
+
+    # Don't bother handling right-associative operators for now, since that currently only
+    #  includes the exponent operator, which isn't commutative.
+    if expr.is_right_associative():
+        return expr
+
+    children = _find_binary_operator_children(expr, type)
+
+    expr = children.pop(0)
+    for op in children:
+        next = nodes.BinaryOperator()
+        next.type = type
+        next.left = expr
+        next.right = op
+        expr = next
+
+    return expr
+
+
+def _find_binary_operator_children(op, type):
+    if not isinstance(op, nodes.BinaryOperator):
+        return [op]
+
+    if op.type != type:
+        return [op]
+
+    return _find_binary_operator_children(op.left, type) + _find_binary_operator_children(op.right, type)
 
 
 #
