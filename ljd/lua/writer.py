@@ -360,6 +360,14 @@ class Visitor(traverse.Visitor):
             else:
                 right_parentheses = node.right.precedence() <= node.precedence()
 
+                # If this is either `a + (b + c)`, `a + (b - c)`, `a * (b * c)`, or `a * (b / c)`, we
+                #  can drop the braces:
+                if node.type == binop.T_ADD and binop.T_ADD <= node.right.type <= binop.T_SUBTRACT:
+                    right_parentheses = False
+
+                elif node.type == binop.T_MULTIPLY and binop.T_MULTIPLY <= node.right.type <= binop.T_DIVISION:
+                    right_parentheses = False
+
         if left_parentheses:
             self._write("(")
 
