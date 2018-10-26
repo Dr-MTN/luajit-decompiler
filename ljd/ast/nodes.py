@@ -179,7 +179,11 @@ class BinaryOperator:
 
     def is_right_associative(self):
         if self.type == self.T_CONCAT:
-            return True
+            # Although this is right-associative per the Lua manual, since that
+            #  doesn't matter here since `("a" .. "b") .. "c"` is the same as `"a" .. ("b" .. "c")`,
+            #  LuaJIT doesn't consider it to be right-associative and thus groups it accordingly. Hence,
+            #  setting this to True results in unnecessary braces being introduced.
+            return False
 
         elif self.type == self.T_POW:
             return True
