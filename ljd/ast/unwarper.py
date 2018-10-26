@@ -32,7 +32,8 @@ class _StatementsCollector(traverse.Visitor):
 
 def unwarp(node):
     try:
-        _run_step(_fix_loops, node)
+        _run_step(_fix_loops, node, repeat_until=False)
+        _run_step(_fix_loops, node, repeat_until=True)
     except:
         if catch_asserts:
             print("-- Decompilation Error: _run_step(_fix_loops, node)\n", file=sys.stdout)
@@ -1307,9 +1308,8 @@ def _remove_processed_blocks(blocks, boundaries):
 # ##
 
 
-def _fix_loops(blocks):
-    # TODO repeat..until loops
-    loops = _find_all_loops(blocks, repeat_until=False)
+def _fix_loops(blocks, repeat_until):
+    loops = _find_all_loops(blocks, repeat_until=repeat_until)
 
     if len(loops) == 0:
         return blocks
@@ -1326,7 +1326,7 @@ def _fix_loops(blocks):
                 loop_block = block
 
         if not loop_block:
-            blocks = _handle_single_loop(start, end, blocks, False)
+            blocks = _handle_single_loop(start, end, blocks, repeat_until)
             continue
 
         assert loop_block
@@ -1351,7 +1351,10 @@ def _fix_loops(blocks):
         _set_end(body[-1])
         _unwarp_breaks(start, body, end)
 
-        blocks = blocks[:body_start_index] + [block] + blocks[end_index:]
+        if body_start_index == start_index:
+            blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
+        else:
+            blocks = blocks[:body_start_index] + [block] + blocks[end_index:]
 
         for i, block in enumerate(body):
             warp = block.warp
@@ -1362,10 +1365,9 @@ def _fix_loops(blocks):
             if isinstance(warp, nodes.ConditionalWarp):
                 assert warp.true_target in body
                 assert warp.false_target in body
-            else:
-                target = _get_target(warp, True)
-                if target:
-                    assert target in body
+            elif isinstance(warp, nodes.UnconditionalWarp):
+                if warp.target:
+                    assert warp.target in body
 
     for i, block in enumerate(blocks):
         warp = block.warp
