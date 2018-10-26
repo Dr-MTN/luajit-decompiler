@@ -208,10 +208,19 @@ def _eliminate_iterators(iterators):
         if warp in processed_warps:
             continue
 
+        # Handle `for a in b` where `b` is a variable, or indexing a table (`a.b`)
+        # In those cases, the first element in cts will be whatever we should iterate
+        #  over, and assignment.destination.contents will only contain two items
+        pre = None
+        cts = warp.controls.contents
+        if len(assignment.destinations.contents) == 2 and len(cts) == 3:
+            pre = [cts[0]]
+            cts = cts[1:]
+
         for i, slot in enumerate(assignment.destinations.contents):
-            if hasattr(warp.controls.contents[i], "slot"):
+            if hasattr(cts[i], "slot"):
                 try:
-                    assert warp.controls.contents[i].slot == slot.slot
+                    assert cts[i].slot == slot.slot
                 except (AttributeError, AssertionError):
                     if catch_asserts:
                         setattr(assignment, "_decompilation_error_here", True)
@@ -220,7 +229,7 @@ def _eliminate_iterators(iterators):
                     else:
                         raise
 
-        warp.controls.contents = [src]
+        warp.controls.contents = pre or [src]
         processed_warps.add(warp)
 
         _mark_invalidated(assignment)
