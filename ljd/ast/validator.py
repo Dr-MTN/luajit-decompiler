@@ -221,8 +221,11 @@ class Visitor(traverse.Visitor):
         self._set_restrictions(EXPRESSION_TYPES)
 
     def visit_function_call(self, node):
+        # Originally node.function had to be a variable type, but that's too strict - something
+        #  like `loadstring(...)()` is perfectly valid.
+
         self._set_restrictions({
-            node.function: VARIABLE_TYPES,
+            node.function: EXPRESSION_TYPES,
             node.arguments: nodes.ExpressionsList
         })
 
