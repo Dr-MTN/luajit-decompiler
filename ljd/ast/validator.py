@@ -72,6 +72,10 @@ VARIABLE_TYPES = (
     nodes.MULTRES  # It's not valid here, but it is a hack anyway...
 )
 
+IDENTIFIER = (
+    nodes.Identifier,
+)
+
 WARP_TYPES = (
     nodes.UnconditionalWarp,
     nodes.ConditionalWarp,
@@ -313,7 +317,7 @@ class Visitor(traverse.Visitor):
         self._set_restrictions({
             node.expressions: nodes.ExpressionsList,
             node.statements: nodes.StatementsList,
-            node.variable: VARIABLE_TYPES
+            node.variable: IDENTIFIER
         })
 
     def visit_iterator_for(self, node):
