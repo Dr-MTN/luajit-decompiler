@@ -431,17 +431,59 @@ def _find_expressions(start, body, end):
     is_local = False
     sure_expression = False
 
-    while i < len(extbody):
-        block = extbody[i]
+    # Note the subexpression processing here has been rewritten from earlier versions - there
+    #  used to be a problem where the following code:
+    #
+    # if a then
+    #  if b then
+    #   c()
+    #  end
+    #  d = e or f -- note, you need two of these
+    #  g = h or i
+    # end
+    #
+    # Would come out as the following:
+    #
+    # if a then
+    #  if b then
+    #   c()
+    #   d = e or f
+    #   g = h or i
+    #  end
+    # end
+    #
+    # It seems the processing wasn't taking note of the second (index=1) block, and
+    #  this led to everything getting merged together. In the end it became quicker to
+    #  rewrite the subexpression code, and avoid processing blocks already done so as part
+    #  of the subexpression checks. So far I have not seen any issues with this, but if you find
+    #  any (which isn't unlikely), please report it.
+    #
+    # Rewriting it also had the nice side-effect of cleaning up the code somewhat, since it's
+    #  significantly shorter, easier to read readable, and should in fact run faster too.
 
-        subs = _find_subexpressions(block, body[i:])
+    while i < len(extbody):
+        current_i = i
+        i += 1
+        block = extbody[current_i]
+
+        subs = []
+
+        # Look for a self-contained conditional, and process that, then skip
+        #  over it.
+        branch_end = _find_branching_end(extbody[current_i:], None)
+        if branch_end and branch_end in extbody:
+            be_index = extbody.index(branch_end)
+            i = be_index
+
+            body = extbody[current_i+1:be_index]
+            subs = _find_expressions(block, body, branch_end)
 
         if len(subs) != 0:
             endest_end = _find_endest_end(subs)
             new_i = extbody.index(endest_end)
 
             # Loop? No way!
-            if new_i <= i:
+            if new_i <= current_i:
                 return expressions
 
             # It should end with a conditional warp if that's
@@ -478,7 +520,6 @@ def _find_expressions(start, body, end):
                 return []
 
         if len(block.contents) == 0:
-            i += 1
             continue
 
         if block != start and len(block.contents) > 1:
@@ -488,7 +529,6 @@ def _find_expressions(start, body, end):
 
         if not isinstance(assignment, nodes.Assignment):
             if block == start:
-                i += 1
                 continue
 
             return expressions
@@ -497,7 +537,6 @@ def _find_expressions(start, body, end):
 
         if len(destinations) != 1:
             if block == start:
-                i += 1
                 continue
 
             return expressions
@@ -506,14 +545,12 @@ def _find_expressions(start, body, end):
 
         if not isinstance(dst, nodes.Identifier):
             if block == start:
-                i += 1
                 continue
 
             return expressions
 
         if isinstance(block.warp, nodes.ConditionalWarp):
             if block == start:
-                i += 1
                 continue
 
             return expressions
@@ -538,8 +575,6 @@ def _find_expressions(start, body, end):
 
             return []
 
-        i += 1
-
     if slot < 0:
         return []
 
@@ -555,19 +590,6 @@ def _find_expressions(start, body, end):
         return expressions
 
     return expressions + [(start, end, slot, slot_type)]
-
-
-def _find_subexpressions(start, body):
-    try:
-        body, end, _end_index = _extract_if_body(0, [start] + body, None)
-    except ValueError:
-        # a warp target is not in a list
-        return []
-
-    if body is None:
-        return []
-
-    return _find_expressions(start, body, end)
 
 
 def _get_simple_local_assignment_slot(start, body, end):
