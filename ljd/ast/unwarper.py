@@ -1867,6 +1867,28 @@ def _find_all_loops(blocks, repeat_until):
     # Duplicates are NOT possible
     loops = []
 
+    # If two points jump back to the same start, they must (if you know of any
+    #  exceptions to this, please let me know) be the same loop, and all but the
+    #  last jump are LuaJIT-generated 'continue' statements. These are almost
+    #  always conditional jumps, but there is one case I know of which bucks this:
+    #
+    # while a do
+    #  if b then
+    #   ...
+    #  elseif c
+    #   ...
+    #  end
+    # end
+    #
+    # Without anything after the if/else statement, the compiler will place an unconditional
+    #  jump from the end of the true block back to the start of the loop
+    # This keeps track of the loops starting at each potential index, and if
+    #  we find a jump to this point, check it and if so remove that loop.
+    #
+    # This is also not removed by _cleanup_breaks_and_if_ends, for some reason. However it may
+    #  end up being possible to remove that pass altogether, and doing it here is simpler.
+    starts = dict()
+
     i = 0
 
     while i < len(blocks):
@@ -1878,11 +1900,21 @@ def _find_all_loops(blocks, repeat_until):
                 i += 1
                 continue
 
-            if warp.target.index <= block.index:
+            start = warp.target
+            if start.index <= block.index:
                 assert not repeat_until
                 assert i < len(blocks) - 1
-                loops.append((warp.target, blocks[i + 1]))
 
+                if start in starts:
+                    pass
+                    loops.remove(starts[start])
+
+                loops.append((start, blocks[i + 1]))
+                starts[start] = loops[-1]
+
+        # The inline continues mentioned above shouldn't be an issue here, since they
+        #  will all be removed during the first pass, and point forwards to their new
+        #  EndWarp-containing nodes
         elif repeat_until and isinstance(warp, nodes.ConditionalWarp):
             if warp.false_target.index > block.index:
                 i += 1
