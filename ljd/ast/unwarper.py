@@ -418,9 +418,6 @@ def _find_expressions(start, body, end):
     # Explicitly allow the local a = x ~= "b" case
     slot, slot_type = _get_simple_local_assignment_slot(start, body, end)
 
-    if slot >= 0:
-        return [(start, end, slot, slot_type)]
-
     expressions = []
 
     # We have something at the end, but not the true/false?
