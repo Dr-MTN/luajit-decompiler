@@ -1607,6 +1607,10 @@ def _cleanup_breaks_and_if_ends(loops, blocks):
 
                     blocks.insert(current_end_i, last)
 
+                assert not last.contents
+                assert isinstance(last.warp, nodes.UnconditionalWarp)
+                assert last.warp.target == start
+
                 warp.target = last
         else:
             fixed.append((start, end))
