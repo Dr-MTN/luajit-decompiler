@@ -1462,6 +1462,14 @@ def _fix_loops(blocks, repeat_until):
 
         body_start_index = blocks.index(loop_block)
 
+        # Skip the LOOP (or similar) instruction
+        # Note that is it guaranteed that there will only be repeat...until loops if
+        #  repeat_until is set, due to `assert not repeat_until` in _find_all_loops
+        # Also note we don't do this in repeat...until loops is that their first block
+        #  contains the user's code, and skipping this would omit that
+        if body_start_index == start_index and not repeat_until:
+            body_start_index += 1
+
         loop = _unwarp_loop(start, end, expr_body=blocks[start_index:body_start_index], body=blocks[body_start_index:end_index])
         body = loop.statements.contents
 
