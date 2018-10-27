@@ -305,6 +305,12 @@ class Visitor(traverse.Visitor):
 
         selfarg = func.arguments.contents[0]
 
+        # This chokes on functions with their first argument being the vararg symbol
+        #  otherwise, since they don't have a `name` property
+        #  ex. `function myfunc(...)`
+        if not isinstance(selfarg, nodes.Identifier):
+            return False
+
         if selfarg.name != "self":
             return False
 
