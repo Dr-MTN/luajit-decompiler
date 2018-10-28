@@ -95,6 +95,15 @@ def unwarp(node):
             raise
 
     try:
+        _run_step(_cleanup_ast, node)
+        pass
+    except:
+        if catch_asserts:
+            print("-- Decompilation Error: _run_step(_cleanup_ast, node)\n", file=sys.stdout)
+        else:
+            raise
+
+    try:
         _glue_flows(node)
     except:
         if catch_asserts:
@@ -2135,3 +2144,74 @@ def _get_previous_block(block, blocks):
     assert block_index > 0
 
     return blocks[block_index - 1]
+
+
+# Remove any unnecessary empty blocks (ie, those which are only flowed into once), and
+#  merge any two blocks where the first flows into the second, and only the first warps to
+#  the second.
+def _cleanup_ast(blocks):
+    next_i = 0
+    while next_i < len(blocks):
+        i = next_i
+        next_i += 1
+        block = blocks[i]
+
+        # Skip the first block, don't want to touch it for now
+        if i == 0:
+            continue
+
+        targets = _find_warps_to(blocks, block)
+
+        assert targets
+
+        if len(targets) != 1:
+            continue
+
+        src = targets[0]
+        warp = src.warp
+
+        if not isinstance(warp, nodes.UnconditionalWarp):
+            continue
+
+        if warp.type != nodes.UnconditionalWarp.T_FLOW:
+            continue
+
+        assert blocks.index(src) == i - 1
+
+        # Move the to-be-deleted block's contents over
+        src.contents += block.contents
+        src.warp = block.warp
+        src.last_address = block.last_address
+
+        blocks.remove(block)
+
+        # Because we're deleting this block, we need to stay at the
+        #  same index since the list moved back
+        next_i = i
+
+    # Now that everything is nicely packed together, the code to eliminate temporary variables that
+    #  are used in the input part of a for..in loop should be able to get everything.
+    slotworks.eliminate_temporary(blocks[0])
+
+    return blocks
+
+
+def _find_warps_to(blocks, target):
+    sources = []
+
+    for block in blocks:
+        warp = block.warp
+
+        if isinstance(warp, nodes.UnconditionalWarp):
+            if warp.target == target:
+                sources.append(block)
+        elif isinstance(warp, nodes.ConditionalWarp):
+            if warp.false_target == target or warp.true_target == target:
+                sources.append(block)
+        elif isinstance(warp, nodes.EndWarp):
+            pass
+        else:
+            if warp.way_out == target or warp.body == target:
+                sources.append(block)
+
+    return sources
