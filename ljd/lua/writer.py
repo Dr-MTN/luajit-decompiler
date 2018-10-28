@@ -150,41 +150,40 @@ class Visitor(traverse.Visitor):
     def visit_table_constructor(self, node):
         self._write("{")
 
-        if len(node.records.contents) + len(node.array.contents) > 0:
+        # These are both delt with in the contents array, no need to visit them separately
+        self._skip(node.array)
+        self._skip(node.records)
+
+        contents = node.array.contents + node.records.contents
+
+        if len(node.array.contents) > 0:
+            # Since we're using array+records in that order, the first
+            #  array item is also the first combined item.
+            first = contents.pop(0).value
+
+            if not isinstance(first, nodes.Primitive) or first.type != first.T_NIL:
+                record = nodes.TableRecord()
+                record.key = nodes.Constant()
+                record.key.type = nodes.Constant.T_INTEGER
+                record.key.value = 0
+                record.value = first
+
+                contents.insert(0, record)
+
+        if len(contents) == 1 and False:
+            # TODO enable as part of a TdlQ-emulation option
+            self._visit(contents[0])
+        elif len(contents) > 0:
             self._end_line()
 
             self._start_block()
 
-            array = node.array.contents
-            records = node.records.contents
-
             all_records = nodes.RecordsList()
-            all_records.contents = array + records
-
-            if len(array) > 0:
-                first = array[0].value
-
-                all_records.contents.pop(0)
-
-                if not isinstance(first, nodes.Primitive) \
-                        or first.type != first.T_NIL:
-                    record = nodes.TableRecord()
-                    record.key = nodes.Constant()
-                    record.key.type = nodes.Constant.T_INTEGER
-                    record.key.value = 0
-                    record.value = first
-
-                    all_records.contents.insert(0, record)
+            all_records.contents = contents
 
             self._visit(all_records)
 
-            self._skip(node.array)
-            self._skip(node.records)
-
             self._end_block()
-        else:
-            self._skip(node.array)
-            self._skip(node.records)
 
         self._write("}")
 
