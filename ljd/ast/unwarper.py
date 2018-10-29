@@ -332,6 +332,8 @@ def _unwarp_expressions_pack(blocks, pack):
         body = blocks[start_index + 1:end_index]
 
         try:
+            # Find the subexpression, and place it into the first block. After this
+            #  point, the body of the subexpression is no longer needed.
             _unwarp_logical_expression(start, end, body)
         except (AssertionError, IndexError):
             if catch_asserts:
@@ -341,48 +343,72 @@ def _unwarp_expressions_pack(blocks, pack):
             else:
                 raise
 
-        statements = start.contents + end.contents
+        # Note that from here on, this function has basically been rewritten
+        #  in order to support subexpressions in subexpressions - eg:
+        #
+        # a = a and a[c or d]
+        #
+        # and this affected function calls too:
+        #
+        # a = a and a(c or d)
+        #
+        # These were generating results such as:
+        #
+        # if a then
+        #  slot0 = a[c or d]
+        # end
+        # a = slot0
+        #
+        # (Actually this isn't it directly - it's to work with a modification
+        #   made to _find_expressions, but this is where most of the changes occur)
 
-        if slot_type == nodes.Identifier.T_SLOT:
-            min_i = len(start.contents)
-            split_i = _split_by_slot_use(statements, min_i,
-                                         end.warp, slot)
-        else:
-            split_i = len(start.contents)
+        # Now the subexpression is gone, the start should warp to the block
+        #  directly after the end of the subexpression, which is where the flow
+        #  would have ended up anyway.
+        _set_flow_to(start, end)
 
-        max_i = len(statements)
+        # Leave the starting block in for now, but delete the rest of
+        #  the body since we need to do so anyway and not doing so now
+        #  will result in it ending up in end_warps
+        del blocks[start_index + 1:end_index]
 
-        if split_i > max_i:
+        # Here, we have to act in two different potential ways:
+        #  - If there is an if condition that skips this subexpression and jumps straight to end, we
+        #     should leave the expression in start, and leave end alone
+        #  - If nothing else is referring to end, we should move the subexpression to it and delete the
+        #     start node, compacting things down to ensure it gets used correctly later, in an enclosing
+        #     subexpression.
+        #
+        # To do this, look for any nodes warping to the end block
+        end_warps = _find_warps_to(blocks, end)
+
+        # This should contain start, at the very least
+        assert start in end_warps
+
+        if start_index > 0:
+            preceding_block = blocks[start_index - 1]
+            if hasattr(preceding_block, "warp") \
+                     and isinstance(preceding_block.warp, nodes.UnconditionalWarp):
+                target_index = blocks.index(_get_target(preceding_block.warp))
+
+                if target_index in range(start_index + 1, end_index - 1):
+                    continue
+
+        if len(end_warps) == 1:
+            # Nothing (aside from the start block) is referring to the end block, thus it's safe
+            #  to merge them.
+
             end.contents = start.contents + end.contents
             start.contents = []
 
-            blocks = blocks[:start_index] + blocks[end_index:]
+            del blocks[start_index]
 
             _replace_targets(blocks, start, end)
 
             replacements[start] = end
 
             slotworks.eliminate_temporary(end)
-
-            _set_flow_to(start, end)
         else:
-            if start_index > 0:
-                preceding_block = blocks[start_index - 1]
-                if hasattr(preceding_block, "warp") \
-                        and isinstance(preceding_block.warp, nodes.UnconditionalWarp):
-                    target_index = blocks.index(_get_target(preceding_block.warp))
-                    if target_index in range(start_index + 1, end_index - 1):
-                        continue
-
-            blocks = blocks[:start_index + 1] + blocks[end_index:]
-
-            start.contents = statements[:split_i]
-            end.contents = statements[split_i:]
-
-            # We need to kill the start's warp before slot
-            # elimination or it could result in a cycled AST.
-            _set_flow_to(start, end)
-
             slotworks.eliminate_temporary(start)
 
     return blocks
@@ -515,8 +541,7 @@ def _find_expressions(start, body, end):
             new_i = extbody.index(endest_end)
 
             # Loop? No way!
-            if new_i <= current_i:
-                return expressions
+            assert new_i > current_i
 
             # It should end with a conditional warp if that's
             # really a subexpression-as-operand
