@@ -547,8 +547,11 @@ def _find_expressions(start, body, end):
             # really a subexpression-as-operand
             end_warp = endest_end.warp
 
-            if not isinstance(end_warp, nodes.ConditionalWarp):
-                return expressions
+            # If any of the subexpressions are put into local variables, then this
+            #  must be an if block, rather than an expression.
+            for _, _, sub_slot, sub_slot_type in subs:
+                if sub_slot_type == nodes.Identifier.T_LOCAL:
+                    return expressions
 
             expressions = subs + expressions
             i = new_i
