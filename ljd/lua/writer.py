@@ -468,6 +468,11 @@ class Visitor(traverse.Visitor):
 
         self._push_state()
 
+        # TODO enable only in 'TdlQ emulation mode'
+        if len(node.contents) == 1 and isinstance(node.contents[0], nodes.NoOp):
+            self._write("-- Nothing")
+            self._end_line()
+
     def leave_statements_list(self, node):
         self._pop_state()
 
