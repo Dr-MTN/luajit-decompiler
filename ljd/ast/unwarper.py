@@ -30,6 +30,14 @@ class _StatementsCollector(traverse.Visitor):
             self.result.append(node)
 
 
+class _FunctionsCollector(traverse.Visitor):
+    def __init__(self):
+        super().__init__()
+        self.result = []
+
+    def visit_function_definition(self, node):
+        self.result.append(node)
+
 def unwarp(node):
     try:
         _run_step(_fix_loops, node, repeat_until=False)
@@ -91,6 +99,14 @@ def unwarp(node):
         else:
             raise
 
+    try:
+        _trim_redundant_returns(node)
+    except:
+        if catch_asserts:
+            print("-- Decompilation Error: _trim_redundant_returns(node)\n", file=sys.stdout)
+        else:
+            raise
+
 
 def _run_step(step, node, **kargs):
     for statements in _gather_statements_lists(node):
@@ -141,6 +157,25 @@ def _glue_flows(node):
 
         if hasattr(blocks[-1], "contents"):  # TODO(yzg): 'Return' object has no attribute 'contents'
             statements.contents = blocks[-1].contents
+
+
+# Delete returns on the last line of a function, when those returns don't have any arguments
+def _trim_redundant_returns(node):
+    collector = _FunctionsCollector()
+    traverse.traverse(collector, node)
+
+    for funcdef in collector.result:
+        statements = funcdef.statements.contents
+
+        if not statements:
+            continue
+
+        # If there is an empty return block at the end of this
+        last = statements[-1]
+
+        if isinstance(last, nodes.Return):
+            if not last.returns.contents:
+                del statements[-1]
 
 
 # ##
