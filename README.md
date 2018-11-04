@@ -100,3 +100,18 @@ There is a lot of work to do. In order of priority:
 	   Simple enough in case of non-stripped bytecode, but a bit
 	   harder otherwise.
 
+Licence:
+---
+
+The original LJD (and Aussiemon's modifications) are distributed under the MIT licence, and a
+copy of this is included as `LICENSE-upstream`. However, all changes made by myself
+(Campbell "ZNixian" Suter) are licenced under the GNU General Public Licence, version 3 or any later
+version of your choice (a copy of which is available in the `LICENSE` file supplied with the source code).
+
+I've chosen this license due to certain dynamics of the videogame modding scene for which these changes
+were made. If you have a use for this outside of games, and need a less restrictive licence, please let me know
+and I'll most likely be fine to relicence the project either to MIT or (preferrably) LGPL.
+
+Also note that while this licence did not appear as my first modification to this project, I did not
+distribute the source before making this change, and never offered those changes under the original licence
+(even if the licence file supplied in those revisions was the original one).
