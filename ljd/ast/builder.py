@@ -91,6 +91,15 @@ def _build_function_blocks(state, instructions):
 
                 block.contents.append(statement)
 
+            # Check if this is a loop
+            opcode = instruction.opcode
+            if ins.LOOP.opcode <= opcode <= ins.JLOOP.opcode:
+                block.loop = True
+            elif ins.FORI.opcode <= opcode <= ins.JFORI.opcode:
+                block.loop = True
+            elif ins.ISNEXT.opcode == opcode:
+                block.loop = True
+
             addr += 1
 
         # walterr this and other fix maybe belong in mutator.SimpleLoopWarpSwapper?
