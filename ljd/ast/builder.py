@@ -16,6 +16,7 @@ class _State:
         self.block = None
         self.blocks = []
         self.block_starts = {}
+        self.header = None
 
     def _warp_in_block(self, addr):
         block = self.block_starts[addr]
@@ -23,17 +24,18 @@ class _State:
         return block
 
 
-def build(prototype):
-    return _build_function_definition(prototype)
+def build(header, prototype):
+    return _build_function_definition(prototype, header)
 
 
-def _build_function_definition(prototype):
+def _build_function_definition(prototype, header):
     node = nodes.FunctionDefinition()
 
     state = _State()
 
     state.constants = prototype.constants
     state.debuginfo = prototype.debuginfo
+    state.header = header
 
     node._upvalues = prototype.constants.upvalue_references
     node._debuginfo = prototype.debuginfo
@@ -670,6 +672,35 @@ def _build_call_arguments(state, addr, instruction):
 
     slot = base + 1
 
+    # LJ_FR2 flag, required for 64-bit LuaJIT
+    # To the best of my knowledge, with this flag enabled there is a empty space on the
+    #  stack between the function and the arguments - when normally you would push the function
+    #  onto the stack followed by arguments, like so:
+    #
+    # /----------
+    # | 0. FUNCTION OBJ
+    # | 1. ARG1
+    # | 2. ARG2
+    # \----------
+    #
+    # With the flag enabled, it would go like so
+    #
+    # /----------
+    # | 0. FUNCTION OBJ
+    # | 1. <unused, reserved for runtime>
+    # | 2. ARG1
+    # | 3. ARG2
+    # \----------
+    #
+    # And thus we have to skip that bit
+    #
+    # (if you're curious about why it does this - it's to allow LuaJIT to store some pointers in the space
+    #  usually used by the stack contents. See https://github.com/LuaJIT/LuaJIT/issues/25#issuecomment-183660706 for
+    #  more information)
+    if state.header.flags.fr2:
+        slot += 1
+        last_argument_slot += 1
+
     while slot <= last_argument_slot:
         argument = _build_slot(state, addr, slot)
         arguments.append(argument)
@@ -804,7 +835,7 @@ def _build_table_element(state, addr, instruction):
 def _build_function(state, slot):
     prototype = state.constants.complex_constants[slot]
 
-    return _build_function_definition(prototype)
+    return _build_function_definition(prototype, state.header)
 
 
 def _build_table_copy(state, slot):

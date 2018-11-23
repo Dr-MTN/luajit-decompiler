@@ -229,7 +229,7 @@ class Main:
 
         # self.ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
-        self.ast = self.ljd.ast.builder.build(prototype)
+        self.ast = self.ljd.ast.builder.build(header, prototype)
 
         assert self.ast is not None
 
