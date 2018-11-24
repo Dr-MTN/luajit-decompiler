@@ -225,7 +225,8 @@ class Main:
 
         if self.options.line_map_output_file:
             with open(self.options.line_map_output_file, "wb") as lm_out:
-                for from_line, to_line in line_map.items():
+                for from_line in sorted(line_map):
+                    to_line = line_map[from_line]
                     lm_out.write(struct.pack("!II", from_line, to_line))
 
         return 0
