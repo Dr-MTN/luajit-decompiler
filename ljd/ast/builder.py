@@ -81,13 +81,17 @@ def _build_function_blocks(state, instructions):
         while addr <= block._last_body_addr:
             instruction = instructions[addr]
 
-            statement = _build_statement(state, addr, instruction)
+            statement, line_marked_elements = _build_statement(state, addr, instruction)
 
             if statement is not None:
                 line = state.debuginfo.lookup_line_number(addr)
 
-                setattr(statement, "_addr", addr)
-                setattr(statement, "_line", line)
+                if not line_marked_elements:
+                    line_marked_elements = []
+
+                for elem in line_marked_elements + [statement]:
+                    setattr(elem, "_addr", addr)
+                    setattr(elem, "_line", line)
 
                 block.contents.append(statement)
 
@@ -422,6 +426,15 @@ def _build_flow_warp(state, addr, instruction):
     return warp, shift
 
 
+def _assignment_marked(func):
+    def decorated(*args, **kwargs):
+        assn = func(*args, **kwargs)
+        assert isinstance(assn, nodes.Assignment)
+        return assn, assn.expressions.contents
+
+    return decorated
+
+
 def _build_statement(state, addr, instruction):
     opcode = instruction.opcode
     A_type = instruction.A_type
@@ -467,9 +480,11 @@ def _build_statement(state, addr, instruction):
         assert opcode == ins.UCLO.opcode or (
                 ins.LOOP.opcode <= opcode <= ins.JLOOP.opcode)
         # NoOp
-        return None
+        # TODO get the line no. for the loop set up
+        return None, None
 
 
+@_assignment_marked
 def _build_var_assignment(state, addr, instruction):
     opcode = instruction.opcode
 
@@ -539,6 +554,7 @@ def _build_var_assignment(state, addr, instruction):
     return assignment
 
 
+@_assignment_marked
 def _build_knil(state, addr, instruction):
     node = _build_range_assignment(state, addr, instruction.A, instruction.CD)
 
@@ -547,6 +563,7 @@ def _build_knil(state, addr, instruction):
     return node
 
 
+@_assignment_marked
 def _build_global_assignment(state, addr, instruction):
     assignment = nodes.Assignment()
 
@@ -559,6 +576,7 @@ def _build_global_assignment(state, addr, instruction):
     return assignment
 
 
+@_assignment_marked
 def _build_table_assignment(state, addr, instruction):
     assignment = nodes.Assignment()
 
@@ -571,6 +589,7 @@ def _build_table_assignment(state, addr, instruction):
     return assignment
 
 
+@_assignment_marked
 def _build_table_mass_assignment(state, addr, instruction):
     assignment = nodes.Assignment()
 
@@ -591,6 +610,8 @@ def _build_call(state, addr, instruction):
     call.function = _build_slot(state, addr, instruction.A)
     call.arguments.contents = _build_call_arguments(state, addr, instruction)
 
+    line_marked = [call]
+
     if instruction.opcode <= ins.CALL.opcode:
         if instruction.B == 0:
             node = nodes.Assignment()
@@ -608,10 +629,12 @@ def _build_call(state, addr, instruction):
         assert instruction.opcode <= ins.CALLT.opcode
         node = nodes.Return()
         node.returns.contents.append(call)
+        line_marked.append(node)
 
-    return node
+    return node, line_marked
 
 
+@_assignment_marked
 def _build_vararg(state, addr, instruction):
     base = instruction.A
     last_slot = base + instruction.B - 2
@@ -647,7 +670,7 @@ def _build_return(state, addr, instruction):
     if instruction.opcode == ins.RETM.opcode:
         node.returns.contents.append(nodes.MULTRES())
 
-    return node
+    return node, [node] + node.returns.contents
 
 
 def _build_call_arguments(state, addr, instruction):
