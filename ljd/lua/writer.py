@@ -54,6 +54,8 @@ class Visitor(traverse.Visitor):
         self._visited_nodes = [set()]
         self._states = [_State()]
 
+        self.line_token_map = {}
+
     # ##
 
     def _start_statement(self, statement):
@@ -888,19 +890,30 @@ class Visitor(traverse.Visitor):
             self._write("-- Decompilation error in this vicinity:")
             self._end_line()
 
+        if hasattr(node, "_line") and node._line:
+            line = node._line
+            self.line_token_map[line] = len(self.print_queue)
+
         traverse.Visitor._visit(self, node)
 
         self._visited_nodes.pop()
 
 
-def write(fd, ast):
+def write(fd, ast, generate_linemap=False):
     assert isinstance(ast, nodes.FunctionDefinition)
 
     visitor = Visitor()
 
     traverse.traverse(visitor, ast.statements)
 
-    _process_queue(fd, visitor.print_queue)
+    line_map = {}
+    token_map = _process_queue(fd, visitor.print_queue, visitor.line_token_map.values() if generate_linemap else None)
+
+    if generate_linemap:
+        for inline, tok in visitor.line_token_map.items():
+            line_map[inline] = token_map[tok]
+
+        return line_map
 
 
 def wrapped_write(fd, *objects, sep=' ', end='\n', file=sys.stdout):
@@ -929,19 +942,26 @@ def _get_next_significant(queue, i):
         return CMD_END_BLOCK,
 
 
-def _process_queue(fd, queue):
+def _process_queue(fd, queue, wanted_tokens):
     indent = 0
 
     line_broken = True
 
+    token_map = {}
+    line_num = 1
+
     for i, cmd in enumerate(queue):
         assert isinstance(cmd, tuple)
+
+        if wanted_tokens and i in wanted_tokens:
+            token_map[i] = line_num
 
         if cmd[0] == CMD_START_STATEMENT:
             # assert line_broken
             pass
         elif cmd[0] == CMD_END_STATEMENT:
             wrapped_write(fd, "\n")
+            line_num += 1
             line_broken = True
 
             next_cmd = _get_next_significant(queue, i)
@@ -953,8 +973,10 @@ def _process_queue(fd, queue):
                         or cmd[1] >= STATEMENT_IF \
                         or next_cmd[1] >= STATEMENT_IF:
                     wrapped_write(fd, "\n")
+                    line_num += 1
         elif cmd[0] == CMD_END_LINE:
             wrapped_write(fd, "\n")
+            line_num += 1
             line_broken = True
         elif cmd[0] == CMD_START_BLOCK:
             indent += 1
@@ -979,3 +1001,5 @@ def _process_queue(fd, queue):
                 text = str(fmt)
 
             wrapped_write(fd, text)
+
+    return token_map

@@ -26,6 +26,7 @@
 import logging
 import os
 import sys
+import struct
 from datetime import datetime
 from optparse import OptionParser
 
@@ -115,6 +116,11 @@ class Main:
         parser.add_option("-l", "--enable_logging",
                           action="store_true", dest="enable_logging", default=False,
                           help="log info and exceptions to external file while decompiling")
+
+        # Single file linemap output
+        parser.add_option("--line-map-output",
+                          type="string", dest="line_map_output_file", default="",
+                          help="line map output file for writing", metavar="FILE")
 
         (self.options, args) = parser.parse_args()
 
@@ -210,16 +216,23 @@ class Main:
 
         self.decompile(self.options.file_name)
 
+        generate_linemap = bool(self.options.line_map_output_file)
+
         if self.options.output_file:
-            self.write_file(self.options.output_file)
+            line_map = self.write_file(self.options.output_file, generate_linemap=generate_linemap)
         else:
-            self.ljd.lua.writer.write(sys.stdout, self.ast)
+            line_map = self.ljd.lua.writer.write(sys.stdout, self.ast, generate_linemap=generate_linemap)
+
+        if self.options.line_map_output_file:
+            with open(self.options.line_map_output_file, "wb") as lm_out:
+                for from_line, to_line in line_map.items():
+                    lm_out.write(struct.pack("!II", from_line, to_line))
 
         return 0
 
-    def write_file(self, file_name):
+    def write_file(self, file_name, **kwargs):
         with open(file_name, "w", encoding="utf8") as out_file:
-            self.ljd.lua.writer.write(out_file, self.ast)
+            return self.ljd.lua.writer.write(out_file, self.ast, **kwargs)
 
     def decompile(self, file_in):
         header, prototype = self.ljd.rawdump.parser.parse(file_in)
