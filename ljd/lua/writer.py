@@ -917,12 +917,17 @@ def write(fd, ast, generate_linemap=False):
 
 
 def wrapped_write(fd, *objects, sep=' ', end='\n', file=sys.stdout):
-    enc = file.encoding
-    if enc == 'UTF-8':
-        fd.write(*objects)
-    else:
-        f = lambda obj: str(obj).encode(enc, errors='backslashreplace').decode(enc)
-        fd.write(*map(f, objects))
+    # TODO find out why this was added (asking Aussiemon might be a good place to start)
+    # For now, just write it without reencoding
+    # Also, it made the output platform-dependant, rather than being identical across platforms
+    fd.write(*objects)
+
+    # enc = fd.encoding
+    # if enc == 'UTF-8':
+    #     fd.write(*objects)
+    # else:
+    #     f = lambda obj: str(obj).encode(enc, errors='backslashreplace').decode(enc)
+    #     fd.write(*map(f, objects))
 
 
 def _get_next_significant(queue, i):
