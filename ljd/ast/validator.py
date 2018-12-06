@@ -228,7 +228,7 @@ class Visitor(traverse.Visitor):
             node.function: EXPRESSION_TYPES,
             node.arguments: nodes.ExpressionsList
         })
-        assert node._line
+        assert node._line is not None
 
     # ##
 
@@ -302,7 +302,7 @@ class Visitor(traverse.Visitor):
 
     def visit_return(self, node):
         self._set_restrictions(nodes.ExpressionsList)
-        assert node._line
+        assert node._line is not None
 
     # ##
 
