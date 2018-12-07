@@ -558,9 +558,34 @@ def _find_expressions(start, body, end):
 
             # If any of the subexpressions are put into local variables, then this
             #  must be an if block, rather than an expression.
-            for _, _, sub_slot, sub_slot_type in subs:
+            for sub_start, sub_end, sub_slot, sub_slot_type in subs:
                 if sub_slot_type == nodes.Identifier.T_LOCAL:
                     return expressions
+
+                # Search the body of the subexpression - if it contains anything other
+                # than assignments, then it must be an if..end rather than an expression
+                #
+                # Here's an example of something that fails to decompile without this:
+                #
+                # local myvar = nil
+                # if test_var then
+                #         unrelated_func()
+                #         myvar = (myvar or f()) + var
+                # else
+                #         unrelated_func()
+                #         myvar = (myvar or f()) + var
+                # end
+
+                # Fetch the subexpression body
+                sub_start_i = extbody.index(sub_start)
+                sub_end_i = extbody.index(sub_end)
+                sub_body = extbody[sub_start_i:sub_end_i]
+
+                # And check it
+                for block in sub_body:
+                    for item in block.contents:
+                        if not isinstance(item, nodes.Assignment):
+                            return expressions
 
             expressions = subs + expressions
             i = new_i
