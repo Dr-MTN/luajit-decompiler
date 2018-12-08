@@ -2,11 +2,13 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+import os
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 from ljd.ast.helpers import insert_table_record
 
 catch_asserts = False
+debug_verify = "LJD_DEBUG" in os.environ
 
 
 def eliminate_temporary(ast):
@@ -125,11 +127,12 @@ def _fill_simple_refs(info, simple, tables):
         else:
             is_dst = False
 
-        for tst_info, tst_ref, _ in simple:
-            if tst_info == info:
-                tst_holder = tst_ref.path[-2]
-                assert tst_holder != ref.path[-2]
-                assert tst_holder != holder
+        if debug_verify:
+            for tst_info, tst_ref, _ in simple:
+                if tst_info == info:
+                    tst_holder = tst_ref.path[-2]
+                    assert tst_holder != ref.path[-2]
+                    assert tst_holder != holder
 
         # Could be more then one reference here
         if src_is_table and is_element and is_dst:
