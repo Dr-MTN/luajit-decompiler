@@ -97,10 +97,22 @@ def _fill_simple_refs(info, simple, tables):
 
     src_is_table = isinstance(src, nodes.TableConstructor)
 
+    holders = []
+
     for ref in info.references[1:]:
         holder = _get_holder(ref.path)
 
         is_element = isinstance(holder, nodes.TableElement)
+
+        if is_element:
+            # Fixes an error on this:
+            # local a = tbl[var or 123]:func()
+            # This is due to the compiler only evaluating (var or 123) once, then mov-ing that to
+            # another slot, and this results in two different slot references that have the same holder.
+            if holder in holders:
+                continue
+
+            holders.append(holder)
 
         path_index = ref.path.index(holder)
 
