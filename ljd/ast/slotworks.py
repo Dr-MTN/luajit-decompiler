@@ -97,7 +97,7 @@ def _fill_simple_refs(info, simple, tables):
 
     src_is_table = isinstance(src, nodes.TableConstructor)
 
-    holders = []
+    holders = set()
 
     for ref in info.references[1:]:
         holder = _get_holder(ref.path)
@@ -112,7 +112,7 @@ def _fill_simple_refs(info, simple, tables):
             if holder in holders:
                 continue
 
-            holders.append(holder)
+            holders.add(holder)
 
         path_index = ref.path.index(holder)
 
