@@ -61,19 +61,17 @@ TODO:
 There is a lot of work to do. In order of priority:
 
 0. Logical subexpressions in while statements:
+	This is done! As far as I'm aware, this is the only available LuaJIT decompiler
+	that can decompile stuff like the following:
+
 	```lua
 		while x < (xi and 2 or 3) do
 			print ("Hello crazy world!")
 		end
 	```
 
-	Logical subexpressions (the subexpressions used as operands in
-	ariphmetic or comparison operations inside other expressions) are
-	currently supported only for ifs. To support them for whiles and
-	repeat-untils, the expression unwarping logic should be moved to the
-	very beginning. This won't work without all the fixes in
-	the loop unwarping logic, so we need to split that and move the fixes
-	before expressions, before loops, before ifs. That's not that easy...
+	If you're having many failures while decompiling files via other forks of LJD, this
+	is quite likely going to solve 90% of your problems.
 
 1. AST Mutations:
 	1. Use the line information (or common sense if there is no line
