@@ -522,6 +522,9 @@ class Visitor(traverse.Visitor):
                 placeholder_identifier = "true"
 
             self._write(placeholder_identifier, node.slot)
+        elif not node.name and node.type == nodes.Identifier.T_UPVALUE:
+            placeholder_identifier = "uv{0}"
+            self._write(placeholder_identifier, node.slot)
         else:
             self._write(node.name)
 

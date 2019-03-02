@@ -998,9 +998,9 @@ def _build_identifier(state, addr, slot, want_type):
     if want_type == nodes.Identifier.T_UPVALUE:
         name = state.debuginfo.lookup_upvalue_name(slot)
 
-        if name is not None:
-            node.name = name
-            node.type = want_type
+        # No problem if name is None, that'll be fixed in writer.Visitor.visit_identifier
+        node.name = name
+        node.type = want_type
 
     return node
 
