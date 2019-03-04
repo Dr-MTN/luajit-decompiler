@@ -78,8 +78,23 @@ def _build_function_blocks(state, instructions):
         addr = block.first_address
         state.block = block
 
-        while addr <= block._last_body_addr:
+        while addr <= block.last_address:
             instruction = instructions[addr]
+
+            # Check if this is a loop
+            # We need to do this counting until block.last_address not block._last_body_addr, as otherwise
+            # we'll often miss stuff like FORI instructions that would otherwise be trimmed off.
+            opcode = instruction.opcode
+            if ins.LOOP.opcode <= opcode <= ins.JLOOP.opcode:
+                block.loop = True
+            elif ins.FORI.opcode <= opcode <= ins.JFORI.opcode:
+                block.loop = True
+            elif ins.ISNEXT.opcode == opcode:
+                block.loop = True
+
+            if addr > block._last_body_addr:
+                addr += 1
+                continue
 
             statement, line_marked_elements = _build_statement(state, addr, instruction)
 
@@ -94,15 +109,6 @@ def _build_function_blocks(state, instructions):
                     setattr(elem, "_line", line)
 
                 block.contents.append(statement)
-
-            # Check if this is a loop
-            opcode = instruction.opcode
-            if ins.LOOP.opcode <= opcode <= ins.JLOOP.opcode:
-                block.loop = True
-            elif ins.FORI.opcode <= opcode <= ins.JFORI.opcode:
-                block.loop = True
-            elif ins.ISNEXT.opcode == opcode:
-                block.loop = True
 
             addr += 1
 
