@@ -1444,10 +1444,13 @@ def _fix_loops(blocks, repeat_until):
         start_index = blocks.index(start)
         end_index = blocks.index(end)
 
+        # Try and find the outermost loop-marking block - this indicates the start of the
+        # loop body is the next block.
         loop_block = None
         for block in blocks[start_index:end_index]:
             if block.loop:
                 loop_block = block
+                break
 
         if not loop_block:
             blocks = _handle_single_loop(start, end, blocks, repeat_until)
