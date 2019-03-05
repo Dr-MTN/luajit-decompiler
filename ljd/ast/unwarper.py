@@ -1452,6 +1452,20 @@ def _fix_loops(blocks, repeat_until):
                 loop_block = block
                 break
 
+        # If this is an iterator loop (for a in b), then there's no body marker (for other types
+        # of loops, block.loop would be set on the last block before the body). In this case, don't
+        # use the detected loop block as that would cause issues, such as in this program:
+        #
+        # for a in b do
+        #   if id then
+        #     for i = c, d, 1 do
+        #       print(i)
+        #     end
+        #   end
+        # end
+        if isinstance(start.warp, nodes.IteratorWarp):
+            loop_block = None
+
         if not loop_block:
             blocks = _handle_single_loop(start, end, blocks, repeat_until)
             continue
