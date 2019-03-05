@@ -89,8 +89,6 @@ def _build_function_blocks(state, instructions):
                 block.loop = True
             elif ins.FORI.opcode <= opcode <= ins.JFORI.opcode:
                 block.loop = True
-            elif ins.ISNEXT.opcode == opcode:
-                block.loop = True
 
             if addr > block._last_body_addr:
                 addr += 1
