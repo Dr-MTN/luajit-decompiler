@@ -1485,29 +1485,7 @@ def _fix_loops(blocks, repeat_until):
         loop = _unwarp_loop(start, end, expr_body=blocks[start_index:body_start_index], body=blocks[body_start_index:end_index])
         body = loop.statements.contents
 
-        block = nodes.Block()
-        block.first_address = body[0].first_address
-        block.last_address = body[-1].last_address
-        block.index = body_start_index
-        block.contents.append(loop)
-
-        block.warp = nodes.UnconditionalWarp()
-        block.warp.type = nodes.UnconditionalWarp.T_FLOW
-        block.warp.target = end
-
-        _replace_targets(blocks, body[0], block)
-
-        # Don't set the _target property of the end block - this will trip up the
-        # verification logic down below in very specific situations.
-        # See https://gitlab.com/znixian/luajit-decompiler/issues/7#note_149912326
-        # for an explanation of why this is a problem.
-        # To elaborate on the 'invalid value' part of the comment: this will normally
-        # (for nested loops) set an invalid _target property for the end block - that is,
-        # it's pointing outside the contents of the loop. This isn't caught by the
-        # validator below, since it's still within the 'blocks' variable.
-        _set_end(body[-1], force_no_target=True)
-
-        _unwarp_breaks(start, body, end)
+        block = _loop_build_block(start, body, end, blocks, loop, body_start_index)
 
         if body_start_index == start_index:
             blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
@@ -1555,10 +1533,17 @@ def _handle_single_loop(start, end, blocks, repeat_until):
     loop = _unwarp_loop(start, end, body)
     body = loop.statements.contents
 
+    block = _loop_build_block(start, body, end, blocks, loop, start.index + 1)
+
+    blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
+    return blocks
+
+
+def _loop_build_block(start, body, end, blocks, loop, block_index):
     block = nodes.Block()
     block.first_address = body[0].first_address
     block.last_address = body[-1].last_address
-    block.index = start.index + 1
+    block.index = block_index
     block.contents.append(loop)
 
     block.warp = nodes.UnconditionalWarp()
@@ -1567,11 +1552,19 @@ def _handle_single_loop(start, end, blocks, repeat_until):
 
     _replace_targets(blocks, body[0], block)
 
-    _set_end(body[-1])
+    # Don't set the _target property of the end block - this will trip up the
+    # verification logic down below in very specific situations.
+    # See https://gitlab.com/znixian/luajit-decompiler/issues/7#note_149912326
+    # for an explanation of why this is a problem.
+    # To elaborate on the 'invalid value' part of the comment: this will normally
+    # (for nested loops) set an invalid _target property for the end block - that is,
+    # it's pointing outside the contents of the loop. This isn't caught by the
+    # validator below, since it's still within the 'blocks' variable.
+    _set_end(body[-1], force_no_target=True)
+
     _unwarp_breaks(start, body, end)
 
-    blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
-    return blocks
+    return block
 
 
 def _unwarp_loops(blocks, repeat_until):
