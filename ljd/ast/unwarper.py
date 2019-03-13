@@ -1497,7 +1497,16 @@ def _fix_loops(blocks, repeat_until):
 
         _replace_targets(blocks, body[0], block)
 
-        _set_end(body[-1])
+        # Don't set the _target property of the end block - this will trip up the
+        # verification logic down below in very specific situations.
+        # See https://gitlab.com/znixian/luajit-decompiler/issues/7#note_149912326
+        # for an explanation of why this is a problem.
+        # To elaborate on the 'invalid value' part of the comment: this will normally
+        # (for nested loops) set an invalid _target property for the end block - that is,
+        # it's pointing outside the contents of the loop. This isn't caught by the
+        # validator below, since it's still within the 'blocks' variable.
+        _set_end(body[-1], force_no_target=True)
+
         _unwarp_breaks(start, body, end)
 
         if body_start_index == start_index:
@@ -1817,10 +1826,10 @@ def _set_flow_to(block, target):
     block.warp.target = target
 
 
-def _set_end(block):
+def _set_end(block, force_no_target=False):
     target = None
 
-    if block.warp is not None:
+    if block.warp is not None and not force_no_target:
         target = _get_target(block.warp, allow_end=True)
 
     block.warp = nodes.EndWarp()
