@@ -25,7 +25,7 @@ How To Use:
 
 Typical usage (no version configuration list, all files in a directory):
 ```
-python ./ljd/main.py --recursive ./<input directory> --dir_out ./<output directory> --catch_asserts
+python3 ./main.py --recursive ./<input directory> --dir_out ./<output directory> --catch_asserts
 ```
 
 
