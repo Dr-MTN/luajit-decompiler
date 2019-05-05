@@ -241,6 +241,22 @@ class Main:
         if not prototype:
             return 1
 
+        # Identify the version of LuaJIT used to compile the file
+        bc_version = None
+        if header.version == 1:
+            bc_version = 2.0
+        elif header.version == 2:
+            bc_version = 2.1
+        else:
+            raise Exception("Unsupported bytecode version: " + str(bc_version))
+
+        # Ensure it matches the selected version
+        version_required = self.check_for_version_config(self.options.file_name)
+        if version_required != bc_version:
+            raise Exception("Incorrect bytecode version: selected {0}, bytecode needs {1}, try "
+                            "adding --jit_version={1} to the command line"
+                            .format(version_required, bc_version))
+
         # self.ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
         self.ast = self.ljd.ast.builder.build(header, prototype)
