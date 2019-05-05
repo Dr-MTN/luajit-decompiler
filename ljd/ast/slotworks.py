@@ -164,6 +164,16 @@ def _eliminate_simple_cases(simple):
         if src is None:
             src = info.assignment.expressions.contents[0]
 
+        # if the assignment's src is FunctionDefinition and references 3 times(one time for assignment,and two
+        # times for call),so marked the identifier to local type and set the name to tmp slot
+        # TODO figure out *why* the functions are ending up here and fix it there
+        if isinstance(src, nodes.FunctionDefinition) and len(info.references) >= 3:
+            first = info.references[0]
+            first.identifier.type = nodes.Identifier.T_LOCAL
+            if first.identifier.name is None:
+                first.identifier.name = 'slot%d' % first.identifier.slot
+            continue
+
         _mark_invalidated(info.assignment)
 
         if isinstance(holder, LIST_TYPES):
