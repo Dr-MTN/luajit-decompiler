@@ -62,7 +62,7 @@ def _process_operand(parser, operand_type, operand):
         return operand
 
 
-def _init():
+def init():
     global _MAP
 
     # from opcode import _OPCODES
@@ -71,8 +71,5 @@ def _init():
     for opcode, instruction in sorted(_OPCODES, key=lambda x: x[0]):
         _MAP[opcode] = instruction
 
-    del globals()["_init"]
+    del globals()["init"]
     del _OPCODES
-
-
-_init()

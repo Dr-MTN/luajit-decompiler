@@ -30,6 +30,16 @@ import struct
 from datetime import datetime
 from optparse import OptionParser
 
+import ljd.rawdump.parser
+import ljd.rawdump.code
+import ljd.pseudoasm.writer
+import ljd.ast.builder
+import ljd.ast.validator
+import ljd.ast.locals
+import ljd.ast.slotworks
+import ljd.ast.unwarper
+import ljd.ast.mutator
+import ljd.lua.writer
 
 def dump(name, obj, level=0):
     indent = level * '\t'
@@ -135,16 +145,8 @@ class Main:
             self.set_version_config(float(self.options.luajit_version))
             sys.path.append(basepath + "/ljd/rawdump/luajit/" + self.options.luajit_version + "/")
 
-        # LuaJIT version is known after the argument is parsed, so delay module import.
-        import ljd.rawdump.parser
-        import ljd.pseudoasm.writer
-        import ljd.ast.builder
-        import ljd.ast.validator
-        import ljd.ast.locals
-        import ljd.ast.slotworks
-        import ljd.ast.unwarper
-        import ljd.ast.mutator
-        import ljd.lua.writer
+        # Now we know the LuaJIT version, initialise the opcodes
+        ljd.rawdump.code.init()
 
         # Send assert catch argument to modules
         if self.options.catch_asserts:
