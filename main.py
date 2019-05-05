@@ -42,6 +42,7 @@ import ljd.ast.unwarper
 import ljd.ast.mutator
 import ljd.lua.writer
 
+
 def dump(name, obj, level=0):
     indent = level * '\t'
 
@@ -83,6 +84,25 @@ class MakeFileHandler(logging.FileHandler):
         logging.FileHandler.__init__(self, filename, *args, **kwargs)
 
 
+def set_luajit_version(bc_version):
+    # If we're already on this version, skip resetting everything
+    if ljd.CURRENT_VERSION == bc_version:
+        return
+
+    ljd.CURRENT_VERSION = bc_version
+    # Now we know the LuaJIT version, initialise the opcodes
+    if bc_version == 2.0:
+        from ljd.rawdump.luajit.v2_0.luajit_opcode import _OPCODES as opcodes
+    elif bc_version == 2.1:
+        from ljd.rawdump.luajit.v2_1.luajit_opcode import _OPCODES as opcodes
+    else:
+        raise Exception("Unknown LuaJIT opcode module name for version " + str(bc_version))
+
+    ljd.rawdump.code.init(opcodes)
+    ljd.ast.builder.init()
+    ljd.pseudoasm.instructions.init()
+
+
 class Main:
     def main(self):
         # Parser arguments
@@ -108,16 +128,6 @@ class Main:
                           type="string", dest="folder_output", default="",
                           help="directory to output decompiled lua scripts", metavar="FOLDER")
 
-        # Global override of LuaJIT version, ignores -j
-        parser.add_option("-j", "--jit_version",
-                          type="string", dest="luajit_version", default="",
-                          help="override LuaJIT version, default 2.1, now supports 2.0, 2.1")
-
-        # 'Profiles' that hardcode LuaJIT versions per file
-        parser.add_option("-v", "--version_config_list",
-                          type="string", dest="version_config_list", default="version_default",
-                          help="LuaJIT version config list to use")
-
         # Prevent most integrity asserts from canceling decompilation
         parser.add_option("-c", "--catch_asserts",
                           action="store_true", dest="catch_asserts", default=False,
@@ -134,23 +144,6 @@ class Main:
                           help="line map output file for writing", metavar="FILE")
 
         (self.options, args) = parser.parse_args()
-
-        # Initialize opcode set for required LuaJIT version
-        basepath = os.path.dirname(sys.argv[0])
-        if basepath == "":
-            basepath = "."
-        if self.options.luajit_version == "":
-            version_required = self.check_for_version_config(self.options.file_name)
-            self.set_version_config(version_required)
-            sys.path.append(basepath + "/ljd/rawdump/luajit/" + str(version_required) + "/")
-        else:
-            self.set_version_config(float(self.options.luajit_version))
-            sys.path.append(basepath + "/ljd/rawdump/luajit/" + self.options.luajit_version + "/")
-
-        # Now we know the LuaJIT version, initialise the opcodes
-        ljd.rawdump.code.init()
-        ljd.ast.builder.init()
-        ljd.pseudoasm.instructions.init()
 
         # Send assert catch argument to modules
         if self.options.catch_asserts:
@@ -179,13 +172,6 @@ class Main:
 
         # Recursive batch processing
         if self.options.folder_name:
-            if self.options.version_config_list != "version_default":
-                print(self.options)
-                print("Version config lists are not supported in recursive directory mode.")
-                if self.options.enable_logging:
-                    logger.info("Exit")
-                return 0
-
             for path, _, filenames in os.walk(self.options.folder_name):
                 for file in filenames:
                     if file.endswith('.lua'):
@@ -240,26 +226,22 @@ class Main:
             return ljd.lua.writer.write(out_file, self.ast, **kwargs)
 
     def decompile(self, file_in):
-        header, prototype = ljd.rawdump.parser.parse(file_in)
+        def on_parse_header(preheader):
+            # Identify the version of LuaJIT used to compile the file
+            bc_version = None
+            if preheader.version == 1:
+                bc_version = 2.0
+            elif preheader.version == 2:
+                bc_version = 2.1
+            else:
+                raise Exception("Unsupported bytecode version: " + str(bc_version))
+
+            set_luajit_version(bc_version)
+
+        header, prototype = ljd.rawdump.parser.parse(file_in, on_parse_header)
 
         if not prototype:
             return 1
-
-        # Identify the version of LuaJIT used to compile the file
-        bc_version = None
-        if header.version == 1:
-            bc_version = 2.0
-        elif header.version == 2:
-            bc_version = 2.1
-        else:
-            raise Exception("Unsupported bytecode version: " + str(bc_version))
-
-        # Ensure it matches the selected version
-        version_required = self.check_for_version_config(self.options.file_name)
-        if version_required != bc_version:
-            raise Exception("Incorrect bytecode version: selected {0}, bytecode needs {1}, try "
-                            "adding --jit_version={1} to the command line"
-                            .format(version_required, bc_version))
 
         # ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
@@ -307,36 +289,6 @@ class Main:
                               file=sys.stdout)
                     else:
                         raise
-
-    def check_for_version_config(self, file_name):
-        import ljd.config.version_config as version_config_file
-
-        # Transform file_name with present working directory
-        if len(file_name) > 0 and file_name[0] == ".":
-            file_name = file_name.replace(".", "", 1)
-        file_name = os.getcwd() + "/" + file_name
-        file_name = file_name.replace("\\", "/")
-        file_name = file_name.replace("//", "/")
-
-        # Get version config list or default
-        try:
-            version_list = version_config_file._LUA_FILE_VERSIONS[self.options.version_config_list]
-        except KeyError:
-            version_list = version_config_file._LUA_FILE_VERSIONS["version_default"]
-
-        # Search for a matching entry
-        for config_entry_name in version_list:
-            if config_entry_name in file_name:
-                self.set_version_config(version_list[config_entry_name])
-                break
-
-        return version_config_file.use_version
-
-    @staticmethod
-    def set_version_config(version_number):
-        import ljd.config.version_config
-        ljd.config.version_config.use_version = version_number
-        ljd.CURRENT_VERSION = version_number
 
 
 if __name__ == "__main__":

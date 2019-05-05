@@ -62,13 +62,10 @@ def _process_operand(parser, operand_type, operand):
         return operand
 
 
-def init():
+def init(opcodes):
     global _MAP
 
-    # from opcode import _OPCODES
-    from luajit_opcode import _OPCODES
-
-    for opcode, instruction in sorted(_OPCODES, key=lambda x: x[0]):
+    for opcode, instruction in sorted(opcodes, key=lambda x: x[0]):
         _MAP[opcode] = instruction
 
         # Set's the opcode's code. This used to be done by the
@@ -76,6 +73,3 @@ def init():
         # ljd.bytecode.instructions._IDef for a description of
         # why this is done.
         instruction.opcode = opcode
-
-    del globals()["init"]
-    del _OPCODES

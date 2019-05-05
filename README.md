@@ -28,6 +28,19 @@ Typical usage (no version configuration list, all files in a directory):
 python3 ./main.py --recursive ./<input directory> --dir_out ./<output directory> --catch_asserts
 ```
 
+Note About Bytecode Versions:
+---
+
+Different versions of LuaJIT produce different versions of the bytecode. Currently revision
+`1` (corresponding to LuaJIT 2.0.x) and revision `2` (corresponding to LuaJIT 2.1.x) are supported.
+
+These are the only two versions officially used in LuaJIT. From time to time I've seen files
+with a revision code of `3` pop up. This appears to be from RaptorJIT, but more investigation
+in that area is needed.
+
+In previous versions of the decompiler, you had to manually specify the version of the files
+you are decompiling. This is now done automatically, although there may be bugs when using
+the `-r` option with files coming from multiple versions of LuaJIT.
 
 Arguments:
 ---
@@ -39,10 +52,6 @@ Arguments:
 "-r", "--recursive" : Directory in which to recurse and process all files. Not to be used with "-f"
 
 "-d", "--dir_out" : Directory to output processed files during recursion. Not to be used with "-f"
-
-"-j", "--jit_version" : Global override of LuaJIT version, ignores -j, currently supports 2.1b3, 2.0
-
-"-v", "--version_config_list" : 'Profiles' that hardcode LuaJIT versions per file, ljd.config.version_config.py
 
 "-c", "--catch_asserts" : Prevent most integrity asserts from canceling decompilation
 

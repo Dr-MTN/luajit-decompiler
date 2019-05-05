@@ -18,7 +18,7 @@ class _State:
         self.prototypes = []
 
 
-def parse(filename):
+def parse(filename, on_parse_header=None):
     parser = _State()
 
     parser.stream.open(filename)
@@ -29,6 +29,10 @@ def parse(filename):
 
     try:
         r = r and _read_header(parser, header)
+
+        if r and on_parse_header:
+            on_parse_header(header)
+
         r = r and _read_prototypes(parser, parser.prototypes)
     except IOError as e:
         errprint("I/O error while reading dump: {0}", str(e))
