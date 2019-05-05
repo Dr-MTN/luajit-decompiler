@@ -123,10 +123,9 @@ def _build_function_blocks(state, instructions):
     return state.blocks
 
 
-_JUMP_WARP_INSTRUCTIONS = {ins.UCLO.opcode, ins.ISNEXT.opcode, ins.JMP.opcode, ins.FORI.opcode, ins.JFORI.opcode}
-
-_WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | {ins.FORL.opcode, ins.IFORL.opcode, ins.JFORL.opcode, ins.ITERL.opcode,
-                                                ins.IITERL.opcode, ins.JITERL.opcode, ins.LOOP.opcode}
+# Set in init() - see it's comment
+_JUMP_WARP_INSTRUCTIONS = None
+_WARP_INSTRUCTIONS = None
 
 
 def _blockenize(state, instructions):
@@ -1333,3 +1332,12 @@ def init():
 
     _COMPARISON_MAP[ins.ISEQP.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
     _COMPARISON_MAP[ins.ISNEP.opcode] = nodes.BinaryOperator.T_EQUAL
+
+    global _JUMP_WARP_INSTRUCTIONS
+    global _WARP_INSTRUCTIONS
+
+    _JUMP_WARP_INSTRUCTIONS = {ins.UCLO.opcode, ins.ISNEXT.opcode, ins.JMP.opcode, ins.FORI.opcode, ins.JFORI.opcode}
+
+    _WARP_INSTRUCTIONS = _JUMP_WARP_INSTRUCTIONS | {ins.FORL.opcode, ins.IFORL.opcode, ins.JFORL.opcode,
+                                                    ins.ITERL.opcode, ins.IITERL.opcode, ins.JITERL.opcode,
+                                                    ins.LOOP.opcode}
