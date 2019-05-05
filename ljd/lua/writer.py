@@ -128,6 +128,15 @@ class Visitor(traverse.Visitor):
 
             assert orig[0].name == "self"
 
+            # Same as above with function_name, set this to false afterwards
+            # This is because it is only set in visit_assignment if it is a
+            # simple assignment. If we have two functions one after the other,
+            # and the first is a method while the other is not but uses
+            # a complex assignment, then this variable will not be reset and
+            # the above assertion will fail, as the writer thinks it is a method.
+            # See https://gitlab.com/znixian/luajit-decompiler/issues/13
+            self._state().function_method = False
+
         self._visit(args)
 
         self._write(")")
