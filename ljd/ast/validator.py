@@ -4,6 +4,7 @@
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
+import ljd
 
 catch_asserts = False
 
@@ -158,14 +159,12 @@ class Visitor(traverse.Visitor):
                or node.type == nodes.BinaryOperator.T_POW
 
     def visit_unary_operator(self, node):
-        import ljd.config.version_config
-
         self._set_restrictions(EXPRESSION_TYPES)
 
         assert node.type == nodes.UnaryOperator.T_NOT \
             or node.type == nodes.UnaryOperator.T_LENGTH_OPERATOR \
             or node.type == nodes.UnaryOperator.T_MINUS \
-            or (ljd.config.version_config.use_version > 2.0
+            or (ljd.CURRENT_VERSION > 2.0
                 and (node.type == nodes.UnaryOperator.T_TOSTRING
                      or node.type == nodes.UnaryOperator.T_TONUMBER))
 

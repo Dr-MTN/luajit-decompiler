@@ -141,6 +141,7 @@ class Main:
             basepath = "."
         if self.options.luajit_version == "":
             version_required = self.check_for_version_config(self.options.file_name)
+            self.set_version_config(version_required)
             sys.path.append(basepath + "/ljd/rawdump/luajit/" + str(version_required) + "/")
         else:
             self.set_version_config(float(self.options.luajit_version))
@@ -335,6 +336,7 @@ class Main:
     def set_version_config(version_number):
         import ljd.config.version_config
         ljd.config.version_config.use_version = version_number
+        ljd.CURRENT_VERSION = version_number
 
 
 if __name__ == "__main__":

@@ -224,15 +224,16 @@ class BinaryOperator:
 
 
 class UnaryOperator:
-    import ljd.config.version_config
-
     T_NOT = 60  # not operand
     T_LENGTH_OPERATOR = 61  # #operand
     T_MINUS = 62  # -operand
 
-    if ljd.config.version_config.use_version > 2.0:
-        T_TOSTRING = 63  # tostring()
-        T_TONUMBER = 64  # tonumber()
+    # Only available on bytecode revision 2 (LuaJIT 2.1)
+    # This used to be if'd off so accessing it would be
+    # an error, that is unfortunately no longer possible
+    # due to the switchable version system.
+    T_TOSTRING = 63  # tostring()
+    T_TONUMBER = 64  # tonumber()
 
     def __init__(self):
         self.type = -1

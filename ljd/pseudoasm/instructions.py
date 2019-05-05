@@ -5,7 +5,6 @@
 import bisect
 
 import ljd.bytecode.instructions as ins
-import ljd.config.version_config
 import ljd.pseudoasm.prototype
 from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
 
@@ -681,7 +680,7 @@ def init():
         (ins.FUNCCW.opcode, _translate_normal)
     ]
 
-    if ljd.config.version_config.use_version > 2.0:
+    if ljd.CURRENT_VERSION > 2.0:
         bisect.insort(_HANDLERS_MAP, (ins.ISTYPE.opcode, _translate_normal))
         bisect.insort(_HANDLERS_MAP, (ins.ISNUM.opcode, _translate_normal))
         bisect.insort(_HANDLERS_MAP, (ins.TGETR.opcode, _translate_normal))

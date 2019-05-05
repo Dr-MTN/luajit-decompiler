@@ -4,7 +4,7 @@
 
 import ljd.ast.nodes as nodes
 import ljd.bytecode.instructions as ins
-import ljd.config.version_config
+import ljd
 from ljd.bytecode.constants import T_FALSE, T_NIL, T_TRUE
 from ljd.bytecode.helpers import get_jump_destination
 
@@ -463,7 +463,7 @@ def _build_statement(state, addr, instruction):
     # ASSIGNMENT starting from TGETV and ending at TGETR
 
     elif opcode >= ins.TSETV.opcode and (opcode <= ins.TSETB.opcode
-                                         or (ljd.config.version_config.use_version > 2.0
+                                         or (ljd.CURRENT_VERSION > 2.0
                                              and opcode == ins.TSETR.opcode)):
         return _build_table_assignment(state, addr, instruction)
 
@@ -497,8 +497,8 @@ def _build_var_assignment(state, addr, instruction):
     if opcode == ins.MOV.opcode \
             or opcode == ins.NOT.opcode \
             or opcode == ins.UNM.opcode \
-            or (ljd.config.version_config.use_version > 2.0 and opcode == ins.ISTYPE.opcode) \
-            or (ljd.config.version_config.use_version > 2.0 and opcode == ins.ISNUM.opcode) \
+            or (ljd.CURRENT_VERSION > 2.0 and opcode == ins.ISTYPE.opcode) \
+            or (ljd.CURRENT_VERSION > 2.0 and opcode == ins.ISNUM.opcode) \
             or opcode == ins.LEN.opcode:
         expression = _build_unary_expression(state, addr, instruction)
 
@@ -536,7 +536,7 @@ def _build_var_assignment(state, addr, instruction):
         expression = _build_global_variable(state, addr, instruction.CD)
 
     else:
-        if ljd.config.version_config.use_version > 2.0:
+        if ljd.CURRENT_VERSION > 2.0:
             assert opcode <= ins.TGETR.opcode
             expression = _build_table_element(state, addr, instruction)
         else:
@@ -949,9 +949,9 @@ def _build_unary_expression(state, addr, instruction):
         operator.type = nodes.UnaryOperator.T_NOT
     elif opcode == ins.UNM.opcode:
         operator.type = nodes.UnaryOperator.T_MINUS
-    elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISTYPE.opcode:
+    elif ljd.CURRENT_VERSION > 2.0 and opcode == ins.ISTYPE.opcode:
         operator.type = nodes.UnaryOperator.T_TOSTRING
-    elif ljd.config.version_config.use_version > 2.0 and opcode == ins.ISNUM.opcode:
+    elif ljd.CURRENT_VERSION > 2.0 and opcode == ins.ISNUM.opcode:
         operator.type = nodes.UnaryOperator.T_TONUMBER
     else:
         assert opcode == ins.LEN.opcode

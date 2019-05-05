@@ -7,6 +7,7 @@ import sys
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
+import ljd
 from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 
 CMD_START_STATEMENT = 0
@@ -439,8 +440,6 @@ class Visitor(traverse.Visitor):
             self._write(")")
 
     def visit_unary_operator(self, node):
-        import ljd.config.version_config
-
         if node.type == nodes.UnaryOperator.T_LENGTH_OPERATOR:
             self._write("#")
         elif node.type == nodes.UnaryOperator.T_MINUS:
@@ -453,7 +452,7 @@ class Visitor(traverse.Visitor):
                     node.operand.slot = SLOT_TRUE
             else:
                 self._write("not ")
-        elif ljd.config.version_config.use_version > 2.0:
+        elif ljd.CURRENT_VERSION > 2.0:
             # TODO
             if node.type == nodes.UnaryOperator.T_TOSTRING:
                 self._write("tostring")
