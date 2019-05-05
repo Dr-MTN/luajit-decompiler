@@ -20,8 +20,6 @@
 # 	bar(...)
 #
 
-import ljd.config.version_config
-
 # Argument types
 
 T_VAR = 0  # variable slot number
@@ -63,12 +61,20 @@ class _Instruction:
             self.CD = 0
 
 
+# Represents a bytecode instruction
+#
+# Note about opcodes:
+# These were previously set from the order the objects were created
+# in. They are now set by ljd.rawdump.code.init, from the luajit_opcode
+# files. (this means the opcodes were duplicated, as they were stored both
+# explicitly in the luajit_opcode files and implicitly in the order of
+# the instruction objects)
+#
+# See ljd.ast.builder.init for a description of why this change was made.
 class _IDef:
-    _LAST_OPCODE = 0
-
     def __init__(self, name, A_type, B_type, CD_type, description):
         self.name = name
-        self.opcode = _IDef._LAST_OPCODE
+        self.opcode = None  # This gets assigned by ljd.rawdump.code.init
         self.A_type = A_type
         self.B_type = B_type
         self.CD_type = CD_type
@@ -77,8 +83,6 @@ class _IDef:
         self.args_count = (self.A_type is not None) \
             + (self.B_type is not None) \
             + (self.CD_type is not None)
-
-        _IDef._LAST_OPCODE += 1
 
     def __call__(self):
         return _Instruction(self)
@@ -114,9 +118,9 @@ ISFC = _IDef("ISFC", T_DST, None, T_VAR, "{A} = {D}; if not {D}")
 IST = _IDef("IST", None, None, T_VAR, "if {D}")
 ISF = _IDef("ISF", None, None, T_VAR, "if not {D}")
 
-if ljd.config.version_config.use_version > 2.0:
-    ISTYPE = _IDef("ISTYPE", T_VAR, None, T_LIT, "see lj vm source")
-    ISNUM = _IDef("ISNUM", T_VAR, None, T_LIT, "see lj vm source")
+# Added in bytecode version 2
+ISTYPE = _IDef("ISTYPE", T_VAR, None, T_LIT, "see lj vm source")
+ISNUM = _IDef("ISNUM", T_VAR, None, T_LIT, "see lj vm source")
 
 # Unary ops
 
@@ -188,8 +192,8 @@ TGETV = _IDef("TGETV", T_DST, T_VAR, T_VAR, "{A} = {B}[{C}]")
 TGETS = _IDef("TGETS", T_DST, T_VAR, T_STR, "{A} = {B}.{C}")
 TGETB = _IDef("TGETB", T_DST, T_VAR, T_LIT, "{A} = {B}[{C}]")
 
-if ljd.config.version_config.use_version > 2.0:
-    TGETR = _IDef("TGETR", T_DST, T_VAR, T_VAR, "{A} = {B}[{C}]")
+# Added in bytecode version 2
+TGETR = _IDef("TGETR", T_DST, T_VAR, T_VAR, "{A} = {B}[{C}]")
 
 TSETV = _IDef("TSETV", T_VAR, T_VAR, T_VAR, "{B}[{C}] = {A}")
 TSETS = _IDef("TSETS", T_VAR, T_VAR, T_STR, "{B}.{C} = {A}")
@@ -199,8 +203,8 @@ TSETM = _IDef("TSETM", T_BS, None, T_NUM,
               "for i = 0, MULTRES, 1 do"
               " {A_minus_one}[{D_low} + i] = slot({A} + i)")
 
-if ljd.config.version_config.use_version > 2.0:
-    TSETR = _IDef("TSETR", T_VAR, T_VAR, T_VAR, "{B}[{C}] = {A}")
+# Added in bytecode version 2
+TSETR = _IDef("TSETR", T_VAR, T_VAR, T_VAR, "{B}[{C}] = {A}")
 
 # Calls and vararg handling. T = tail call.
 

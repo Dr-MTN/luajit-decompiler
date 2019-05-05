@@ -71,5 +71,11 @@ def init():
     for opcode, instruction in sorted(_OPCODES, key=lambda x: x[0]):
         _MAP[opcode] = instruction
 
+        # Set's the opcode's code. This used to be done by the
+        # opcode itself, it's now done here. See the comments around
+        # ljd.bytecode.instructions._IDef for a description of
+        # why this is done.
+        instruction.opcode = opcode
+
     del globals()["init"]
     del _OPCODES

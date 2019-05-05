@@ -11,7 +11,8 @@ from ljd.bytecode.constants import T_NIL, T_FALSE, T_TRUE
 
 _FORMAT = "{addr:3}\t[{line:3}]\t{name:<5}\t{a:3}\t{b}\t{c}\t; {description}"
 
-_DESCRIPTION_HANDLERS = [None] * 255
+# Set in init(), see it's comment
+_DESCRIPTION_HANDLERS = None
 
 
 class _State:
@@ -522,175 +523,172 @@ def _translate_iter_loop(writer, description, addr, line, instruction):
     )
 
 
-_HANDLERS_MAP = [
-    # Comparison ops
+# See ljd.ast.builder.init for a description of why this is done, rather than
+# setting everything up statically. TLDR is that the the opcode's 'opcode' fields
+# are not yet set.
+def init():
+    _HANDLERS_MAP = [
+        # Comparison ops
 
-    (ins.ISLT.opcode, _translate_normal),
-    (ins.ISGE.opcode, _translate_normal),
-    (ins.ISLE.opcode, _translate_normal),
-    (ins.ISGT.opcode, _translate_normal),
+        (ins.ISLT.opcode, _translate_normal),
+        (ins.ISGE.opcode, _translate_normal),
+        (ins.ISLE.opcode, _translate_normal),
+        (ins.ISGT.opcode, _translate_normal),
 
-    (ins.ISEQV.opcode, _translate_normal),
-    (ins.ISNEV.opcode, _translate_normal),
+        (ins.ISEQV.opcode, _translate_normal),
+        (ins.ISNEV.opcode, _translate_normal),
 
-    (ins.ISEQS.opcode, _translate_normal),
-    (ins.ISNES.opcode, _translate_normal),
+        (ins.ISEQS.opcode, _translate_normal),
+        (ins.ISNES.opcode, _translate_normal),
 
-    (ins.ISEQN.opcode, _translate_normal),
-    (ins.ISNEN.opcode, _translate_normal),
+        (ins.ISEQN.opcode, _translate_normal),
+        (ins.ISNEN.opcode, _translate_normal),
 
-    (ins.ISEQP.opcode, _translate_normal),
-    (ins.ISNEP.opcode, _translate_normal),
+        (ins.ISEQP.opcode, _translate_normal),
+        (ins.ISNEP.opcode, _translate_normal),
 
-    # Unary test and copy ops
+        # Unary test and copy ops
 
-    (ins.ISTC.opcode, _translate_normal),
-    (ins.ISFC.opcode, _translate_normal),
+        (ins.ISTC.opcode, _translate_normal),
+        (ins.ISFC.opcode, _translate_normal),
 
-    (ins.IST.opcode, _translate_normal),
-    (ins.ISF.opcode, _translate_normal),
+        (ins.IST.opcode, _translate_normal),
+        (ins.ISF.opcode, _translate_normal),
 
-    # Unary ops
+        # Unary ops
 
-    (ins.MOV.opcode, _translate_normal),
-    (ins.NOT.opcode, _translate_normal),
-    (ins.UNM.opcode, _translate_normal),
-    (ins.LEN.opcode, _translate_normal),
+        (ins.MOV.opcode, _translate_normal),
+        (ins.NOT.opcode, _translate_normal),
+        (ins.UNM.opcode, _translate_normal),
+        (ins.LEN.opcode, _translate_normal),
 
-    # Binary ops
+        # Binary ops
 
-    (ins.ADDVN.opcode, _translate_normal),
-    (ins.SUBVN.opcode, _translate_normal),
-    (ins.MULVN.opcode, _translate_normal),
-    (ins.DIVVN.opcode, _translate_normal),
-    (ins.MODVN.opcode, _translate_normal),
+        (ins.ADDVN.opcode, _translate_normal),
+        (ins.SUBVN.opcode, _translate_normal),
+        (ins.MULVN.opcode, _translate_normal),
+        (ins.DIVVN.opcode, _translate_normal),
+        (ins.MODVN.opcode, _translate_normal),
 
-    (ins.ADDNV.opcode, _translate_normal),
-    (ins.SUBNV.opcode, _translate_normal),
-    (ins.MULNV.opcode, _translate_normal),
-    (ins.DIVNV.opcode, _translate_normal),
-    (ins.MODNV.opcode, _translate_normal),
+        (ins.ADDNV.opcode, _translate_normal),
+        (ins.SUBNV.opcode, _translate_normal),
+        (ins.MULNV.opcode, _translate_normal),
+        (ins.DIVNV.opcode, _translate_normal),
+        (ins.MODNV.opcode, _translate_normal),
 
-    (ins.ADDVV.opcode, _translate_normal),
-    (ins.SUBVV.opcode, _translate_normal),
-    (ins.MULVV.opcode, _translate_normal),
-    (ins.DIVVV.opcode, _translate_normal),
-    (ins.MODVV.opcode, _translate_normal),
+        (ins.ADDVV.opcode, _translate_normal),
+        (ins.SUBVV.opcode, _translate_normal),
+        (ins.MULVV.opcode, _translate_normal),
+        (ins.DIVVV.opcode, _translate_normal),
+        (ins.MODVV.opcode, _translate_normal),
 
-    (ins.POW.opcode, _translate_normal),
-    (ins.CAT.opcode, _translate_concat),
+        (ins.POW.opcode, _translate_normal),
+        (ins.CAT.opcode, _translate_concat),
 
-    # Constant ops
+        # Constant ops
 
-    (ins.KSTR.opcode, _translate_normal),
-    (ins.KCDATA.opcode, _translate_normal),
-    (ins.KSHORT.opcode, _translate_normal),
-    (ins.KNUM.opcode, _translate_normal),
-    (ins.KPRI.opcode, _translate_normal),
+        (ins.KSTR.opcode, _translate_normal),
+        (ins.KCDATA.opcode, _translate_normal),
+        (ins.KSHORT.opcode, _translate_normal),
+        (ins.KNUM.opcode, _translate_normal),
+        (ins.KPRI.opcode, _translate_normal),
 
-    (ins.KNIL.opcode, _translate_nil),
+        (ins.KNIL.opcode, _translate_nil),
 
-    # Upvalue and function ops
+        # Upvalue and function ops
 
-    (ins.UGET.opcode, _translate_normal),
+        (ins.UGET.opcode, _translate_normal),
 
-    (ins.USETV.opcode, _translate_normal),
-    (ins.USETS.opcode, _translate_normal),
-    (ins.USETN.opcode, _translate_normal),
-    (ins.USETP.opcode, _translate_normal),
+        (ins.USETV.opcode, _translate_normal),
+        (ins.USETS.opcode, _translate_normal),
+        (ins.USETN.opcode, _translate_normal),
+        (ins.USETP.opcode, _translate_normal),
 
-    (ins.UCLO.opcode, _translate_normal),
+        (ins.UCLO.opcode, _translate_normal),
 
-    (ins.FNEW.opcode, _translate_normal),
+        (ins.FNEW.opcode, _translate_normal),
 
-    # Table ops
+        # Table ops
 
-    (ins.TNEW.opcode, _translate_new_table),
+        (ins.TNEW.opcode, _translate_new_table),
 
-    (ins.TDUP.opcode, _translate_normal),
+        (ins.TDUP.opcode, _translate_normal),
 
-    (ins.GGET.opcode, _translate_normal),
-    (ins.GSET.opcode, _translate_normal),
+        (ins.GGET.opcode, _translate_normal),
+        (ins.GSET.opcode, _translate_normal),
 
-    (ins.TGETV.opcode, _translate_normal),
-    (ins.TGETS.opcode, _translate_table_str_op),
-    (ins.TGETB.opcode, _translate_normal),
+        (ins.TGETV.opcode, _translate_normal),
+        (ins.TGETS.opcode, _translate_table_str_op),
+        (ins.TGETB.opcode, _translate_normal),
 
-    (ins.TSETV.opcode, _translate_normal),
-    (ins.TSETS.opcode, _translate_table_str_op),
-    (ins.TSETB.opcode, _translate_normal),
+        (ins.TSETV.opcode, _translate_normal),
+        (ins.TSETS.opcode, _translate_table_str_op),
+        (ins.TSETB.opcode, _translate_normal),
 
-    (ins.TSETM.opcode, _translate_mass_set),
+        (ins.TSETM.opcode, _translate_mass_set),
 
-    # Calls and vararg handling
+        # Calls and vararg handling
 
-    (ins.CALLM.opcode, _translate_varg_call),
-    (ins.CALL.opcode, _translate_call),
-    (ins.CALLMT.opcode, _translate_varg_tailcall),
-    (ins.CALLT.opcode, _translate_tailcall),
+        (ins.CALLM.opcode, _translate_varg_call),
+        (ins.CALL.opcode, _translate_call),
+        (ins.CALLMT.opcode, _translate_varg_tailcall),
+        (ins.CALLT.opcode, _translate_tailcall),
 
-    (ins.ITERC.opcode, _translate_iterator),
-    (ins.ITERN.opcode, _translate_iterator),
+        (ins.ITERC.opcode, _translate_iterator),
+        (ins.ITERN.opcode, _translate_iterator),
 
-    (ins.VARG.opcode, _translate_vararg),
+        (ins.VARG.opcode, _translate_vararg),
 
-    (ins.ISNEXT.opcode, _translate_normal),
+        (ins.ISNEXT.opcode, _translate_normal),
 
-    # Returns
+        # Returns
 
-    (ins.RETM.opcode, _translate_return_mult),
-    (ins.RET.opcode, _translate_return_many),
-    (ins.RET0.opcode, _translate_normal),
-    (ins.RET1.opcode, _translate_return_one),
+        (ins.RETM.opcode, _translate_return_mult),
+        (ins.RET.opcode, _translate_return_many),
+        (ins.RET0.opcode, _translate_normal),
+        (ins.RET1.opcode, _translate_return_one),
 
-    # Loops and branches
+        # Loops and branches
 
-    (ins.FORI.opcode, _translate_for_init),
-    (ins.JFORI.opcode, _translate_for_init),
+        (ins.FORI.opcode, _translate_for_init),
+        (ins.JFORI.opcode, _translate_for_init),
 
-    (ins.FORL.opcode, _translate_numeric_loop),
-    (ins.IFORL.opcode, _translate_numeric_loop),
-    (ins.JFORL.opcode, _translate_numeric_loop),
+        (ins.FORL.opcode, _translate_numeric_loop),
+        (ins.IFORL.opcode, _translate_numeric_loop),
+        (ins.JFORL.opcode, _translate_numeric_loop),
 
-    (ins.ITERL.opcode, _translate_iter_loop),
-    (ins.IITERL.opcode, _translate_iter_loop),
-    (ins.JITERL.opcode, _translate_iter_loop),
+        (ins.ITERL.opcode, _translate_iter_loop),
+        (ins.IITERL.opcode, _translate_iter_loop),
+        (ins.JITERL.opcode, _translate_iter_loop),
 
-    (ins.LOOP.opcode, _translate_normal),
-    (ins.ILOOP.opcode, _translate_normal),
-    (ins.JLOOP.opcode, _translate_normal),
+        (ins.LOOP.opcode, _translate_normal),
+        (ins.ILOOP.opcode, _translate_normal),
+        (ins.JLOOP.opcode, _translate_normal),
 
-    (ins.JMP.opcode, _translate_normal),
+        (ins.JMP.opcode, _translate_normal),
 
-    # Function headers
+        # Function headers
 
-    (ins.FUNCF.opcode, _translate_normal),
-    (ins.IFUNCF.opcode, _translate_normal),
-    (ins.JFUNCF.opcode, _translate_normal),
+        (ins.FUNCF.opcode, _translate_normal),
+        (ins.IFUNCF.opcode, _translate_normal),
+        (ins.JFUNCF.opcode, _translate_normal),
 
-    (ins.FUNCV.opcode, _translate_normal),
-    (ins.IFUNCV.opcode, _translate_normal),
-    (ins.JFUNCV.opcode, _translate_normal),
+        (ins.FUNCV.opcode, _translate_normal),
+        (ins.IFUNCV.opcode, _translate_normal),
+        (ins.JFUNCV.opcode, _translate_normal),
 
-    (ins.FUNCC.opcode, _translate_normal),
-    (ins.FUNCCW.opcode, _translate_normal)
-]
+        (ins.FUNCC.opcode, _translate_normal),
+        (ins.FUNCCW.opcode, _translate_normal)
+    ]
 
-if ljd.config.version_config.use_version > 2.0:
-    bisect.insort(_HANDLERS_MAP, (ins.ISTYPE.opcode, _translate_normal))
-    bisect.insort(_HANDLERS_MAP, (ins.ISNUM.opcode, _translate_normal))
-    bisect.insort(_HANDLERS_MAP, (ins.TGETR.opcode, _translate_normal))
-    bisect.insort(_HANDLERS_MAP, (ins.TSETR.opcode, _translate_normal))
+    if ljd.config.version_config.use_version > 2.0:
+        bisect.insort(_HANDLERS_MAP, (ins.ISTYPE.opcode, _translate_normal))
+        bisect.insort(_HANDLERS_MAP, (ins.ISNUM.opcode, _translate_normal))
+        bisect.insort(_HANDLERS_MAP, (ins.TGETR.opcode, _translate_normal))
+        bisect.insort(_HANDLERS_MAP, (ins.TSETR.opcode, _translate_normal))
 
-
-def _init():
-    global _HANDLERS_MAP, _DESCRIPTION_HANDLERS
+    global _DESCRIPTION_HANDLERS
+    _DESCRIPTION_HANDLERS = [None] * 255
 
     for opcode, handler in _HANDLERS_MAP:
         _DESCRIPTION_HANDLERS[opcode] = handler
-
-    del globals()["_init"]
-    del globals()["_HANDLERS_MAP"]
-
-
-_init()

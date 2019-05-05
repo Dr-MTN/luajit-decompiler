@@ -33,6 +33,7 @@ from optparse import OptionParser
 import ljd.rawdump.parser
 import ljd.rawdump.code
 import ljd.pseudoasm.writer
+import ljd.pseudoasm.instructions
 import ljd.ast.builder
 import ljd.ast.validator
 import ljd.ast.locals
@@ -147,6 +148,8 @@ class Main:
 
         # Now we know the LuaJIT version, initialise the opcodes
         ljd.rawdump.code.init()
+        ljd.ast.builder.init()
+        ljd.pseudoasm.instructions.init()
 
         # Send assert catch argument to modules
         if self.options.catch_asserts:

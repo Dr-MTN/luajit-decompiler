@@ -748,13 +748,8 @@ def _build_range_assignment(state, addr, from_slot, to_slot):
     return assignment
 
 
-_BINARY_OPERATOR_MAP = [None] * 255
-
-_BINARY_OPERATOR_MAP[ins.ADDVN.opcode] = nodes.BinaryOperator.T_ADD
-_BINARY_OPERATOR_MAP[ins.SUBVN.opcode] = nodes.BinaryOperator.T_SUBTRACT
-_BINARY_OPERATOR_MAP[ins.MULVN.opcode] = nodes.BinaryOperator.T_MULTIPLY
-_BINARY_OPERATOR_MAP[ins.DIVVN.opcode] = nodes.BinaryOperator.T_DIVISION
-_BINARY_OPERATOR_MAP[ins.MODVN.opcode] = nodes.BinaryOperator.T_MOD
+# Set in init() - see it's comment
+_BINARY_OPERATOR_MAP = None
 
 
 def _build_binary_expression(state, addr, instruction):
@@ -909,26 +904,8 @@ def _build_table_record_item(value):
     return item
 
 
-_COMPARISON_MAP = [None] * 255
-
-# Mind the inversion - comparison operators are affecting JMP to the next block
-# So in the normal code a comparison will be inverted
-_COMPARISON_MAP[ins.ISLT.opcode] = nodes.BinaryOperator.T_GREATER_OR_EQUAL
-_COMPARISON_MAP[ins.ISGE.opcode] = nodes.BinaryOperator.T_LESS_THEN
-_COMPARISON_MAP[ins.ISLE.opcode] = nodes.BinaryOperator.T_GREATER_THEN
-_COMPARISON_MAP[ins.ISGT.opcode] = nodes.BinaryOperator.T_LESS_OR_EQUAL
-
-_COMPARISON_MAP[ins.ISEQV.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
-_COMPARISON_MAP[ins.ISNEV.opcode] = nodes.BinaryOperator.T_EQUAL
-
-_COMPARISON_MAP[ins.ISEQS.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
-_COMPARISON_MAP[ins.ISNES.opcode] = nodes.BinaryOperator.T_EQUAL
-
-_COMPARISON_MAP[ins.ISEQN.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
-_COMPARISON_MAP[ins.ISNEN.opcode] = nodes.BinaryOperator.T_EQUAL
-
-_COMPARISON_MAP[ins.ISEQP.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
-_COMPARISON_MAP[ins.ISNEP.opcode] = nodes.BinaryOperator.T_EQUAL
+# Set in init() - see it's comment
+_COMPARISON_MAP = None
 
 
 def _build_comparison_expression(state, addr, instruction):
@@ -1315,3 +1292,44 @@ def _shift_debug_variable_info(state, shift, modified_index):
         if variable_info.start_addr > modified_index \
                 or (shift > 0 and variable_info.start_addr == modified_index):
             variable_info.start_addr += shift
+
+
+# Sets up _BINARY_OPERATOR_MAP and _COMPARISON_MAP
+# The reason we have to do it in the init method is due to
+# the new initialisation system for opcodes. Previously,
+# they were set by the order they were specified in ljd.bytecode.instructions,
+# but now their opcode fields are set by ljd.rawdump.code.init from the luajit_opcode
+# files. This will eventually allow the decompiler to switch between
+# different LuaJIT versions.
+def init():
+    global _BINARY_OPERATOR_MAP
+    global _COMPARISON_MAP
+
+    _BINARY_OPERATOR_MAP = [None] * 255
+
+    _BINARY_OPERATOR_MAP[ins.ADDVN.opcode] = nodes.BinaryOperator.T_ADD
+    _BINARY_OPERATOR_MAP[ins.SUBVN.opcode] = nodes.BinaryOperator.T_SUBTRACT
+    _BINARY_OPERATOR_MAP[ins.MULVN.opcode] = nodes.BinaryOperator.T_MULTIPLY
+    _BINARY_OPERATOR_MAP[ins.DIVVN.opcode] = nodes.BinaryOperator.T_DIVISION
+    _BINARY_OPERATOR_MAP[ins.MODVN.opcode] = nodes.BinaryOperator.T_MOD
+
+    _COMPARISON_MAP = [None] * 255
+
+    # Mind the inversion - comparison operators are affecting JMP to the next block
+    # So in the normal code a comparison will be inverted
+    _COMPARISON_MAP[ins.ISLT.opcode] = nodes.BinaryOperator.T_GREATER_OR_EQUAL
+    _COMPARISON_MAP[ins.ISGE.opcode] = nodes.BinaryOperator.T_LESS_THEN
+    _COMPARISON_MAP[ins.ISLE.opcode] = nodes.BinaryOperator.T_GREATER_THEN
+    _COMPARISON_MAP[ins.ISGT.opcode] = nodes.BinaryOperator.T_LESS_OR_EQUAL
+
+    _COMPARISON_MAP[ins.ISEQV.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
+    _COMPARISON_MAP[ins.ISNEV.opcode] = nodes.BinaryOperator.T_EQUAL
+
+    _COMPARISON_MAP[ins.ISEQS.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
+    _COMPARISON_MAP[ins.ISNES.opcode] = nodes.BinaryOperator.T_EQUAL
+
+    _COMPARISON_MAP[ins.ISEQN.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
+    _COMPARISON_MAP[ins.ISNEN.opcode] = nodes.BinaryOperator.T_EQUAL
+
+    _COMPARISON_MAP[ins.ISEQP.opcode] = nodes.BinaryOperator.T_NOT_EQUAL
+    _COMPARISON_MAP[ins.ISNEP.opcode] = nodes.BinaryOperator.T_EQUAL
