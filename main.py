@@ -154,8 +154,6 @@ class Main:
             ljd.ast.slotworks.catch_asserts = True
             ljd.ast.validator.catch_asserts = True
 
-        self.ljd = ljd
-
         # Start logging if required
         if self.options.enable_logging:
             logger = logging.getLogger('LJD')
@@ -223,7 +221,7 @@ class Main:
         if self.options.output_file:
             line_map = self.write_file(self.options.output_file, generate_linemap=generate_linemap)
         else:
-            line_map = self.ljd.lua.writer.write(sys.stdout, self.ast, generate_linemap=generate_linemap)
+            line_map = ljd.lua.writer.write(sys.stdout, self.ast, generate_linemap=generate_linemap)
 
         if self.options.line_map_output_file:
             with open(self.options.line_map_output_file, "wb") as lm_out:
@@ -235,10 +233,10 @@ class Main:
 
     def write_file(self, file_name, **kwargs):
         with open(file_name, "w", encoding="utf8") as out_file:
-            return self.ljd.lua.writer.write(out_file, self.ast, **kwargs)
+            return ljd.lua.writer.write(out_file, self.ast, **kwargs)
 
     def decompile(self, file_in):
-        header, prototype = self.ljd.rawdump.parser.parse(file_in)
+        header, prototype = ljd.rawdump.parser.parse(file_in)
 
         if not prototype:
             return 1
@@ -259,49 +257,49 @@ class Main:
                             "adding --jit_version={1} to the command line"
                             .format(version_required, bc_version))
 
-        # self.ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
+        # ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
-        self.ast = self.ljd.ast.builder.build(header, prototype)
+        self.ast = ljd.ast.builder.build(header, prototype)
 
         assert self.ast is not None
 
-        self.ljd.ast.validator.validate(self.ast, warped=True)
+        ljd.ast.validator.validate(self.ast, warped=True)
 
-        self.ljd.ast.mutator.pre_pass(self.ast)
+        ljd.ast.mutator.pre_pass(self.ast)
 
-        # self.ljd.ast.validator.validate(self.ast, warped=True)
+        # ljd.ast.validator.validate(self.ast, warped=True)
 
-        self.ljd.ast.locals.mark_locals(self.ast)
+        ljd.ast.locals.mark_locals(self.ast)
 
-        # self.ljd.ast.validator.validate(self.ast, warped=True)
+        # ljd.ast.validator.validate(self.ast, warped=True)
 
         try:
-            self.ljd.ast.slotworks.eliminate_temporary(self.ast)
+            ljd.ast.slotworks.eliminate_temporary(self.ast)
         except:
             if self.options.catch_asserts:
-                print("-- Decompilation Error: self.ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
+                print("-- Decompilation Error: ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
             else:
                 raise
 
-        # self.ljd.ast.validator.validate(self.ast, warped=True)
+        # ljd.ast.validator.validate(self.ast, warped=True)
 
         if True:
-            self.ljd.ast.unwarper.unwarp(self.ast)
+            ljd.ast.unwarper.unwarp(self.ast)
 
-            # self.ljd.ast.validator.validate(self.ast, warped=False)
+            # ljd.ast.validator.validate(self.ast, warped=False)
 
             if True:
-                self.ljd.ast.locals.mark_local_definitions(self.ast)
+                ljd.ast.locals.mark_local_definitions(self.ast)
 
-                # self.ljd.ast.validator.validate(self.ast, warped=False)
+                # ljd.ast.validator.validate(self.ast, warped=False)
 
-                self.ljd.ast.mutator.primary_pass(self.ast)
+                ljd.ast.mutator.primary_pass(self.ast)
 
                 try:
-                    self.ljd.ast.validator.validate(self.ast, warped=False)
+                    ljd.ast.validator.validate(self.ast, warped=False)
                 except:
                     if self.options.catch_asserts:
-                        print("-- Decompilation Error: self.ljd.ast.validator.validate(self.ast, warped=False)\n",
+                        print("-- Decompilation Error: ljd.ast.validator.validate(self.ast, warped=False)\n",
                               file=sys.stdout)
                     else:
                         raise
