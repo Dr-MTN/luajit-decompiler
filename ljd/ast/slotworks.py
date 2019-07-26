@@ -57,12 +57,16 @@ debug_verify = "LJD_DEBUG" in os.environ
 # Here's a minimal code sample to reproduce this:
 # local some_local = my_global
 # local testing = some_local()
+#
+# This is now fixed via _sort_slots - slots are given an ID in the order they first appear, and this is used to
+# sort them. This should solve this issue for good.
 
 
 def eliminate_temporary(ast):
     _eliminate_multres(ast)
 
     slots, unused = _collect_slots(ast)
+    _sort_slots(slots)
     _eliminate_temporary(slots)
 
     # _remove_unused(unused)
@@ -338,6 +342,13 @@ def _eliminate_multres(ast):
     _cleanup_invalid_nodes(ast)
 
 
+def _sort_slots(slots):
+    def get_slot_id(slot):
+        return slot.slot_id
+
+    slots.sort(key=get_slot_id)
+
+
 class _MultresEliminator(traverse.Visitor):
     def __init__(self):
         super().__init__()
@@ -396,7 +407,7 @@ class _SlotReference:
 
 
 class _SlotInfo:
-    def __init__(self):
+    def __init__(self, id):
         self.slot = 0
 
         self.assignment = None
@@ -404,6 +415,11 @@ class _SlotInfo:
         self.termination = None
 
         self.function = None
+
+        # An ID representing the position in the input
+        # This is used to ensure correct ordering of the slots, preventing reverse references (see comment about
+        # the temporary slot cleanup eliminating assignments)
+        self.slot_id = id
 
 
 class _SlotsCollector(traverse.Visitor):
@@ -419,6 +435,7 @@ class _SlotsCollector(traverse.Visitor):
         self._states = []
         self._path = []
         self._skip = None
+        self._next_slot_id = 0
 
         self.slots = []
         self.unused = []
@@ -459,12 +476,14 @@ class _SlotsCollector(traverse.Visitor):
     def _register_slot(self, slot, node):
         self._commit_slot(slot, node)
 
-        info = _SlotInfo()
+        info = _SlotInfo(self._next_slot_id)
         info.slot = slot
         info.assignment = node
         info.function = self._state().function
 
         self._state().known_slots[slot] = info
+
+        self._next_slot_id += 1
 
     def _register_all_slots(self, node, slots):
         for slot in slots:
