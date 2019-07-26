@@ -11,6 +11,54 @@ catch_asserts = False
 debug_verify = "LJD_DEBUG" in os.environ
 
 
+# Temporary slot cleanup eliminating assignments - general documentation
+#
+# Imagine the following:
+#
+# slot0 = "mything"
+# slot1 = slot0
+# return slot1
+#
+# There's a couple of ways this could be simplified. If slot0 is eliminated first, it will look like this:
+#
+# slot1 = "mything"
+# (slot1 = slot0 -- marked for deletion)
+# return slot1
+#
+# return "mything"
+#
+# If, however (and this can happen under some situations) slot1 is eliminated first, the following can occur:
+#
+# slot0 = "mything"
+# (slot1 = slot0 -- marked for deletion)
+# return slot0
+#
+# (slot0 = "mything" -- marked for deletion)
+# (slot1 = "mything" -- marked for deletion, substituion was made here)
+# return slot0
+#
+# Which method is used depends on the ordering of the collected slots.
+#
+# Now, why does this occur? The visitor system that collects all the slots does so node-by-node so it should
+# pick up the earlier slots first. This is broken due to the committing system: when a slot is first used, it
+# it not immediately added to the slots list. Rather, it is marked as a 'known slot', and any references to
+# it will be added. This is done as one slot may refer to multiple variables, as per below:
+#
+# addr1:   slot0 = my_global
+# addr2:   slot1 = slot0 -- slot1 is my_global
+# addr3:   slot1 = slot1() -- slot1 is the result of the function execution
+#
+# Whenever a slot is reassigned, it is "committed" into the slots array. At the end of parsing, any uncommitted
+# slots are committed. In this case the slot0, it is only assigned at addr1, and is therefore committed at the
+# very end, after everything else. slot1 is assigned both at addr2 and addr3. When addr3 is visited, slot1 gets
+# committed to the stack as the same slot is used to hold another different value.
+# The slots list is then as follows: [addr2_slot1, addr1_slot0, addr3_slot1], and we get broken output.
+#
+# Here's a minimal code sample to reproduce this:
+# local some_local = my_global
+# local testing = some_local()
+
+
 def eliminate_temporary(ast):
     _eliminate_multres(ast)
 
