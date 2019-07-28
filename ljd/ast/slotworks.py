@@ -76,6 +76,10 @@ def eliminate_temporary(ast):
     return ast
 
 
+def simplify_ast(ast):
+    traverse.traverse(_SimplifyVisitor(), ast)
+
+
 def _eliminate_temporary(slots):
     simple = []
     massive = []
@@ -592,3 +596,30 @@ class _TreeCleanup(traverse.Visitor):
                 patched.append(subnode)
 
         node.contents = patched
+
+
+class _SimplifyVisitor(traverse.Visitor):
+
+    # Identify method calls, and mark them as such early. This eliminates their 'this' argument, which allows
+    # the elimination of slots that would otherwise have three uses.
+    def visit_function_call(self, node):
+        if node.is_method:
+            return
+
+        args = node.arguments.contents
+        func = node.function
+
+        if len(args) < 1 or not isinstance(args[0], nodes.Identifier):
+            return
+
+        arg0 = args[0]
+        if not isinstance(func, nodes.TableElement) or not isinstance(func.table, nodes.Identifier):
+            return
+
+        table = func.table
+
+        if arg0.name != table.name or arg0.type != table.type or arg0.slot != table.slot:
+            return
+
+        node.is_method = True
+        del args[0]

@@ -590,30 +590,13 @@ class Visitor(traverse.Visitor):
         # We are going to modify this list so we can remove the first
         # argument
         args = node.arguments.contents
-        is_method = False
 
-        if len(args) > 0 and isinstance(node.function, nodes.TableElement):
-            table = node.function.table
-
-            first_arg = node.arguments.contents[0]
-
-            if self._is_valid_name(node.function.key):
-                if hasattr(table, "name") and isinstance(first_arg, nodes.Identifier):
-                    if table.name == first_arg.name \
-                            and table.slot == first_arg.slot \
-                            and table.type == first_arg.type:
-                        is_method = True
-                else:
-                    is_method = table == first_arg
-
-        if is_method:
+        if node.is_method:
             self._visit(node.function.table)
             self._write(":")
             self._write(node.function.key.value)
 
             self._skip(node.function)
-
-            args.pop(0)
 
             self._write("(")
             self._visit(node.arguments)

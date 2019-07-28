@@ -267,6 +267,8 @@ class Main:
             else:
                 raise
 
+        ljd.ast.slotworks.simplify_ast(self.ast)
+
         # ljd.ast.validator.validate(self.ast, warped=True)
 
         if True:
