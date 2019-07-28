@@ -146,7 +146,15 @@ def _fill_massive_refs(info, simple, massive, iterators):
 def _fill_simple_refs(info, simple, tables):
     src = info.assignment.expressions.contents[0]
 
-    if isinstance(src, nodes.FunctionCall) and len(info.references) > 3:
+    # Don't attempt to simplify any slots that have more than two usages.
+    # This is a major policy change, as slotworks used to inline almost anything and
+    # everything, with the exception of the results of function calls with more than three
+    # uses.
+    # This caused a LOT of incorrect decompilation results, however this is only noticeable
+    # when running against stripped code - when a slot has a name attached, it cannot be
+    # simplified and thus many of these issues would not appear.
+    # For an example of the issues this caused, see issue #19 (https://gitlab.com/znixian/luajit-decompiler/issues/19)
+    if len(info.references) > 2:
         return
 
     src_is_table = isinstance(src, nodes.TableConstructor)
