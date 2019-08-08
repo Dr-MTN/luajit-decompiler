@@ -165,6 +165,23 @@ def _fill_simple_refs(info, simple, tables):
 
     holders = set()
 
+    # Check if we've had a single non-table-constructor-write reference yet. If so, none of the
+    # following references can be part of the constructor.
+    # Without this, the following:
+    #
+    # local test = {}
+    # f(test)
+    # test.abc = "hi"
+    #
+    # Decompiles to:
+    #
+    # slot0 = { abc = "hi" }
+    # f(slot0)
+    #
+    # Note that when debugging this, it may be wise to disable mutator.py - it can interfere
+    # with the results and move things into the constructor that otherwise wouldn't be.
+    all_ctor_refs = True
+
     for ref in info.references[1:]:
         holder = _get_holder(ref.path)
 
@@ -199,11 +216,12 @@ def _fill_simple_refs(info, simple, tables):
                     assert tst_holder != holder
 
         # Could be more then one reference here
-        if src_is_table and is_element and is_dst:
+        if src_is_table and is_element and is_dst and all_ctor_refs:
             assert holder.table == ref.identifier
             tables.append((info, ref))
         else:
             simple.append((info, ref, None))
+            all_ctor_refs = False
 
 
 LIST_TYPES = (nodes.VariablesList,
