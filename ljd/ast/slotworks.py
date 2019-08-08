@@ -150,20 +150,14 @@ def _fill_massive_refs(info, simple, massive, iterators):
 def _fill_simple_refs(info, simple, tables):
     src = info.assignment.expressions.contents[0]
 
-    # Don't attempt to simplify any slots that have more than two usages.
-    # This is a major policy change, as slotworks used to inline almost anything and
-    # everything, with the exception of the results of function calls with more than three
-    # uses.
-    # This caused a LOT of incorrect decompilation results, however this is only noticeable
-    # when running against stripped code - when a slot has a name attached, it cannot be
-    # simplified and thus many of these issues would not appear.
-    # For an example of the issues this caused, see issue #19 (https://gitlab.com/znixian/luajit-decompiler/issues/19)
-    if len(info.references) > 2:
-        return
-
     src_is_table = isinstance(src, nodes.TableConstructor)
 
     holders = set()
+
+    # Collect all the simple refs as we go through, then make a policy decision about what to
+    # do with them at the end. This also folds in the table constructor elements, even if simple
+    # inlining cannot be performed (though mutator.py would likely pick this up regardless).
+    new_simple = []
 
     # Check if we've had a single non-table-constructor-write reference yet. If so, none of the
     # following references can be part of the constructor.
@@ -209,7 +203,7 @@ def _fill_simple_refs(info, simple, tables):
             is_dst = False
 
         if debug_verify:
-            for tst_info, tst_ref, _ in simple:
+            for tst_info, tst_ref, _ in new_simple:
                 if tst_info == info:
                     tst_holder = tst_ref.path[-2]
                     assert tst_holder != ref.path[-2]
@@ -220,8 +214,26 @@ def _fill_simple_refs(info, simple, tables):
             assert holder.table == ref.identifier
             tables.append((info, ref))
         else:
-            simple.append((info, ref, None))
+            new_simple.append((info, ref, None))
             all_ctor_refs = False
+
+    # Don't attempt to simplify any slots that have more than two usages (excluding table constructor elements).
+    # This is a major policy change, as slotworks used to inline almost anything and
+    # everything, with the exception of the results of function calls with more than three
+    # uses.
+    # This caused a LOT of incorrect decompilation results, however this is only noticeable
+    # when running against stripped code - when a slot has a name attached, it cannot be
+    # simplified and thus many of these issues would not appear.
+    # For an example of the issues this caused, see issue #19 (https://gitlab.com/znixian/luajit-decompiler/issues/19)
+    # Also note that we only inline the use if it's still valid at the end.
+    #
+    # And as for the issue 19 problem, why isn't that still happening like this? There's still
+    # only one simple reference, since the other one has been moved into the tables system. The
+    # answer is 55b2f5c, which introduced all_ctor_refs. Since the table is referenced before the
+    # third use, it cannot be moved into the constructor (well, mutator will move it in, but it'll
+    # be safe from being eliminated)
+    if len(new_simple) == 1:
+        simple += new_simple
 
 
 LIST_TYPES = (nodes.VariablesList,
