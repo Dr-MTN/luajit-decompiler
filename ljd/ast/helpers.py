@@ -40,7 +40,13 @@ def insert_table_record(constructor, key, value, replace):
         else:
             return False
 
-    # TODO duplicate checking
+    # Check for record duplicates
+    # This isn't nearly as important as duplicate protection with arrays, since both values
+    # end up in the table to the user can make sense of what happened. Nonetheless, we should still
+    # reject stuff like this.
+    for rec in records:
+        if is_equal(rec.key, key, strict=False):
+            return False
 
     record = nodes.TableRecord()
     record.key = key
@@ -85,7 +91,7 @@ def has_same_table(node, table):
     return checker.found
 
 
-def is_equal(a, b):
+def is_equal(a, b, strict=True):
     if type(a) != type(b):
         return False
 
@@ -94,6 +100,8 @@ def is_equal(a, b):
     elif isinstance(a, nodes.TableElement):
         return is_equal(a.table, b.table) \
                and is_equal(a.key, b.key)
-    else:
-        assert isinstance(a, nodes.Constant)
+    elif isinstance(a, nodes.Constant):
         return a.type == b.type and a.value == b.value
+    else:
+        assert not strict
+        return False
