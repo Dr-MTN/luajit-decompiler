@@ -224,7 +224,7 @@ class MutatorVisitor(traverse.Visitor):
             if not isinstance(dst, nodes.TableElement):
                 break
 
-            if not is_equal(dst.table, table):
+            if not is_equal(dst.table, table, False):
                 break
 
             assert len(statement.expressions.contents) == 1
