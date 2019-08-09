@@ -2,7 +2,7 @@ import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 
 
-def insert_table_record(constructor, key, value):
+def insert_table_record(constructor, key, value, replace):
     array = constructor.array.contents
     records = constructor.records.contents
 
@@ -33,10 +33,14 @@ def insert_table_record(constructor, key, value):
 
         if len(array) == 0 or index == len(array):
             array.append(record)
-        else:
+            return True
+        elif replace:
             array[index] = record
+            return True
+        else:
+            return False
 
-        return
+    # TODO duplicate checking
 
     record = nodes.TableRecord()
     record.key = key
@@ -44,7 +48,7 @@ def insert_table_record(constructor, key, value):
 
     if len(records) == 0:
         records.append(record)
-        return
+        return True
 
     last = records[-1]
 
@@ -52,6 +56,8 @@ def insert_table_record(constructor, key, value):
         records.insert(-1, record)
     else:
         records.append(record)
+
+    return True
 
 
 def has_same_table(node, table):

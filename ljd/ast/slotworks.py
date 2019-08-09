@@ -289,12 +289,16 @@ def _eliminate_into_table_constructors(tables):
 
         assert len(assignment.expressions.contents) == 1
 
-        _mark_invalidated(assignment)
-
         key = table_element.key
         value = assignment.expressions.contents[0]
 
-        insert_table_record(constructor, key, value)
+        success = insert_table_record(constructor, key, value, False)
+
+        # If this would involve overwriting another record, handle it normally
+        if not success:
+            continue
+
+        _mark_invalidated(assignment)
 
 
 def _eliminate_mass_assignments(massive):
