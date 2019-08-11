@@ -38,6 +38,10 @@ def insert_table_record(constructor, key, value, replace):
             array[index] = record
             return True
         else:
+            current_value = array[index].value
+            if isinstance(current_value, nodes.Primitive) and current_value.type == nodes.Primitive.T_NIL:
+                array[index] = record
+                return True
             return False
 
     # Check for record duplicates
