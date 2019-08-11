@@ -499,6 +499,38 @@ class _SlotsCollector(traverse.Visitor):
     def _pop_state(self):
         self._states.pop()
 
+    # Slots are stored (at most) twice: once by their id and the most recent slot assignment
+    # will be stored with id -1. This way we can prevent the loss of information after an elimination
+    # step where an expression references the same slot at multiple states (ids).
+    def _get_slot(self, slot, exact=True):
+        slot_states = self._state().known_slots.get(slot.slot)
+        if slot_states:
+            info = slot_states.get(slot.id)
+            if exact and info and info.slot_id != slot.id:
+                return None
+            return info
+        return None
+
+    def _set_slot(self, slot, info):
+        slot_states = self._state().known_slots.get(slot.slot)
+        if not slot_states:
+            slot_states = {}
+            self._state().known_slots[slot.slot] = slot_states
+        slot_states[slot.id] = info
+        if slot.id != -1:
+            slot_states[-1] = info
+
+    def _remove_slot(self, slot):
+        slot_states = self._state().known_slots.get(slot.slot)
+        if slot_states:
+            if slot.id != -1:
+                info = slot_states.get(slot.id)
+                if info == slot_states.get(-1):
+                    del slot_states[-1]
+            del slot_states[slot.id]
+            if not slot_states:
+                del self._state().known_slots[slot.slot]
+
     def _commit_info(self, info):
         assert len(info.references) > 0
 
@@ -508,28 +540,34 @@ class _SlotsCollector(traverse.Visitor):
             self.slots.append(info)
 
     def _commit_slot(self, slot, node):
-        info = self._state().known_slots.get(slot)
+        info = self._get_slot(slot)
 
         if info is None:
             return
 
         info.termination = node
 
-        del self._state().known_slots[slot]
+        self._remove_slot(slot)
 
         self._commit_info(info)
 
     def _register_slot(self, slot, node):
         self._commit_slot(slot, node)
 
-        info = _SlotInfo(self._next_slot_id)
-        info.slot = slot
+        # We need to re-use known slot ids here to avoid assigning a new id to a slot that has been registered on a
+        # previous slot collection run.
+        slot_id = slot.id
+        if slot_id == -1:
+            slot_id = self._next_slot_id
+            self._next_slot_id += 1
+            slot.id = slot_id
+
+        info = _SlotInfo(slot_id)
+        info.slot = slot.slot
         info.assignment = node
         info.function = self._state().function
 
-        self._state().known_slots[slot] = info
-
-        self._next_slot_id += 1
+        self._set_slot(slot, info)
 
     def _register_all_slots(self, node, slots):
         for slot in slots:
@@ -539,23 +577,29 @@ class _SlotsCollector(traverse.Visitor):
             if slot.type != nodes.Identifier.T_SLOT:
                 continue
 
-            self._register_slot(slot.slot, node)
+            self._register_slot(slot, node)
 
     def _commit_all_slots(self, slots, node):
         for slot in slots:
             if not isinstance(slot, nodes.Identifier):
                 continue
 
-            self._commit_slot(slot.slot, node)
+            self._commit_slot(slot, node)
 
     def _register_slot_reference(self, slot, node):
-        info = self._state().known_slots.get(slot)
+        # Slot references may have a reference to a slot that was identified in a previous block. WHen
+        # this is the case, we need to use the slot that has been assigned most recently.
+        info = self._get_slot(slot, False)
 
         if info is None:
             return
 
         reference = _SlotReference()
         reference.identifier = node
+
+        # Make sure the identifier node stores the correct slot reference.
+        if node.id == -1:
+            node.id = info.slot_id
 
         # Copy the list, but not contents
         reference.path = self._path[:]
@@ -575,7 +619,7 @@ class _SlotsCollector(traverse.Visitor):
 
     def visit_identifier(self, node):
         if node.type == nodes.Identifier.T_SLOT:
-            self._register_slot_reference(node.slot, node)
+            self._register_slot_reference(node, node)
 
     # ##
 
@@ -587,8 +631,11 @@ class _SlotsCollector(traverse.Visitor):
         self._pop_state()
 
     def leave_block(self, node):
-        for info in self._state().known_slots.values():
-            self._commit_info(info)
+        for info_states in self._state().known_slots.values():
+            for slot_id, info in info_states.items():
+                # Commit slots only once, so ignore the extra references to the "most recent" slots.
+                if slot_id == info.slot_id:
+                    self._commit_info(info)
 
         self._state().known_slots = {}
 
@@ -596,7 +643,7 @@ class _SlotsCollector(traverse.Visitor):
         self._commit_all_slots(node.variables.contents, node)
 
     def visit_numeric_loop_warp(self, node):
-        self._commit_slot(node.index.slot, node)
+        self._commit_slot(node.index, node)
 
     # ##
 

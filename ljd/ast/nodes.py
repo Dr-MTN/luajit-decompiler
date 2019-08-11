@@ -321,6 +321,7 @@ class Identifier:
         self.name = None
         self.type = -1
         self.slot = -1
+        self.id = -1
         self._varinfo = None
 
     def _accept(self, visitor):
@@ -330,7 +331,7 @@ class Identifier:
     def __str__(self):
         return "{ Identifier: {name: " + str(self.name) + ", type: " + ["T_SLOT", "T_LOCAL", "T_UPVALUE", "T_BUILTIN"][
             self.type] + \
-               ", slot: " + str(self.slot) + "} }"
+               ", slot: " + str(self.slot) + (self.id != -1 and ("#" + str(self.id)) or "") + "} }"
 
 
 # helper vararg/varreturn
