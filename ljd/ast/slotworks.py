@@ -709,6 +709,9 @@ class _SimplifyVisitor(traverse.Visitor):
         if not isinstance(func, nodes.TableElement) or not isinstance(func.table, nodes.Identifier):
             return
 
+        if isinstance(func.key, OPERATOR_TYPES):
+            return
+
         table = func.table
 
         if arg0.name != table.name or arg0.type != table.type or arg0.slot != table.slot:
