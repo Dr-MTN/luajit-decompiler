@@ -603,12 +603,18 @@ class Visitor(traverse.Visitor):
             if needs_parentheses:
                 self._write(")")
 
-            self._write(node.is_method and ":" or ".")
+            if node.is_method:
+                self._write(":")
+            elif isinstance(node.function.key, nodes.Constant):
+                self._write(".")
+            else:
+                self._write("[")
 
             if isinstance(node.function.key, nodes.Constant):
                 self._write(node.function.key.value)
             else:
                 self._visit(node.function.key)
+                self._write("]")
 
             self._skip(node.function)
 
