@@ -38,7 +38,7 @@ class _FunctionsCollector(traverse.Visitor):
     def visit_function_definition(self, node):
         self.result.append(node)
 
-def unwarp(node):
+def unwarp(node, conservative=False):
     try:
         _run_step(_fix_loops, node, repeat_until=False)
         _run_step(_fix_loops, node, repeat_until=True)
@@ -92,7 +92,7 @@ def unwarp(node):
             raise
 
     try:
-        _glue_flows(node)
+        _glue_flows(node, conservative)
     except:
         if catch_asserts:
             print("-- Decompilation Error: _glue_flows(node)\n", file=sys.stdout)
@@ -126,7 +126,7 @@ def _gather_statements_lists(node):
     return collector.result
 
 
-def _glue_flows(node):
+def _glue_flows(node, conservative=False):
     error_pending = False
 
     for statements in _gather_statements_lists(node):
@@ -155,8 +155,11 @@ def _glue_flows(node):
             target.contents = block.contents + target.contents
             block.contents = []
 
-        if hasattr(blocks[-1], "contents"):  # TODO(yzg): 'Return' object has no attribute 'contents'
-            statements.contents = blocks[-1].contents
+        # Most visitors make assumptions on blocks being present. If we want to simplify the AST in multiple passes,
+        # these outer blocks cannot simply be eliminated.
+        if not conservative or not isinstance(node, nodes.FunctionDefinition):
+            if hasattr(blocks[-1], "contents"):  # TODO(yzg): 'Return' object has no attribute 'contents'
+                statements.contents = blocks[-1].contents
 
 
 # Delete returns on the last line of a function, when those returns don't have any arguments

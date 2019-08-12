@@ -271,17 +271,22 @@ class Main:
 
         # ljd.ast.validator.validate(self.ast, warped=True)
 
+        extra_pass = True
         if True:
-            ljd.ast.unwarper.unwarp(self.ast)
+            ljd.ast.unwarper.unwarp(self.ast, extra_pass)
 
             # ljd.ast.validator.validate(self.ast, warped=False)
 
             if True:
                 ljd.ast.locals.mark_local_definitions(self.ast)
 
-                # ljd.ast.validator.validate(self.ast, warped=False)
+                # ljd.ast.validator.validate(self.ast, warped=extra_pass)
 
                 ljd.ast.mutator.primary_pass(self.ast)
+
+                if extra_pass:
+                    ljd.ast.slotworks.simplify_ast(self.ast)
+                    ljd.ast.unwarper.unwarp(self.ast, False)
 
                 try:
                     ljd.ast.validator.validate(self.ast, warped=False)
