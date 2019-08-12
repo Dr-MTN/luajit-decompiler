@@ -2,6 +2,7 @@
 # Copyright (C) 2013 Andrian Nord. See Copyright Notice in main.py
 #
 
+import copy
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
@@ -13,6 +14,9 @@ def mark_locals(ast):
 
 def mark_local_definitions(ast):
     traverse.traverse(_LocalDefinitionsMarker(), ast)
+
+def split_local_definitions(ast):
+    traverse.traverse(_LocalDefinitionsSplitter(), ast)
 
 
 class _LocalsMarker(traverse.Visitor):
@@ -228,3 +232,27 @@ class _LocalDefinitionsMarker(traverse.Visitor):
             self._state().addr = node_addr
 
         traverse.Visitor._visit(self, node)
+
+
+class _LocalDefinitionsSplitter(traverse.Visitor):
+    def visit_assignment(self, node):
+        if len(node.destinations.contents) <= 1:
+            return
+
+        is_local = False
+        for idx, dst in enumerate(node.destinations.contents):
+            if isinstance(dst, nodes.Identifier) and dst.type == nodes.Identifier.T_LOCAL:
+                is_local = True
+            elif is_local:
+                new_node = copy.copy(node)
+                new_node.destinations = nodes.VariablesList()
+                new_node.destinations.contents = node.destinations.contents[idx:]
+                node.destinations.contents = node.destinations.contents[:idx]
+                setattr(node, "_split_node", new_node)
+                break
+
+    def leave_block(self, node):
+        for idx, dst in enumerate(node.contents):
+            if hasattr(dst, "_split_node"):
+                node.contents.insert(idx + 1, dst._split_node)
+                delattr(dst, "_split_node")
