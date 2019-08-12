@@ -143,6 +143,9 @@ class Main:
                           type="string", dest="line_map_output_file", default="",
                           help="line map output file for writing", metavar="FILE")
 
+        # Output the pseudoasm of the initial AST instead of decompiling the input
+        parser.add_option("--asm", action = "store_true", dest="write_pseudoasm", default=False, help="Print pseudo asm")
+
         (self.options, args) = parser.parse_args()
 
         # Send assert catch argument to modules
@@ -208,10 +211,11 @@ class Main:
 
         generate_linemap = bool(self.options.line_map_output_file)
 
-        if self.options.output_file:
-            line_map = self.write_file(self.options.output_file, generate_linemap=generate_linemap)
-        else:
-            line_map = ljd.lua.writer.write(sys.stdout, self.ast, generate_linemap=generate_linemap)
+        if not self.options.write_pseudoasm:
+            if self.options.output_file:
+                line_map = self.write_file(self.options.output_file, generate_linemap=generate_linemap)
+            else:
+                line_map = ljd.lua.writer.write(sys.stdout, self.ast, generate_linemap=generate_linemap)
 
         if self.options.line_map_output_file:
             with open(self.options.line_map_output_file, "wb") as lm_out:
@@ -243,7 +247,8 @@ class Main:
         if not prototype:
             return 1
 
-        # ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
+        if self.options.write_pseudoasm:
+            ljd.pseudoasm.writer.write(sys.stdout, header, prototype)
 
         self.ast = ljd.ast.builder.build(header, prototype)
 
