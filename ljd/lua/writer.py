@@ -587,36 +587,47 @@ class Visitor(traverse.Visitor):
         if is_statement:
             self._start_statement(STATEMENT_FUNCTION_CALL)
 
+        func = node.function
+
         # We are going to modify this list so we can remove the first
         # argument
         args = node.arguments.contents
 
-        if node.is_method or isinstance(node.function, nodes.TableElement):
-            needs_parentheses = isinstance(node.function.table, nodes.TableConstructor) \
-                                or isinstance(node.function.table, OPERATOR_TYPES)
+        if node.is_method or (isinstance(func, nodes.TableElement)):
+            needs_parentheses = isinstance(func.table, nodes.TableConstructor) \
+                                or isinstance(func.table, OPERATOR_TYPES)
 
             if needs_parentheses:
                 self._write("(")
 
-            self._visit(node.function.table)
+            # Try to avoid printing the global environment on each function call that involves it. So instead of
+            # writing _env.function(), simply write function().
+
+            is_global_tbl = isinstance(func.table, nodes.Identifier) \
+                            and func.table.type == nodes.Identifier.T_BUILTIN \
+                            and func.table.name == "_env"
+
+            if not is_global_tbl or node.is_method:
+                self._visit(func.table)
 
             if needs_parentheses:
                 self._write(")")
 
             if node.is_method:
                 self._write(":")
-            elif isinstance(node.function.key, nodes.Constant):
-                self._write(".")
+            elif isinstance(func.key, nodes.Constant):
+                if not is_global_tbl:
+                    self._write(".")
             else:
                 self._write("[")
 
-            if isinstance(node.function.key, nodes.Constant):
-                self._write(node.function.key.value)
+            if isinstance(func.key, nodes.Constant):
+                self._write(func.key.value)
             else:
-                self._visit(node.function.key)
+                self._visit(func.key)
                 self._write("]")
 
-            self._skip(node.function)
+            self._skip(func)
 
             self._write("(")
             self._visit(node.arguments)
@@ -624,7 +635,7 @@ class Visitor(traverse.Visitor):
 
             self._skip(node.arguments)
         else:
-            self._visit(node.function)
+            self._visit(func)
 
             self._write("(")
             self._visit(node.arguments)
