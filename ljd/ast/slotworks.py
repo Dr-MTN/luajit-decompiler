@@ -241,6 +241,8 @@ LIST_TYPES = (nodes.VariablesList,
               nodes.ExpressionsList,
               nodes.StatementsList)
 
+OPERATOR_TYPES = (nodes.BinaryOperator, nodes.UnaryOperator)
+
 
 def _get_holder(path):
     for node in reversed(path[:-1]):
@@ -267,6 +269,16 @@ def _eliminate_simple_cases(simple):
             if first.identifier.name is None:
                 first.identifier.name = 'slot%d' % first.identifier.slot
             continue
+        elif isinstance(src, OPERATOR_TYPES) \
+                and isinstance(holder, nodes.TableElement) \
+                and holder.key == dst \
+                and isinstance(ref.path[-3], nodes.FunctionCall):
+            # Handle a special case where a function has been incorrectly marked as a method now that
+            # a slot will be reduced to an expression with an operator
+            function = ref.path[-3]
+            if function.is_method:
+                function.arguments.contents.insert(0, holder.table)
+                function.is_method = False
 
         _mark_invalidated(info.assignment)
 
