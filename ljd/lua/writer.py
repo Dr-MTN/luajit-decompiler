@@ -591,10 +591,24 @@ class Visitor(traverse.Visitor):
         # argument
         args = node.arguments.contents
 
-        if node.is_method:
+        if node.is_method or isinstance(node.function, nodes.TableElement):
+            needs_parentheses = isinstance(node.function.table, nodes.TableConstructor) \
+                                or isinstance(node.function.table, OPERATOR_TYPES)
+
+            if needs_parentheses:
+                self._write("(")
+
             self._visit(node.function.table)
-            self._write(":")
-            self._write(node.function.key.value)
+
+            if needs_parentheses:
+                self._write(")")
+
+            self._write(node.is_method and ":" or ".")
+
+            if isinstance(node.function.key, nodes.Constant):
+                self._write(node.function.key.value)
+            else:
+                self._visit(node.function.key)
 
             self._skip(node.function)
 
