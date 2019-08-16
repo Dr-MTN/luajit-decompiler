@@ -76,8 +76,8 @@ def eliminate_temporary(ast):
     return ast
 
 
-def simplify_ast(ast):
-    traverse.traverse(_SimplifyVisitor(), ast)
+def simplify_ast(ast, eliminate_slots=True):
+    traverse.traverse(_SimplifyVisitor(eliminate_slots=eliminate_slots), ast)
 
 
 def _eliminate_temporary(slots):
@@ -693,6 +693,17 @@ class _TreeCleanup(traverse.Visitor):
 
 class _SimplifyVisitor(traverse.Visitor):
 
+    def __init__(self, eliminate_slots=True):
+        super().__init__()
+        self._dirty = False
+        self._eliminate_slots = eliminate_slots
+
+    def leave_block(self, node):
+        if self._dirty:
+            if self._eliminate_slots:
+                eliminate_temporary(node)
+            self._dirty = False
+
     # Identify method calls, and mark them as such early. This eliminates their 'this' argument, which allows
     # the elimination of slots that would otherwise have three uses.
     def visit_function_call(self, node):
@@ -717,5 +728,6 @@ class _SimplifyVisitor(traverse.Visitor):
         if arg0.name != table.name or arg0.type != table.type or arg0.slot != table.slot:
             return
 
+        self._dirty = True
         node.is_method = True
         del args[0]

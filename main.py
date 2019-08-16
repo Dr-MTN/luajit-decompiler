@@ -272,7 +272,13 @@ class Main:
             else:
                 raise
 
-        ljd.ast.slotworks.simplify_ast(self.ast)
+        try:
+            ljd.ast.slotworks.simplify_ast(self.ast, eliminate_slots=True)
+        except:
+            if self.options.catch_asserts:
+                print("-- Decompilation Error: ljd.ast.slotworks.simplify_ast(self.ast)\n", file=sys.stdout)
+            else:
+                raise
 
         # ljd.ast.validator.validate(self.ast, warped=True)
 
