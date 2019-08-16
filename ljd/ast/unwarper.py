@@ -701,8 +701,10 @@ def _get_simple_local_assignment_slot(start, body, end):
         slot = true.contents[0].destinations.contents[0]
         if not isinstance(slot, nodes.TableElement):
             return slot.slot, slot.type
-        else:
+        elif isinstance(slot.table, nodes.Identifier):
             return slot.table.slot, slot.table.type
+        else:
+            return -1, None
 
 
 def _find_expression_slot(body):
