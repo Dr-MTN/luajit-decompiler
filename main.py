@@ -300,6 +300,7 @@ class Main:
                 if extra_pass:
                     ljd.ast.slotworks.simplify_ast(self.ast)
                     ljd.ast.unwarper.unwarp(self.ast, False)
+                    ljd.ast.mutator.primary_pass(self.ast)
 
                 try:
                     ljd.ast.validator.validate(self.ast, warped=False)
