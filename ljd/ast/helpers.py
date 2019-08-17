@@ -49,8 +49,9 @@ def insert_table_record(constructor, key, value, replace):
     # end up in the table to the user can make sense of what happened. Nonetheless, we should still
     # reject stuff like this.
     for rec in records:
-        if is_equal(rec.key, key, strict=False):
-            return False
+        if isinstance(rec, nodes.TableRecord):
+            if is_equal(rec.key, key, strict=False):
+                return False
 
     record = nodes.TableRecord()
     record.key = key
