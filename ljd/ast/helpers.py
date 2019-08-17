@@ -2,7 +2,7 @@ import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 
 
-def insert_table_record(constructor, key, value, replace):
+def insert_table_record(constructor, key, value, replace, allow_duplicates=True):
     array = constructor.array.contents
     records = constructor.records.contents
 
@@ -48,10 +48,11 @@ def insert_table_record(constructor, key, value, replace):
     # This isn't nearly as important as duplicate protection with arrays, since both values
     # end up in the table to the user can make sense of what happened. Nonetheless, we should still
     # reject stuff like this.
-    for rec in records:
-        if isinstance(rec, nodes.TableRecord):
-            if is_equal(rec.key, key, strict=False):
-                return False
+    if not allow_duplicates:
+        for rec in records:
+            if isinstance(rec, nodes.TableRecord):
+                if is_equal(rec.key, key, strict=False):
+                    return False
 
     record = nodes.TableRecord()
     record.key = key
