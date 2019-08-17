@@ -420,8 +420,10 @@ def _unwarp_expressions_pack(blocks, pack):
             replacements[start] = end
 
             slotworks.eliminate_temporary(end)
+            slotworks.simplify_ast(end, eliminate_slots=True)
         else:
             slotworks.eliminate_temporary(start)
+            slotworks.simplify_ast(end, eliminate_slots=True)
 
     return blocks
 
