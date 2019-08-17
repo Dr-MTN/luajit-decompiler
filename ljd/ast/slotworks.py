@@ -276,7 +276,9 @@ def _eliminate_simple_cases(simple):
             # Handle a special case where a function has been incorrectly marked as a method now that
             # a slot will be reduced to an expression with an operator
             function = ref.path[-3]
-            if function.is_method:
+            if function.is_method and \
+                    (not isinstance(function, nodes.TableElement)
+                     or function.key.type != nodes.Constant.T_STRING):
                 function.arguments.contents.insert(0, holder.table)
                 function.is_method = False
 
@@ -300,7 +302,6 @@ def _eliminate_into_table_constructors(tables):
         assert isinstance(assignment, nodes.Assignment)
 
         assert len(assignment.expressions.contents) == 1
-
         key = table_element.key
         value = assignment.expressions.contents[0]
 
@@ -719,8 +720,10 @@ class _SimplifyVisitor(traverse.Visitor):
         arg0 = args[0]
         if not isinstance(func, nodes.TableElement) or not isinstance(func.table, nodes.Identifier):
             return
-
-        if isinstance(func.key, OPERATOR_TYPES):
+        elif isinstance(func.key, nodes.Identifier):
+            if func.key.type != nodes.Identifier.T_SLOT:
+                return
+        elif not isinstance(func.key, nodes.Constant) or func.key.type != nodes.Constant.T_STRING:
             return
 
         table = func.table
