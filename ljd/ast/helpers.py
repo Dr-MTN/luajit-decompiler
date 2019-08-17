@@ -79,7 +79,7 @@ def has_same_table(node, table):
             self.table = checker_table
 
         def visit_table_element(self, checked_node):
-            if is_equal(self.table, checked_node):
+            if is_equal(self.table, checked_node.table):
                 self.found = True
 
         def _visit(self, checked_node):
