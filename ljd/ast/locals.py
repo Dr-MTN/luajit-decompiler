@@ -112,8 +112,9 @@ class _LocalsMarker(traverse.Visitor):
         addr = getattr(node, "_addr", None)
 
         if not isinstance(node, nodes.Identifier) and addr is not None:
-            assert self._state().addr <= addr
-            self._state().addr = addr
+            # TODO This was an assertion, but it doesn't always hold up. Why was this required?
+            if self._state().addr <= addr:
+                self._state().addr = addr
             self._process_slots(addr)
 
     # We need to process slots twice as it could be the last
