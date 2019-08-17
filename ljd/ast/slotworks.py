@@ -307,7 +307,7 @@ def _eliminate_into_table_constructors(tables):
         success = insert_table_record(constructor, key, value, False)
 
         # If this would involve overwriting another record, handle it normally
-        if success is False:
+        if not success:
             continue
 
         _mark_invalidated(assignment)

@@ -11,7 +11,7 @@ def insert_table_record(constructor, key, value, replace):
                or isinstance(records[-1], nodes.TableRecord)
 
         records.append(value)
-        return
+        return True
 
     while isinstance(key, nodes.Constant) \
             and key.type == key.T_INTEGER \
