@@ -555,27 +555,23 @@ class Visitor(traverse.Visitor):
 
             return
 
-        base_is_constructor = isinstance(base, nodes.TableConstructor)
+        base_is_constructor = isinstance(base, nodes.TableConstructor) or isinstance(base, OPERATOR_TYPES)
 
-        if not base_is_constructor and is_valid_name:
-            self._visit(base)
+        if base_is_constructor:
+            self._write("(")
+
+        self._visit(base)
+
+        if base_is_constructor:
+            self._write(")")
+
+        if is_valid_name:
             self._write(".")
-
             self._write(key.value)
             self._skip(key)
         else:
-            if base_is_constructor:
-                self._write("(")
-
-            self._visit(base)
-
-            if base_is_constructor:
-                self._write(")")
-
             self._write("[")
-
             self._visit(key)
-
             self._write("]")
 
     def visit_vararg(self, node):
@@ -589,45 +585,30 @@ class Visitor(traverse.Visitor):
 
         func = node.function
 
-        # We are going to modify this list so we can remove the first
-        # argument
+        # We are going to modify this list so we can remove the first argument
         args = node.arguments.contents
 
-        if node.is_method or (isinstance(func, nodes.TableElement)):
-            needs_parentheses = isinstance(func.table, nodes.TableConstructor) \
-                                or isinstance(func.table, OPERATOR_TYPES)
+        if node.is_method:
+            func = node.function
+            base = func.table
+            base_is_constructor = isinstance(base, nodes.TableConstructor) or isinstance(base, OPERATOR_TYPES)
 
-            if needs_parentheses:
+            if base_is_constructor:
                 self._write("(")
 
-            # Try to avoid printing the global environment on each function call that involves it. So instead of
-            # writing _env.function(), simply write function().
+            self._visit(base)
 
-            is_global_tbl = isinstance(func.table, nodes.Identifier) \
-                            and func.table.type == nodes.Identifier.T_BUILTIN \
-                            and func.table.name == "_env"
-
-            if not is_global_tbl or node.is_method:
-                self._visit(func.table)
-
-            if needs_parentheses:
+            if base_is_constructor:
                 self._write(")")
 
-            if node.is_method:
-                self._write(":")
-            elif isinstance(func.key, nodes.Constant):
-                if not is_global_tbl:
-                    self._write(".")
-            else:
-                self._write("[")
+            self._write(":")
 
-            if isinstance(func.key, nodes.Constant):
-                self._write(func.key.value)
-            else:
-                self._visit(func.key)
-                self._write("]")
+            assert self._is_valid_name(func.key)
 
-            self._skip(func)
+            self._write(func.key.value)
+            self._skip(func.key)
+
+            self._skip(node.function)
 
             self._write("(")
             self._visit(node.arguments)
@@ -635,7 +616,7 @@ class Visitor(traverse.Visitor):
 
             self._skip(node.arguments)
         else:
-            self._visit(func)
+            self._visit(node.function)
 
             self._write("(")
             self._visit(node.arguments)
