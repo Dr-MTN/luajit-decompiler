@@ -711,10 +711,10 @@ def _find_expression_slot(body):
     slot = None
 
     for block in reversed(body):
-        if len(block.contents) != 1:
+        if len(block.contents) == 0: # TODO Why was this != 1? Does it always need to be just one?
             continue
 
-        slot = block.contents[0].destinations.contents[0]
+        slot = block.contents[-1].destinations.contents[0]
         break
 
     return slot
