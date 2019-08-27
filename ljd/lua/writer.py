@@ -10,6 +10,8 @@ import ljd.ast.traverse as traverse
 import ljd
 from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 
+keep_slot_ids = False
+
 CMD_START_STATEMENT = 0
 CMD_END_STATEMENT = 1
 CMD_END_LINE = 3
@@ -89,6 +91,42 @@ class Visitor(traverse.Visitor):
 
     def _pop_state(self):
         return self._states.pop()
+
+    # ##
+
+    def _write_slot(self, node):
+        slot = None
+        slot_ids = None
+
+        if isinstance(node, nodes.Identifier):
+            slot = node.slot
+
+            if node.id != -1:
+                slot_ids = node.id
+            else:
+                slot_ids = getattr(node, "_ids", None)
+        else:
+            slot = getattr(node, "_slot", None)
+            slot_id = getattr(node, "_slot_id", None)
+
+        assert slot is not None
+
+        name = "slot" + str(slot)
+
+        if keep_slot_ids:
+            if slot_ids and slot_ids != -1:
+                name += "#"
+                if isinstance(slot_ids, list):
+                    name += "{"
+                    for i, slot_id in enumerate(slot_ids):
+                        if i > 0:
+                            name += "|"
+                        name += str(slot_id)
+                    name += "}"
+                else:
+                    name += str(slot_ids)
+
+        self._write(name)
 
     # ##
 
@@ -521,15 +559,12 @@ class Visitor(traverse.Visitor):
 
     def visit_identifier(self, node):
         if node.type == nodes.Identifier.T_SLOT:
-            placeholder_identifier = "slot{0}"
-
-            # Fix placeholder slots before writing
             if node.slot == SLOT_FALSE:
-                placeholder_identifier = "false"
+                self._write("false")
             elif node.slot == SLOT_TRUE:
-                placeholder_identifier = "true"
-
-            self._write(placeholder_identifier, node.slot)
+                self._write("true")
+            else:
+                self._write_slot(node)
         elif not node.name and node.type == nodes.Identifier.T_UPVALUE:
             placeholder_identifier = "uv{0}"
             self._write(placeholder_identifier, node.slot)
@@ -700,7 +735,7 @@ class Visitor(traverse.Visitor):
 
     def visit_conditional_warp(self, node):
         if hasattr(node, "_slot"):
-            self._write("slot" + str(node._slot))
+            self._write_slot(node)
             self._write(" = ")
 
         self._write("if ")

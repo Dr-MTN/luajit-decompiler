@@ -328,10 +328,26 @@ class Identifier:
         visitor._visit_node(visitor.visit_identifier, self)
         visitor._leave_node(visitor.leave_identifier, self)
 
+    def _slot_name(self):
+        name = str(self.slot)
+        if self.id != -1:
+            name += ("#" + str(self.id))
+        else:
+            slot_ids = getattr(self, "_ids", None)
+            if slot_ids:
+                name += "#("
+                for i, slot_id in enumerate(slot_ids):
+                    if i > 0:
+                        name += "|"
+                    name += str(slot_id)
+                name += ")"
+        return name
+
+
     def __str__(self):
         return "{ Identifier: {name: " + str(self.name) + ", type: " + ["T_SLOT", "T_LOCAL", "T_UPVALUE", "T_BUILTIN"][
             self.type] + \
-               ", slot: " + str(self.slot) + (self.id != -1 and ("#" + str(self.id)) or "") + "} }"
+               ", slot: " + self._slot_name() + "} }"
 
 
 # helper vararg/varreturn
