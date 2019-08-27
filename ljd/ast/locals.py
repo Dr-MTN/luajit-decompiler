@@ -15,6 +15,7 @@ def mark_locals(ast):
 def mark_local_definitions(ast):
     traverse.traverse(_LocalDefinitionsMarker(), ast)
 
+
 def split_local_definitions(ast):
     traverse.traverse(_LocalDefinitionsSplitter(), ast)
 
@@ -79,14 +80,6 @@ class _LocalsMarker(traverse.Visitor):
     def visit_function_definition(self, node):
         self._push_state()
         self._state().debuginfo = node._debuginfo
-
-        varinfo = node._debuginfo and node._debuginfo.variable_info
-        for i in range(varinfo and len(varinfo) or 0, 0, -1):
-            info = varinfo[i - 1]
-            if None != info.start_addr == info.end_addr:
-                info.end_addr += 1
-                continue
-            break
 
     def leave_function_definition(self, node):
         addr = node._instructions_count
