@@ -167,12 +167,21 @@ def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguou
 
     src = info.assignment.expressions.contents[0]
 
-    assert isinstance(src, (nodes.FunctionCall,
-                            nodes.Vararg,
-                            nodes.Primitive))
+    def _remove_invalid_references(info):
+        # TODO need to check why these invalid references end up here and whether they're actually invalid
+        while len(info.references) > 2:
+            ref = info.references[-1].identifier
+            if ref.id != -1:
+                break
+            possible_ids = getattr(ref, "_ids", [])
+            possible_ids.remove(info.slot_id)
+            del info.references[-1]
+
+    assert isinstance(src, (nodes.FunctionCall, nodes.Vararg, nodes.Primitive))
     if isinstance(holder, nodes.Assignment):
         dst = holder.destinations.contents[0]
 
+        _remove_invalid_references(info)
         assert len(info.references) == 2
         orig = info.references[0].identifier
 
@@ -182,6 +191,7 @@ def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguou
 
         massive.append((orig, info, assignment, dst))
     elif isinstance(holder, nodes.IteratorWarp):
+        _remove_invalid_references(info)
         assert len(info.references) == 2
         iterators.append((info, src, holder))
     elif isinstance(src, nodes.Primitive) and src.type == src.T_NIL:
