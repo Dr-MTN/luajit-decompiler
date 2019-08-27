@@ -9,6 +9,7 @@ binop = nodes.BinaryOperator
 
 catch_asserts = False
 
+# TODO: reduce expressions like a.x = a.x or {}
 
 # ##
 # ## REMEMBER
@@ -37,6 +38,7 @@ class _FunctionsCollector(traverse.Visitor):
 
     def visit_function_definition(self, node):
         self.result.append(node)
+
 
 def unwarp(node, conservative=False):
     try:
@@ -219,13 +221,13 @@ def _unwarp_expressions(blocks):
                                       " supported")
 
         try:
-            expressions = _find_expressions(start, body, end)
+            expressions, unused = _find_expressions(start, body, end)
         except AttributeError:
             if catch_asserts:
                 setattr(start, "_decompilation_error_here", True)
                 print("-- WARNING: Error occurred during decompilation.")
                 print("--   Code may be incomplete or incorrect.")
-                expressions = []
+                expressions, unused = [], []
             else:
                 raise
 
@@ -239,13 +241,33 @@ def _unwarp_expressions(blocks):
 
         assert len(expressions_set) == len(expressions)
 
-        pack += list(reversed(expressions))
-        pack_set |= expressions_set
-
         endest_end = _find_endest_end(expressions)
 
         if endest_end != end:
             end_index = blocks.index(endest_end)
+
+        if unused:
+            expression_start_index = blocks.index(expressions[0][1])
+            if expression_start_index > start_index + 1:
+                # Too big of a gap, there may be stuff we missed
+                # TODO Unsure if the check is still needed
+
+                missed = []
+                for i in range(0, len(unused)):
+                    sub_block = unused[i][0]
+                    for sub_index in range(start_index + 1, end_index - 1):
+                        if sub_block == blocks[sub_index]:
+                            missed.append(unused[i])
+
+                missed_set = set(missed)
+
+                assert len(missed_set) == len(missed)
+
+                pack += list(reversed(missed))
+                pack_set |= missed_set
+
+        pack += list(reversed(expressions))
+        pack_set |= expressions_set
 
         start_index = end_index
 
@@ -253,9 +275,9 @@ def _unwarp_expressions(blocks):
 
 
 def _find_endest_end(expressions):
-    endest_end = expressions[0][1]
+    endest_end = expressions[0][2]
 
-    for _start, exp_end, _slot, _slot_type in expressions[1:]:
+    for _, _start, exp_end, _slot, _slot_type, _slot_ref in expressions[1:]:
         if exp_end.index > endest_end.index:
             endest_end = exp_end
 
@@ -335,7 +357,7 @@ def _extract_if_body(start_index, blocks, topmost_end):
 def _unwarp_expressions_pack(blocks, pack):
     replacements = {}
 
-    for start, end, slot, slot_type in reversed(pack):
+    for _, start, end, slot, slot_type, slot_ref in reversed(pack):
         end = replacements.get(end, end)
 
         start_index = blocks.index(start)
@@ -379,6 +401,21 @@ def _unwarp_expressions_pack(blocks, pack):
         #  would have ended up anyway.
         _set_flow_to(start, end)
 
+        # We no longer need the body, but there may still be some slots we need to eliminate before we lose
+        # the definitions. This works because the expressions we found earlier still have a reference to
+        # the nodes these body blocks. Create a temporary block to take care of this.
+        if len(body) > 1:
+            # TODO: Avoid using a temporary block and process "unused" slots as well
+            tmp_block = nodes.Block()
+            tmp_block.first_address = body[0].first_address
+            tmp_block.last_address = body[-1].last_address
+            tmp_block.index = body[0].index
+            tmp_block.warpins_count = body[0].warpins_count
+            tmp_block.warp = body[-1].warp
+            for block in body:
+                tmp_block.contents += block.contents
+            slotworks.eliminate_temporary(tmp_block, False)
+
         # Leave the starting block in for now, but delete the rest of
         #  the body since we need to do so anyway and not doing so now
         #  will result in it ending up in end_warps
@@ -400,7 +437,7 @@ def _unwarp_expressions_pack(blocks, pack):
         if start_index > 0:
             preceding_block = blocks[start_index - 1]
             if hasattr(preceding_block, "warp") \
-                     and isinstance(preceding_block.warp, nodes.UnconditionalWarp):
+                    and isinstance(preceding_block.warp, nodes.UnconditionalWarp):
                 target_index = blocks.index(_get_target(preceding_block.warp))
 
                 if target_index in range(start_index + 1, end_index - 1):
@@ -413,6 +450,9 @@ def _unwarp_expressions_pack(blocks, pack):
             end.contents = start.contents + end.contents
             start.contents = []
 
+            # TODO check if necessary
+            for node in blocks[start_index].contents:
+                setattr(node, "_invalidated", True)
             del blocks[start_index]
 
             _replace_targets(blocks, start, end)
@@ -489,11 +529,12 @@ def _gather_slots(node):
     return collector.slots
 
 
-def _find_expressions(start, body, end):
+def _find_expressions(start, body, end, level=0):
     # Explicitly allow the local a = x ~= "b" case
-    slot, slot_type = _get_simple_local_assignment_slot(start, body, end)
+    slot, slot_type, slot_ref = _get_simple_local_assignment_slot(start, body, end)
 
     expressions = []
+    unused = []
 
     # We have something at the end, but not the true/false?
 
@@ -501,7 +542,7 @@ def _find_expressions(start, body, end):
     extbody = [start] + body
 
     is_local = False
-    sure_expression = False
+    sure_expression = None
 
     # Note the subexpression processing here has been rewritten from earlier versions - there
     #  used to be a problem where the following code:
@@ -539,16 +580,18 @@ def _find_expressions(start, body, end):
         block = extbody[current_i]
 
         subs = []
+        subs_unused = []
 
         # Look for a self-contained conditional, and process that, then skip
         #  over it.
         branch_end = _find_branching_end(extbody[current_i:], None)
         if branch_end and branch_end in extbody:
             be_index = extbody.index(branch_end)
-            i = be_index
+            i = be_index  # NOTE This misses things, so re-check it later
 
             body = extbody[current_i+1:be_index]
-            subs = _find_expressions(block, body, branch_end)
+            subs, subs_unused = _find_expressions(block, body, branch_end, level + 1)
+            _ = 0
 
         if len(subs) != 0:
             endest_end = _find_endest_end(subs)
@@ -563,9 +606,9 @@ def _find_expressions(start, body, end):
 
             # If any of the subexpressions are put into local variables, then this
             #  must be an if block, rather than an expression.
-            for sub_start, sub_end, sub_slot, sub_slot_type in subs:
+            for _, sub_start, sub_end, sub_slot, sub_slot_type, sub_slot_ref in subs:
                 if sub_slot_type == nodes.Identifier.T_LOCAL:
-                    return expressions
+                    return expressions, unused
 
                 # Search the body of the subexpression - if it contains anything other
                 # than assignments, then it must be an if..end rather than an expression
@@ -587,14 +630,19 @@ def _find_expressions(start, body, end):
                 sub_body = extbody[sub_start_i:sub_end_i]
 
                 # And check it
-                for block in sub_body:
-                    for item in block.contents:
+                for sub_block in sub_body:
+                    for item in sub_block.contents:
                         if not isinstance(item, nodes.Assignment):
-                            return expressions
+                            return expressions, subs
 
             expressions = subs + expressions
             i = new_i
             continue
+        elif subs_unused:
+            unused = subs_unused + unused
+        else:
+            # We may not have checked all sub expressions
+            i = current_i + 1
 
         if isinstance(block.warp, nodes.ConditionalWarp):
             condition = block.warp.condition
@@ -605,24 +653,27 @@ def _find_expressions(start, body, end):
 
             if is_end:
                 if is_binop:
-                    return expressions
+                    return expressions, unused
                 elif slot < 0 <= block_slot:
                     slot = block_slot
                     slot_type = nodes.Identifier.T_SLOT
-                    sure_expression = True
+                    slot_ref = block
+                    if sure_expression is None:
+                        sure_expression = True
                 elif slot != block_slot:
-                    return expressions
-                else:
+                    sure_expression = False
+                    continue
+                elif sure_expression is None:
                     sure_expression = True
         elif isinstance(block.warp, nodes.UnconditionalWarp):
             if block == start and len(block.contents) == 0:
-                return []
+                return [], expressions
 
         if len(block.contents) == 0:
             continue
 
         if block != start and len(block.contents) > 1:
-            return expressions
+            return expressions, unused
 
         assignment = block.contents[-1]
 
@@ -630,7 +681,7 @@ def _find_expressions(start, body, end):
             if block == start:
                 continue
 
-            return expressions
+            return expressions, unused
 
         destinations = assignment.destinations.contents
 
@@ -638,7 +689,7 @@ def _find_expressions(start, body, end):
             if block == start:
                 continue
 
-            return expressions
+            return expressions, unused
 
         dst = destinations[0]
 
@@ -646,13 +697,16 @@ def _find_expressions(start, body, end):
             if block == start:
                 continue
 
-            return expressions
+            return expressions, unused
 
         if isinstance(block.warp, nodes.ConditionalWarp):
             if block == start:
                 continue
 
-            return expressions
+            return expressions, unused
+
+        if not sure_expression and sure_expression is not None:
+            return expressions, unused
 
         if slot < 0:
             # If all encounters are locals, which means
@@ -660,22 +714,24 @@ def _find_expressions(start, body, end):
             if dst.type == nodes.Identifier.T_LOCAL:
                 is_local = True
             elif dst.type == nodes.Identifier.T_UPVALUE:
-                return []
+                return [], expressions
 
             slot = dst.slot
             slot_type = dst.type
+            slot_ref = dst
         elif slot == dst.slot:
             slot_type = dst.type
+            slot_ref = dst
 
             if dst.type == nodes.Identifier.T_UPVALUE:
-                return []
+                return [], expressions
         else:
             assert block != start
 
-            return []
+            return [], expressions
 
     if slot < 0:
-        return []
+        return [], expressions
 
     true, _false, body = _get_terminators(body)
 
@@ -686,27 +742,27 @@ def _find_expressions(start, body, end):
         sure_expression = True
 
     if not sure_expression and is_local:
-        return expressions
+        return expressions, unused
 
-    return expressions + [(start, end, slot, slot_type)]
+    return expressions + [(block, start, end, slot, slot_type, slot_ref)], unused
 
 
 def _get_simple_local_assignment_slot(start, body, end):
     if len(body) != 2:
-        return -1, None
+        return -1, None, None
 
     true, _false, body = _get_terminators(body)
 
     if true is None:
-        return -1, None
+        return -1, None, None
     else:
         slot = true.contents[0].destinations.contents[0]
         if not isinstance(slot, nodes.TableElement):
-            return slot.slot, slot.type
+            return slot.slot, slot.type, slot
         elif isinstance(slot.table, nodes.Identifier):
-            return slot.table.slot, slot.table.type
+            return slot.table.slot, slot.table.type, slot.table
         else:
-            return -1, None
+            return -1, None, None
 
 
 def _find_expression_slot(body):
