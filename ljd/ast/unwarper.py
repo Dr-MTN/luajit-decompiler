@@ -419,11 +419,11 @@ def _unwarp_expressions_pack(blocks, pack):
 
             replacements[start] = end
 
-            slotworks.eliminate_temporary(end)
-            slotworks.simplify_ast(end, eliminate_slots=True)
+            slotworks.eliminate_temporary(end, False)
+            slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
         else:
-            slotworks.eliminate_temporary(start)
-            slotworks.simplify_ast(end, eliminate_slots=True)
+            slotworks.eliminate_temporary(start, False)
+            slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
 
     return blocks
 
@@ -1528,6 +1528,7 @@ def _fix_loops(blocks, repeat_until):
 
     return blocks
 
+
 def _handle_single_loop(start, end, blocks, repeat_until):
     start_index = blocks.index(start)
     end_index = blocks.index(end)
@@ -2170,7 +2171,7 @@ def _cleanup_ast(blocks):
 
     # Now that everything is nicely packed together, the code to eliminate temporary variables that
     #  are used in the input part of a for..in loop should be able to get everything.
-    slotworks.eliminate_temporary(blocks[0])
+    slotworks.eliminate_temporary(blocks[0], False)
 
     return blocks
 

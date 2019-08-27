@@ -35,12 +35,14 @@ import ljd.rawdump.code
 import ljd.pseudoasm.writer
 import ljd.pseudoasm.instructions
 import ljd.ast.builder
+import ljd.ast.slotworks
 import ljd.ast.validator
 import ljd.ast.locals
-import ljd.ast.slotworks
 import ljd.ast.unwarper
 import ljd.ast.mutator
 import ljd.lua.writer
+
+import ljd.ast.nodes as nodes
 
 
 def dump(name, obj, level=0):
@@ -265,7 +267,7 @@ class Main:
         # ljd.ast.validator.validate(self.ast, warped=True)
 
         try:
-            ljd.ast.slotworks.eliminate_temporary(self.ast)
+            ljd.ast.slotworks.eliminate_temporary(self.ast, ignore_ambiguous=True, identify_slots=True)
         except:
             if self.options.catch_asserts:
                 print("-- Decompilation Error: ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
@@ -273,7 +275,7 @@ class Main:
                 raise
 
         try:
-            ljd.ast.slotworks.simplify_ast(self.ast, eliminate_slots=True)
+            ljd.ast.slotworks.simplify_ast(self.ast, dirty_callback=ljd.ast.slotworks.eliminate_temporary)
         except:
             if self.options.catch_asserts:
                 print("-- Decompilation Error: ljd.ast.slotworks.simplify_ast(self.ast)\n", file=sys.stdout)
@@ -284,23 +286,17 @@ class Main:
 
         ljd.ast.locals.split_local_definitions(self.ast)
 
-        extra_pass = True
         if True:
-            ljd.ast.unwarper.unwarp(self.ast, extra_pass)
+            ljd.ast.unwarper.unwarp(self.ast, False)
 
             # ljd.ast.validator.validate(self.ast, warped=False)
 
             if True:
                 ljd.ast.locals.mark_local_definitions(self.ast)
 
-                # ljd.ast.validator.validate(self.ast, warped=extra_pass)
+                # ljd.ast.validator.validate(self.ast, warped=False)
 
                 ljd.ast.mutator.primary_pass(self.ast)
-
-                if extra_pass:
-                    ljd.ast.slotworks.simplify_ast(self.ast)
-                    ljd.ast.unwarper.unwarp(self.ast, False)
-                    ljd.ast.mutator.primary_pass(self.ast)
 
                 try:
                     ljd.ast.validator.validate(self.ast, warped=False)

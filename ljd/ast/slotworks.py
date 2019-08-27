@@ -62,12 +62,12 @@ debug_verify = "LJD_DEBUG" in os.environ
 # sort them. This should solve this issue for good.
 
 
-def eliminate_temporary(ast):
+def eliminate_temporary(ast, ignore_ambiguous=True, identify_slots=False):
     _eliminate_multres(ast)
 
-    slots, unused = _collect_slots(ast)
+    slots, unused = _collect_slots(ast, identify_slots=identify_slots)
     _sort_slots(slots)
-    _eliminate_temporary(slots)
+    _eliminate_temporary(slots, ignore_ambiguous)
 
     # _remove_unused(unused)
 
@@ -76,16 +76,30 @@ def eliminate_temporary(ast):
     return ast
 
 
-def simplify_ast(ast, eliminate_slots=True):
-    traverse.traverse(_SimplifyVisitor(eliminate_slots=eliminate_slots), ast)
+def simplify_ast(ast, dirty_callback=None):
+    traverse.traverse(_SimplifyVisitor(dirty_callback=dirty_callback), ast)
 
 
-def _eliminate_temporary(slots):
+def _eliminate_temporary(slots, ignore_ambiguous=True):
     simple = []
     massive = []
     tables = []
     iterators = []
+    unsafe = []
 
+    _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous)
+
+    _eliminate_simple_cases(simple)
+    _recheck_unsafe_cases(unsafe, False)
+
+    _eliminate_into_table_constructors(tables)
+    _eliminate_mass_assignments(massive)
+    _eliminate_iterators(iterators)
+
+    return simple, massive, tables, iterators, unsafe
+
+
+def _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous=True):
     for info in slots:
         assignment = info.assignment
 
@@ -103,17 +117,51 @@ def _eliminate_temporary(slots):
         is_massive = len(assignment.destinations.contents) > 1
 
         if is_massive:
-            _fill_massive_refs(info, simple, massive, iterators)
+            _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous)
         else:
-            _fill_simple_refs(info, simple, tables)
-
-    _eliminate_simple_cases(simple)
-    _eliminate_into_table_constructors(tables)
-    _eliminate_mass_assignments(massive)
-    _eliminate_iterators(iterators)
+            _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous)
 
 
-def _fill_massive_refs(info, simple, massive, iterators):
+def _recheck_unsafe_cases(unsafe, ignore_ambiguous):
+    if not unsafe:
+        return
+
+    blocks = set()
+    slots = set()
+    for info in unsafe:
+        slots.add(str(info.slot) + "#" + str(info.slot_id))
+        for ref in info.references[1:]:
+            for node in reversed(ref.path):
+                if isinstance(node, nodes.Block):
+                    blocks.add(node)
+                    break
+
+    if len(blocks) > 0:
+        dirty_blocks = []
+
+        def _ast_dirty_cb(ast):
+            new_simple, new_massive, new_tables, new_iterators, new_unsafe = [], [], [], [], []
+
+            _cleanup_invalid_nodes(ast)
+
+            # Collect slots in the block, but only keep those that were deemed unsafe to eliminate before.
+            new_slots, _ = _collect_slots(ast)
+            for idx, info in enumerate(new_slots):
+                if (str(info.slot) + "#" + str(info.slot_id)) not in slots:
+                    del new_slots[idx]
+
+            _sort_slots(new_slots)
+
+            _fill_refs(new_slots, new_simple, new_massive, new_tables, new_iterators, new_unsafe)
+            _eliminate_simple_cases(new_simple)
+
+        for block in blocks:
+            simplify_ast(block, dirty_callback=_ast_dirty_cb)
+
+    return False
+
+
+def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous):
     ref = info.references[1]
     holder = _get_holder(ref.path)
 
@@ -132,10 +180,10 @@ def _fill_massive_refs(info, simple, massive, iterators):
 
         assert isinstance(assignment, nodes.Assignment)
 
-        massive.append((orig, info.assignment, assignment, dst))
+        massive.append((orig, info, assignment, dst))
     elif isinstance(holder, nodes.IteratorWarp):
         assert len(info.references) == 2
-        iterators.append((info.assignment, src, holder))
+        iterators.append((info, src, holder))
     elif isinstance(src, nodes.Primitive) and src.type == src.T_NIL:
         assert len(info.references) == 2
 
@@ -147,7 +195,7 @@ def _fill_massive_refs(info, simple, massive, iterators):
         simple.append((info, ref, src))
 
 
-def _fill_simple_refs(info, simple, tables):
+def _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous):
     src = info.assignment.expressions.contents[0]
 
     src_is_table = isinstance(src, nodes.TableConstructor)
@@ -177,6 +225,9 @@ def _fill_simple_refs(info, simple, tables):
     all_ctor_refs = True
 
     for ref in info.references[1:]:
+        if ignore_ambiguous and ref.identifier.id == -1:
+            continue
+
         holder = _get_holder(ref.path)
 
         is_element = isinstance(holder, nodes.TableElement)
@@ -234,6 +285,8 @@ def _fill_simple_refs(info, simple, tables):
     # be safe from being eliminated)
     if len(new_simple) == 1:
         simple += new_simple
+    elif len(new_simple) > 1:
+        unsafe.append(info)
 
 
 LIST_TYPES = (nodes.VariablesList,
@@ -269,18 +322,6 @@ def _eliminate_simple_cases(simple):
             if first.identifier.name is None:
                 first.identifier.name = 'slot%d' % first.identifier.slot
             continue
-        elif isinstance(src, OPERATOR_TYPES) \
-                and isinstance(holder, nodes.TableElement) \
-                and holder.key == dst \
-                and isinstance(ref.path[-3], nodes.FunctionCall):
-            # Handle a special case where a function has been incorrectly marked as a method now that
-            # a slot will be reduced to an expression with an operator
-            function = ref.path[-3]
-            if function.is_method and \
-                    (not isinstance(function, nodes.TableElement)
-                     or function.key.type != nodes.Constant.T_STRING):
-                function.arguments.contents.insert(0, holder.table)
-                function.is_method = False
 
         _mark_invalidated(info.assignment)
 
@@ -315,8 +356,8 @@ def _eliminate_into_table_constructors(tables):
 
 
 def _eliminate_mass_assignments(massive):
-    for identifier, assignment, base_assignment, globalvar in massive:
-        destinations = assignment.destinations.contents
+    for identifier, info, base_assignment, globalvar in massive:
+        destinations = info.assignment.destinations.contents
         found = _replace_node_in_list(destinations, identifier, globalvar)
 
         _mark_invalidated(base_assignment)
@@ -346,7 +387,8 @@ def _replace_node_in_list(node_list, original, replacement):
 def _eliminate_iterators(iterators):
     processed_warps = set()
 
-    for assignment, src, warp in iterators:
+    for info, src, warp in iterators:
+        assignment = info.assignment
         if warp in processed_warps:
             continue
 
@@ -389,8 +431,8 @@ def _remove_unused(unused):
     pass
 
 
-def _collect_slots(ast):
-    collector = _SlotsCollector()
+def _collect_slots(ast, identify_slots=False):
+    collector = _SlotsCollector(identify_slots)
     traverse.traverse(collector, ast)
 
     return collector.slots, collector.unused
@@ -485,16 +527,24 @@ class _SlotsCollector(traverse.Visitor):
     class _State:
         def __init__(self):
             self.known_slots = {}
+            self.all_known_slots = {}
+
+            self.block_slots = {}
+            self.block_refs = {}
+            self.block = None
+
             self.function = None
 
     # ##
 
-    def __init__(self):
+    def __init__(self, identify_slots=False):
         super().__init__()
         self._states = []
         self._path = []
+        self._root = None
         self._skip = None
         self._next_slot_id = 0
+        self._identify = identify_slots
 
         self.slots = []
         self.unused = []
@@ -512,6 +562,8 @@ class _SlotsCollector(traverse.Visitor):
     def _pop_state(self):
         self._states.pop()
 
+    # ##
+
     # Slots are stored (at most) twice: once by their id and the most recent slot assignment
     # will be stored with id -1. This way we can prevent the loss of information after an elimination
     # step where an expression references the same slot at multiple states (ids).
@@ -525,24 +577,60 @@ class _SlotsCollector(traverse.Visitor):
         return None
 
     def _set_slot(self, slot, info):
-        slot_states = self._state().known_slots.get(slot.slot)
-        if not slot_states:
-            slot_states = {}
-            self._state().known_slots[slot.slot] = slot_states
-        slot_states[slot.id] = info
-        if slot.id != -1:
-            slot_states[-1] = info
+        state = self._state()
+        for target in [state.known_slots, state.all_known_slots]:
+            slot_states = target.get(slot.slot)
+            if not slot_states:
+                slot_states = {}
+                target[slot.slot] = slot_states
+            slot_states[slot.id] = info
+            if slot.id != -1:
+                slot_states[-1] = info
 
     def _remove_slot(self, slot):
-        slot_states = self._state().known_slots.get(slot.slot)
+        state = self._state()
+        for target in [state.known_slots, state.all_known_slots]:
+            slot_states = target.get(slot.slot)
+            if slot_states:
+                if slot.id != -1:
+                    info = slot_states.get(slot.id)
+                    if info == slot_states.get(-1):
+                        del slot_states[-1]
+                del slot_states[slot.id]
+                if not slot_states:
+                    del target[slot.slot]
+
+    def _find_slot_assignments(self, index, block=None, visited=None):
+        state = self._state()
+        refs = state.block_refs
+        block = block or state.block
+
+        known_slots = state.block_slots.get(block)
+        slot_states = known_slots and known_slots.get(index)
         if slot_states:
-            if slot.id != -1:
-                info = slot_states.get(slot.id)
-                if info == slot_states.get(-1):
-                    del slot_states[-1]
-            del slot_states[slot.id]
-            if not slot_states:
-                del self._state().known_slots[slot.slot]
+            info = slot_states.get(-1)
+            if info:
+                return [info]
+
+        blocks_to_check = refs.get(block)
+        if not blocks_to_check:
+            return None
+
+        # Keep track of visited nodes to prevent infinite loops
+        visited = visited or set()
+        visited.add(block)
+
+        possibilities = set()
+        for ref in blocks_to_check:
+            if ref in visited:
+                continue
+
+            found = self._find_slot_assignments(index, ref, visited)
+            if found:
+                for info in found:
+                    possibilities.add(info)
+
+        return list(possibilities)
 
     def _commit_info(self, info):
         assert len(info.references) > 0
@@ -553,7 +641,7 @@ class _SlotsCollector(traverse.Visitor):
             self.slots.append(info)
 
     def _commit_slot(self, slot, node):
-        info = self._get_slot(slot)
+        info = self._get_slot(slot) # False
 
         if info is None:
             return
@@ -599,20 +687,23 @@ class _SlotsCollector(traverse.Visitor):
 
             self._commit_slot(slot, node)
 
-    def _register_slot_reference(self, slot, node):
-        # Slot references may have a reference to a slot that was identified in a previous block. WHen
-        # this is the case, we need to use the slot that has been assigned most recently.
-        info = self._get_slot(slot, False)
-
-        if info is None:
-            return
-
+    def _register_slot_reference(self, info, node, update_id=True):
         reference = _SlotReference()
         reference.identifier = node
 
         # Make sure the identifier node stores the correct slot reference.
         if node.id == -1:
-            node.id = info.slot_id
+            possible_ids = getattr(node, "_ids", [])
+            if info.slot_id not in possible_ids:
+                if update_id:
+                    if len(possible_ids) > 0:
+                        # Slot matches, but not the id.
+                        return
+                    node.id = info.slot_id
+                elif self._identify:
+                    possible_ids.append(info.slot_id)
+                    setattr(node, "_ids", possible_ids)
+                    possible_ids.sort()
 
         # Copy the list, but not contents
         reference.path = self._path[:]
@@ -631,8 +722,22 @@ class _SlotsCollector(traverse.Visitor):
         self._skip = None
 
     def visit_identifier(self, node):
-        if node.type == nodes.Identifier.T_SLOT:
-            self._register_slot_reference(node, node)
+        if node.type != nodes.Identifier.T_SLOT:
+            return
+
+        # Slot references may have a reference to a slot that was identified in a previous block. When
+        # this is the case, we need to use the slot that has been assigned most recently.
+        info = self._get_slot(node, False)
+        if info:
+            self._register_slot_reference(info, node)
+            return
+
+        # No direct reference is found, so look through blocks and register all references
+        assignments = self._find_slot_assignments(node.slot)
+        if assignments:
+            update_ids = self._identify and len(assignments) == 1
+            for info in assignments:
+                self._register_slot_reference(info, node, update_ids)
 
     # ##
 
@@ -643,20 +748,37 @@ class _SlotsCollector(traverse.Visitor):
     def leave_function_definition(self, node):
         self._pop_state()
 
+    def visit_block(self, node):
+        state = self._state()
+        state.block = node
+        state.block_slots[node] = state.known_slots
+
     def leave_block(self, node):
-        for info_states in self._state().known_slots.values():
+        state = self._state()
+
+        refs = None
+        warp = node.warp
+        if isinstance(warp, nodes.ConditionalWarp):
+            refs = [warp.true_target, warp.false_target]
+        elif isinstance(warp, nodes.UnconditionalWarp):
+            refs = [warp.target]
+        elif isinstance(warp, nodes.NumericLoopWarp):
+            refs = [warp.way_out]
+        elif isinstance(warp, nodes.IteratorWarp):
+            refs = [warp.way_out]
+
+        if refs:
+            for ref in refs:
+                block_refs = state.block_refs.setdefault(ref, set())
+                block_refs.add(node)
+
+        for info_states in state.known_slots.values():
             for slot_id, info in info_states.items():
                 # Commit slots only once, so ignore the extra references to the "most recent" slots.
                 if slot_id == info.slot_id:
                     self._commit_info(info)
 
-        self._state().known_slots = {}
-
-    def visit_iterator_warp(self, node):
-        self._commit_all_slots(node.variables.contents, node)
-
-    def visit_numeric_loop_warp(self, node):
-        self._commit_slot(node.index, node)
+        state.known_slots = {}
 
     # ##
 
@@ -674,7 +796,15 @@ class _SlotsCollector(traverse.Visitor):
         if self._skip == node:
             return
 
+        is_root_node = False
+        if self._root is None:
+            is_root_node = True
+            self._root = node
+
         traverse.Visitor._visit(self, node)
+
+        if is_root_node:
+            self._root = None
 
 
 def _cleanup_invalid_nodes(ast):
@@ -694,15 +824,15 @@ class _TreeCleanup(traverse.Visitor):
 
 class _SimplifyVisitor(traverse.Visitor):
 
-    def __init__(self, eliminate_slots=True):
+    def __init__(self, dirty_callback=None):
         super().__init__()
         self._dirty = False
-        self._eliminate_slots = eliminate_slots
+        self._dirty_cb = dirty_callback
 
     def leave_block(self, node):
         if self._dirty:
-            if self._eliminate_slots:
-                eliminate_temporary(node)
+            if self._dirty_cb:
+                self._dirty_cb(node)
             self._dirty = False
 
     # Identify method calls, and mark them as such early. This eliminates their 'this' argument, which allows
