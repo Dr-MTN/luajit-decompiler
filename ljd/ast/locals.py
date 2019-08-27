@@ -16,8 +16,18 @@ def mark_local_definitions(ast):
     traverse.traverse(_LocalDefinitionsMarker(), ast)
 
 
-def split_local_definitions(ast):
-    traverse.traverse(_LocalDefinitionsSplitter(), ast)
+LIST_TYPES = (nodes.VariablesList,
+              nodes.IdentifiersList,
+              nodes.ExpressionsList,
+              nodes.StatementsList)
+
+
+def _get_holder(path):
+    for node in reversed(path[:-1]):
+        if not isinstance(node, LIST_TYPES):
+            return node
+
+    return None
 
 
 class _LocalsMarker(traverse.Visitor):
@@ -142,6 +152,7 @@ class _LocalDefinitionsMarker(traverse.Visitor):
     def __init__(self):
         super().__init__()
         self._states = []
+        self._path = []
 
     def _push_state(self):
         self._states.append(_LocalDefinitionsMarker._State())
@@ -153,9 +164,10 @@ class _LocalDefinitionsMarker(traverse.Visitor):
         return self._states[-1]
 
     def _update_known_locals(self, local, addr):
-        varinfo = self._state().known_locals[local.slot]
+        state = self._state()
+        varinfo = state.known_locals[local.slot]
 
-        self._state().known_locals[local.slot] = getattr(local,
+        state.known_locals[local.slot] = getattr(local,
                                                          "_varinfo",
                                                          None)
 
@@ -213,11 +225,26 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 
         known_slot = self._update_known_locals(dst, addr)
 
-        for slot in node.destinations.contents[1:]:
-            if not isinstance(slot, nodes.Identifier):
-                return
+        for slot_index, slot in enumerate(node.destinations.contents[1:]):
+            if not isinstance(slot, nodes.Identifier) or slot.type != nodes.Identifier.T_LOCAL:
+                if not known_slot:
+                    # Slot is not known, so it cannot be in the same assignment
+                    new_node = copy.copy(node)
+                    new_node.destinations = nodes.VariablesList()
+                    new_node.destinations.contents = node.destinations.contents[slot_index + 1:]
+                    node.destinations.contents = node.destinations.contents[:slot_index + 1]
 
-            if slot.type != nodes.Identifier.T_LOCAL:
+                    # Find node in the holder
+                    holder = _get_holder(self._path)
+                    if isinstance(holder, nodes.FunctionDefinition):
+                        holder = holder.statements.contents
+
+                    for node_index, child_node in enumerate(holder):
+                        if node != child_node:
+                            continue
+
+                        holder.insert(node_index + 1, new_node)
+
                 return
 
             also_known = self._update_known_locals(slot, addr)
@@ -227,6 +254,16 @@ class _LocalDefinitionsMarker(traverse.Visitor):
         if not known_slot:
             node.type = nodes.Assignment.T_LOCAL_DEFINITION
 
+    def _visit_node(self, handler, node):
+        self._path.append(node)
+
+        traverse.Visitor._visit_node(self, handler, node)
+
+    def _leave_node(self, handler, node):
+        self._path.pop()
+
+        traverse.Visitor._leave_node(self, handler, node)
+
     def _visit(self, node):
         node_addr = getattr(node, "_addr", -1)
 
@@ -234,27 +271,3 @@ class _LocalDefinitionsMarker(traverse.Visitor):
             self._state().addr = node_addr
 
         traverse.Visitor._visit(self, node)
-
-
-class _LocalDefinitionsSplitter(traverse.Visitor):
-    def visit_assignment(self, node):
-        if len(node.destinations.contents) <= 1:
-            return
-
-        is_local = False
-        for idx, dst in enumerate(node.destinations.contents):
-            if isinstance(dst, nodes.Identifier) and dst.type == nodes.Identifier.T_LOCAL:
-                is_local = True
-            elif is_local:
-                new_node = copy.copy(node)
-                new_node.destinations = nodes.VariablesList()
-                new_node.destinations.contents = node.destinations.contents[idx:]
-                node.destinations.contents = node.destinations.contents[:idx]
-                setattr(node, "_split_node", new_node)
-                break
-
-    def leave_block(self, node):
-        for idx, dst in enumerate(node.contents):
-            if hasattr(dst, "_split_node"):
-                node.contents.insert(idx + 1, dst._split_node)
-                delattr(dst, "_split_node")

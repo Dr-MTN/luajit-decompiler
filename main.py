@@ -284,8 +284,6 @@ class Main:
 
         # ljd.ast.validator.validate(self.ast, warped=True)
 
-        ljd.ast.locals.split_local_definitions(self.ast)
-
         if True:
             ljd.ast.unwarper.unwarp(self.ast, False)
 
