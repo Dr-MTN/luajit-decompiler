@@ -747,7 +747,7 @@ class _SlotsCollector(traverse.Visitor):
         if assignments:
             update_ids = self._identify and len(assignments) == 1
             for info in assignments:
-                self._register_slot_reference(info, node, update_ids)
+                self._register_slot_reference(info, node, False)
 
     # ##
 
