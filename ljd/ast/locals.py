@@ -226,28 +226,32 @@ class _LocalDefinitionsMarker(traverse.Visitor):
         known_slot = self._update_known_locals(dst, addr)
 
         for slot_index, slot in enumerate(node.destinations.contents[1:]):
-            if not isinstance(slot, nodes.Identifier) or slot.type != nodes.Identifier.T_LOCAL:
-                if not known_slot:
-                    # Slot is not known, so it cannot be in the same assignment
-                    new_node = copy.copy(node)
-                    new_node.destinations = nodes.VariablesList()
-                    new_node.destinations.contents = node.destinations.contents[slot_index + 1:]
-                    node.destinations.contents = node.destinations.contents[:slot_index + 1]
+            slot_is_local = isinstance(slot, nodes.Identifier) and slot.type == nodes.Identifier.T_LOCAL
+            also_known = slot_is_local and self._update_known_locals(slot, addr)
 
-                    # Find node in the holder
-                    holder = _get_holder(self._path)
-                    if isinstance(holder, nodes.FunctionDefinition):
-                        holder = holder.statements.contents
+            if not known_slot and (not slot_is_local or also_known):
+                # Slot is not known, so it cannot be in the same assignment
+                new_node = copy.copy(node)
+                new_node.destinations = nodes.VariablesList()
+                new_node.destinations.contents = node.destinations.contents[slot_index + 1:]
+                node.destinations.contents = node.destinations.contents[:slot_index + 1]
 
-                    for node_index, child_node in enumerate(holder):
-                        if node != child_node:
-                            continue
+                # Find node in the holder
+                holder = _get_holder(self._path)
+                if isinstance(holder, nodes.FunctionDefinition):
+                    holder = holder.statements.contents
 
-                        holder.insert(node_index + 1, new_node)
+                for node_index, child_node in enumerate(holder):
+                    if node != child_node:
+                        continue
 
+                    holder.insert(node_index + 1, new_node)
+
+                # Split off the bad parts, so what remains is good for a local declaration
+                break
+
+            elif not slot_is_local:
                 return
-
-            also_known = self._update_known_locals(slot, addr)
 
             assert known_slot == also_known
 
