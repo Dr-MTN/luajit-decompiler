@@ -117,6 +117,14 @@ def unwarp(node, conservative=False):
         else:
             raise
 
+    try:
+        slotworks.simplify_ast(node)
+    except:
+        if catch_asserts:
+            print("-- Decompilation Error: ljd.ast.slotworks.simplify_ast(self.ast)\n", file=sys.stdout)
+        else:
+            raise
+
 
 def _run_step(step, node, **kargs):
     for statements in _gather_statements_lists(node):
