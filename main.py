@@ -305,6 +305,9 @@ class Main:
                     else:
                         raise
 
+                ljd.ast.locals.mark_locals(self.ast, alt_mode=True)
+                ljd.ast.locals.mark_local_definitions(self.ast)
+
 
 if __name__ == "__main__":
     main_obj = Main()

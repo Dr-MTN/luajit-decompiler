@@ -8,8 +8,8 @@ import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 
 
-def mark_locals(ast):
-    traverse.traverse(_LocalsMarker(), ast)
+def mark_locals(ast, alt_mode=False):
+    traverse.traverse(_LocalsMarker(alt_mode), ast)
 
 
 def mark_local_definitions(ast):
@@ -37,9 +37,10 @@ class _LocalsMarker(traverse.Visitor):
             self.debuginfo = None
             self.addr = -1
 
-    def __init__(self):
+    def __init__(self, alt_mode=False):
         super().__init__()
         self._states = []
+        self._alt_mode = alt_mode
 
     # ##
 
@@ -58,7 +59,7 @@ class _LocalsMarker(traverse.Visitor):
         cleanup = []
 
         for slot, pending_slot_nodes in self._state().pending_slots.items():
-            varinfo = debuginfo.lookup_local_name(addr, slot)
+            varinfo = debuginfo.lookup_local_name(addr, slot, self._alt_mode)
 
             if varinfo is None:
                 continue
@@ -99,6 +100,19 @@ class _LocalsMarker(traverse.Visitor):
 
     # ##
 
+    def leave_assignment(self, node):
+        if self._alt_mode:
+            for i, exp in enumerate(node.expressions.contents):
+                if isinstance(exp, nodes.TableConstructor):
+
+                    dst = node.destinations.contents[i]
+                    if not isinstance(dst, nodes.Identifier) or dst.type != nodes.Identifier.T_SLOT:
+                        continue
+
+                    self._process_slots(self._state().addr + 2)
+
+    # ##
+
     def visit_variables_list(self, node):
         # Last chance for a local = local + 1 type assignments
         self._process_slots(self._state().addr)
@@ -109,6 +123,10 @@ class _LocalsMarker(traverse.Visitor):
 
     def visit_numeric_loop_warp(self, node):
         self._reset_slot(node.index.slot)
+
+    def leave_statements_list(self, node):
+        if self._alt_mode:
+            self._process_slots(self._state().addr + 1)
 
     def visit_identifier(self, node):
         if node.type == nodes.Identifier.T_SLOT:
@@ -124,7 +142,7 @@ class _LocalsMarker(traverse.Visitor):
 
         if not isinstance(node, nodes.Identifier) and addr is not None:
             # TODO This was an assertion, but it doesn't always hold up. Why was this required?
-            if self._state().addr <= addr:
+            if self._state().addr < addr:
                 self._state().addr = addr
             self._process_slots(addr)
 
