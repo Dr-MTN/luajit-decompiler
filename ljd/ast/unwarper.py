@@ -52,6 +52,14 @@ def unwarp(node, conservative=False):
 
     try:
         _run_step(_unwarp_expressions, node)
+
+        # Under some conditions the expressions unwarper causes new assignments to become expressions themselves.
+        # Instead of doing some difficult bookkeeping, we just unwarp expressions again.
+        #
+        # An example where this is needed is an expression like x = x or { a and b }
+        #
+        # There's probably a better (read: faster) way to do this, but it works for now.
+        _run_step(_unwarp_expressions, node)
     except:
         if catch_asserts:
             print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
@@ -634,6 +642,8 @@ def _find_expressions(start, body, end, level=0):
                     for item in sub_block.contents:
                         if not isinstance(item, nodes.Assignment):
                             return expressions, subs
+
+            # TODO This can skip expressions in the current blocks body. Solved by a second call for now.
 
             expressions = subs + expressions
             i = new_i
