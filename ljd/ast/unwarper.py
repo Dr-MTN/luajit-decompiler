@@ -725,6 +725,14 @@ def _find_expressions(start, body, end, level=0):
                 continue
 
             return expressions, unused
+        elif isinstance(block.warp, nodes.UnconditionalWarp):
+            # TODO Check why it actually fails without this
+            if block != start and sure_expression is None and block.warp:
+                warp_target = _get_target(block.warp, True)
+                if warp_target == end and len(warp_target.contents) == 0 \
+                        and isinstance(warp_target.warp, nodes.EndWarp) \
+                        and block.warpins_count == 1:
+                    sure_expression = False
 
         if not sure_expression and sure_expression is not None:
             return expressions, unused
