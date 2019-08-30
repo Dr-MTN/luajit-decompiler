@@ -327,11 +327,18 @@ def _eliminate_simple_cases(simple):
         # times for call),so marked the identifier to local type and set the name to tmp slot
         # TODO figure out *why* the functions are ending up here and fix it there
         if isinstance(src, nodes.FunctionDefinition) and len(info.references) >= 3:
-            first = info.references[0]
-            first.identifier.type = nodes.Identifier.T_LOCAL
-            if first.identifier.name is None:
-                first.identifier.name = 'slot%d' % first.identifier.slot
-            continue
+            # Make sure it's actually 3 references, ignoring the ambiguous ones
+            nr_references = 0
+            for _ref in info.references:
+                if _ref.identifier.id == -1 and len(getattr(_ref, "_ids", [])) != 1:
+                    continue
+                nr_references += 1
+            if nr_references >= 3:
+                first = info.references[0]
+                first.identifier.type = nodes.Identifier.T_LOCAL
+                if first.identifier.name is None:
+                    first.identifier.name = 'slot%d' % first.identifier.slot
+                continue
         elif isinstance(src, OPERATOR_TYPES) \
                 and isinstance(holder, nodes.TableElement) \
                 and holder.key == dst \
