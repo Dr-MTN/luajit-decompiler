@@ -658,7 +658,7 @@ def _find_expressions(start, body, end, level=0):
             continue
         elif subs_unused:
             unused = subs_unused + unused
-        else:
+        elif i > current_i + 1:
             # We may not have checked all sub expressions
             i = current_i + 1
 
@@ -765,11 +765,12 @@ def _find_expressions(start, body, end, level=0):
 
     true, _false, body = _get_terminators(body)
 
-    if true is not None:
-        sure_expression = True
+    if sure_expression is None:
+        if true is not None:
+            sure_expression = True
 
-    if len(expressions) > 0:
-        sure_expression = True
+        if len(expressions) > 0:
+            sure_expression = True
 
     if not sure_expression and is_local:
         return expressions, unused
