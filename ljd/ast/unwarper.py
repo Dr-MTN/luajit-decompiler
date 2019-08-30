@@ -699,9 +699,10 @@ def _find_expressions(start, body, end, level=0):
             if block == start:
                 continue
 
-
             if isinstance(assignment, nodes.NoOp):
-                continue
+                if _get_target(block.warp, True) != end:
+                    continue
+
             return expressions, unused
 
         destinations = assignment.destinations.contents
