@@ -224,11 +224,18 @@ def _unwarp_expressions(blocks):
                                 and len(start.contents[-1].expressions.contents) > 0
                                 and isinstance(start.contents[-1].expressions.contents[-1],
                                 nodes.Primitive)):
+
+                    # NOTE Don't skip the last statement (before the return), it may be an expression
                     if start_index == end_index:
                         end_index += 1
-                    start_index += 1
-                    continue
 
+                        if end_index < blocks[-1].index - 1:
+                            start_index += 1
+                        continue
+                    elif start_index <= end_index - 1:
+                        if start_index != end_index - 1 or end_index < blocks[-1].index - 1:
+                            start_index += 1
+                            continue
         body, end, end_index = _extract_if_body(start_index,
                                                 blocks, None)
 
