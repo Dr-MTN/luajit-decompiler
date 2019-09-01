@@ -242,11 +242,12 @@ def _unwarp_expressions(blocks):
         if body is None:
             raise NotImplementedError("GOTO statements are not"
                                       " supported")
-        elif len(body) == 1 and body[0].warpins_count == 0:
+        elif start_index > 0 and len(body) == 1 and body[0].warpins_count == 0:
             # Unreached true/false, don't include it. This should deal with some unwanted 'and true' expressions.
             if isinstance(body[0].contents[-1], nodes.Assignment) \
                     and len(body[0].contents[-1].expressions.contents) > 0 \
-                    and isinstance(body[0].contents[-1].expressions.contents[-1], nodes.Primitive):
+                    and isinstance(body[0].contents[-1].expressions.contents[-1], nodes.Primitive) \
+                    and start_index + 1 < blocks[-1].index:
                 start_index += 1
                 continue
 
