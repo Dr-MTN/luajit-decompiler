@@ -242,6 +242,13 @@ def _unwarp_expressions(blocks):
         if body is None:
             raise NotImplementedError("GOTO statements are not"
                                       " supported")
+        elif len(body) == 1 and body[0].warpins_count == 0:
+            # Unreached true/false, don't include it. This should deal with some unwanted 'and true' expressions.
+            if isinstance(body[0].contents[-1], nodes.Assignment) \
+                    and len(body[0].contents[-1].expressions.contents) > 0 \
+                    and isinstance(body[0].contents[-1].expressions.contents[-1], nodes.Primitive):
+                start_index += 1
+                continue
 
         try:
             expressions, unused = _find_expressions(start, body, end)
@@ -718,6 +725,9 @@ def _find_expressions(start, body, end, level=0):
             if block == start:
                 continue
 
+            return expressions, unused
+
+        if block.warpins_count == 0 and level > 0:
             return expressions, unused
 
         dst = destinations[0]
