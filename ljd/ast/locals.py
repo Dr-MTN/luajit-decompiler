@@ -144,6 +144,9 @@ class _LocalsMarker(traverse.Visitor):
             # TODO This was an assertion, but it doesn't always hold up. Why was this required?
             if self._state().addr < addr:
                 self._state().addr = addr
+            if self._alt_mode:
+                # TODO do for loops separately and always make this +1
+                self._process_slots(addr+1)
             self._process_slots(addr)
 
     # We need to process slots twice as it could be the last
