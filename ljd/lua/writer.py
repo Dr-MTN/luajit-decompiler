@@ -590,7 +590,9 @@ class Visitor(traverse.Visitor):
 
             return
 
-        base_is_constructor = isinstance(base, nodes.TableConstructor) or isinstance(base, OPERATOR_TYPES)
+        base_is_constructor = isinstance(base, nodes.TableConstructor) \
+                              or isinstance(base, OPERATOR_TYPES) \
+                              or (isinstance(base, nodes.Constant) and base.type == nodes.Constant.T_STRING)
 
         if base_is_constructor:
             self._write("(")
@@ -626,7 +628,9 @@ class Visitor(traverse.Visitor):
         if node.is_method:
             func = node.function
             base = func.table
-            base_is_constructor = isinstance(base, nodes.TableConstructor) or isinstance(base, OPERATOR_TYPES)
+            base_is_constructor = isinstance(base, nodes.TableConstructor) \
+                                  or isinstance(base, OPERATOR_TYPES) \
+                                  or (isinstance(base, nodes.Constant) and base.type == nodes.Constant.T_STRING)
 
             if base_is_constructor:
                 self._write("(")
