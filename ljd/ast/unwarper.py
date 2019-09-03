@@ -1552,7 +1552,10 @@ def _fix_loops(blocks, repeat_until):
 
     fixed = _cleanup_breaks_and_if_ends(loops, blocks)
 
+    replacements = {}
+
     for start, end in fixed:
+        end = replacements.get(end, end)
         start_index = blocks.index(start)
         end_index = blocks.index(end)
 
@@ -1602,7 +1605,15 @@ def _fix_loops(blocks, repeat_until):
         if body_start_index == start_index:
             blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
         else:
-            blocks = blocks[:body_start_index] + [block] + blocks[end_index:]
+            if isinstance(loop, nodes.While) and start_index < body_start_index - 1:
+                before = blocks[:start_index]
+                if start_index > 0:
+                    old_start = blocks[start_index]
+                    _replace_targets(before, old_start, block)
+                    replacements[old_start] = block
+            else:
+                before = blocks[:body_start_index]
+            blocks = before + [block] + blocks[end_index:]
 
         for i, block in enumerate(body):
             warp = block.warp
