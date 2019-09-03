@@ -788,7 +788,13 @@ def _find_expressions(start, body, end, level=0):
             sure_expression = True
 
         if len(expressions) > 0:
-            sure_expression = True
+            matching_end_warp = False
+            for _, _, exp_end, *_ in expressions:
+                if exp_end.warp == block.warp:
+                    matching_end_warp = True
+                    break
+            if not matching_end_warp:
+                sure_expression = True
 
     if not sure_expression and is_local:
         return expressions, unused
