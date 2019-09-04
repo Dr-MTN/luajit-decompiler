@@ -560,7 +560,25 @@ def _gather_slots(node):
     return collector.slots
 
 
-def _find_expressions(start, body, end, level=0):
+def _find_expressions(start, body, end, level=0, known_blocks=None):
+    block = None
+    known_blocks = known_blocks or set()
+    known_blocks.add(start)
+
+    def _add_warps_to_known_blocks(node):
+        refs = None
+        warp = node.warp
+        if isinstance(warp, nodes.ConditionalWarp):
+            refs = [warp.true_target, warp.false_target]
+        elif isinstance(warp, nodes.UnconditionalWarp):
+            refs = [warp.target]
+
+        for ref in refs or []:
+            if not ref: continue
+            known_blocks.add(ref)
+
+    _add_warps_to_known_blocks(start)
+
     # Explicitly allow the local a = x ~= "b" case
     slot, slot_type, slot_ref = _get_simple_local_assignment_slot(start, body, end)
 
@@ -610,6 +628,9 @@ def _find_expressions(start, body, end, level=0):
         i += 1
         block = extbody[current_i]
 
+        if block in known_blocks:
+            _add_warps_to_known_blocks(block)
+
         subs = []
         subs_unused = []
 
@@ -621,7 +642,7 @@ def _find_expressions(start, body, end, level=0):
             i = be_index  # NOTE This misses things, so re-check it later
 
             body = extbody[current_i+1:be_index]
-            subs, subs_unused = _find_expressions(block, body, branch_end, level + 1)
+            subs, subs_unused = _find_expressions(block, body, branch_end, level + 1, known_blocks)
             _ = 0
 
         if len(subs) != 0:
@@ -787,7 +808,7 @@ def _find_expressions(start, body, end, level=0):
         if true is not None:
             sure_expression = True
 
-        if len(expressions) > 0:
+        if len(expressions) > 0 and block in known_blocks:
             matching_end_warp = False
             for _, _, exp_end, *_ in expressions:
                 if exp_end.warp == block.warp:
@@ -797,6 +818,10 @@ def _find_expressions(start, body, end, level=0):
                 sure_expression = True
 
     if not sure_expression and is_local:
+        return expressions, unused
+
+    # TODO Actually prevent bad blocks from being part of the body instead of trying to eliminate it here
+    if not sure_expression and block not in known_blocks and extbody.index(block) < len(extbody) - 1:
         return expressions, unused
 
     return expressions + [(block, start, end, slot, slot_type, slot_ref)], unused
