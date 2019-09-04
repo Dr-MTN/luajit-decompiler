@@ -1637,8 +1637,10 @@ def _fix_loops(blocks, repeat_until):
             blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
         else:
             if isinstance(loop, nodes.While) and start_index < body_start_index - 1:
-                if _get_target(blocks[start_index].warp, True) != end \
-                        or any(len(node.contents) > 0 for node in blocks[start_index:body_start_index]):
+                if not (isinstance(loop.expression, nodes.BinaryOperator)
+                        and loop.expression.type == nodes.BinaryOperator.T_LOGICAL_OR) \
+                        and (_get_target(blocks[start_index].warp, True) != end
+                             or any(len(node.contents) > 0 for node in blocks[start_index:body_start_index])):
                     start_index = body_start_index
 
                 # TODO deal with mixed conditions and sub expressions
