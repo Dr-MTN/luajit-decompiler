@@ -1637,8 +1637,13 @@ def _fix_loops(blocks, repeat_until):
             blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
         else:
             if isinstance(loop, nodes.While) and start_index < body_start_index - 1:
+                if _get_target(blocks[start_index].warp, True) != end \
+                        or any(len(node.contents) > 0 for node in blocks[start_index:body_start_index]):
+                    start_index = body_start_index
+
+                # TODO deal with mixed conditions and sub expressions
                 before = blocks[:start_index]
-                if start_index > 0:
+                if before:
                     old_start = blocks[start_index]
                     _replace_targets(before, old_start, block)
                     replacements[old_start] = block
