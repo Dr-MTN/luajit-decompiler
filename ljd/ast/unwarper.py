@@ -10,7 +10,6 @@ binop = nodes.BinaryOperator
 
 catch_asserts = False
 
-# TODO: reduce expressions like a.x = a.x or {}
 
 # ##
 # ## REMEMBER
@@ -2031,16 +2030,26 @@ def _unwarp_loop(start, end, body, expr_body=None):
         loop._addr = body[0].first_address
         _set_flow_to(start, body[0])
 
-    # While (including "while true" and "repeat until false" which will be
-    # while true)
+    # While (including "while true" and "repeat until false")
     elif isinstance(last.warp, nodes.UnconditionalWarp):
         assert last.warp.target == start
 
-        # while true
+        # while true / repeat until false
         if _is_flow(start.warp):
-            loop = nodes.While()
-            loop.expression = nodes.Primitive()
-            loop.expression.type = nodes.Primitive.T_TRUE
+
+            prev_to_last = body[-2] if len(body) > 1 else None
+            if prev_to_last and isinstance(prev_to_last.warp, nodes.UnconditionalWarp) \
+                    and prev_to_last.warp.type == nodes.UnconditionalWarp.T_JUMP \
+                    and prev_to_last.warp.target == last \
+                    and (len(body) <= 2 or _is_flow(body[-3].warp)):  # not strictly needed, but better be safe
+                loop = nodes.RepeatUntil()
+                loop.expression = nodes.Primitive()
+                loop.expression.type = nodes.Primitive.T_FALSE
+                body.pop()  # Remove the jump block specific to this case
+            else:
+                loop = nodes.While()
+                loop.expression = nodes.Primitive()
+                loop.expression.type = nodes.Primitive.T_TRUE
 
             loop.statements.contents = body
         else:
