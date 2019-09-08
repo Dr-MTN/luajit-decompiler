@@ -264,21 +264,12 @@ class Main:
 
         ljd.ast.locals.mark_locals(self.ast)
 
-        # ljd.ast.validator.validate(self.ast, warped=True)
 
         try:
-            ljd.ast.slotworks.eliminate_temporary(self.ast, ignore_ambiguous=True, identify_slots=True)
-        except:
+            ljd.ast.slotworks.eliminate_temporary(self.ast, identify_slots=True)
+        except AssertionError:
             if self.options.catch_asserts:
-                print("-- Decompilation Error: ljd.ast.slotworks.eliminate_temporary(self.ast)\n", file=sys.stdout)
-            else:
-                raise
-
-        try:
-            ljd.ast.slotworks.simplify_ast(self.ast, dirty_callback=ljd.ast.slotworks.eliminate_temporary)
-        except:
-            if self.options.catch_asserts:
-                print("-- Decompilation Error: ljd.ast.slotworks.simplify_ast(self.ast)\n", file=sys.stdout)
+                print("-- Decompilation Error: ljd.ast.slotworks.eliminate_temporary(ast)\n", file=sys.stdout)
             else:
                 raise
 
@@ -305,8 +296,45 @@ class Main:
                     else:
                         raise
 
-                ljd.ast.locals.mark_locals(self.ast, alt_mode=True)
-                ljd.ast.locals.mark_local_definitions(self.ast)
+                if True:
+                    # Mark remaining (unused) locals in empty loops, before blocks and at the end of functions
+                    ljd.ast.locals.mark_locals(self.ast, alt_mode=True)
+                    ljd.ast.locals.mark_local_definitions(self.ast)
+
+                    # Extra (unsafe) slot elimination pass (iff debug info is available) to deal with compiler issues
+                    for ass in self.ast.statements.contents if True else []:
+                        if not isinstance(ass, nodes.Assignment):
+                            continue
+
+                        for node in ass.expressions.contents:
+                            if not getattr(node, "_debuginfo", False) or not node._debuginfo.variable_info:
+                                continue
+
+                            contents = None
+                            if isinstance(node, nodes.FunctionDefinition):
+                                contents = [node.statements.contents]
+                            elif isinstance(node, nodes.TableConstructor):
+                                contents = [node.array.contents, node.records.contents]
+                            else:
+                                continue
+
+                            # Check for any remaining slots
+                            try:
+                                for content_list in contents:
+                                    for subnode in content_list:
+                                        if isinstance(subnode, nodes.Assignment):
+                                            for dst in subnode.destinations.contents:
+                                                if isinstance(dst, nodes.Identifier) and dst.type == dst.T_SLOT:
+                                                    raise StopIteration
+                            except StopIteration:
+                                ljd.ast.slotworks.eliminate_temporary(node, unwarped=True, safe_mode=False)
+
+                                # Manual cleanup
+                                for content_list in contents:
+                                    j = len(content_list) - 1
+                                    for i, subnode in enumerate(reversed(content_list)):
+                                        if getattr(subnode, "_invalidated", False):
+                                            del content_list[j - i]
 
 
 if __name__ == "__main__":

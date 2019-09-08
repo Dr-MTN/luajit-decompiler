@@ -62,16 +62,17 @@ debug_verify = "LJD_DEBUG" in os.environ
 # sort them. This should solve this issue for good.
 
 
-def eliminate_temporary(ast, ignore_ambiguous=True, identify_slots=False):
+def eliminate_temporary(ast, ignore_ambiguous=True, identify_slots=False, safe_mode=True, unwarped=False):
     _eliminate_multres(ast)
 
-    slots, unused = _collect_slots(ast, identify_slots=identify_slots)
+    slots, unused = _collect_slots(ast, identify_slots=identify_slots, unwarped=unwarped)
     _sort_slots(slots)
-    _eliminate_temporary(slots, ignore_ambiguous)
+    _eliminate_temporary(ast, slots, ignore_ambiguous, safe_mode=safe_mode, unwarped=unwarped)
 
     # _remove_unused(unused)
 
-    _cleanup_invalid_nodes(ast)
+    if not unwarped:
+        _cleanup_invalid_nodes(ast)
 
     return ast
 
@@ -80,17 +81,17 @@ def simplify_ast(ast, dirty_callback=None):
     traverse.traverse(_SimplifyVisitor(dirty_callback=dirty_callback), ast)
 
 
-def _eliminate_temporary(slots, ignore_ambiguous=True):
+def _eliminate_temporary(ast, slots, ignore_ambiguous=True, safe_mode=True, unwarped=False):
     simple = []
     massive = []
     tables = []
     iterators = []
     unsafe = []
 
-    _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous)
+    _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous and safe_mode, True)
 
     _eliminate_simple_cases(simple)
-    _recheck_unsafe_cases(unsafe, False)
+    _recheck_unsafe_cases(ast, unsafe, ignore_ambiguous=False, safe_mode=safe_mode, unwarped=unwarped)
 
     _eliminate_into_table_constructors(tables)
     _eliminate_mass_assignments(massive)
@@ -99,7 +100,7 @@ def _eliminate_temporary(slots, ignore_ambiguous=True):
     return simple, massive, tables, iterators, unsafe
 
 
-def _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous=True):
+def _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous=True, safe_mode=True):
     for info in slots:
         assignment = info.assignment
 
@@ -117,12 +118,12 @@ def _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguo
         is_massive = len(assignment.destinations.contents) > 1
 
         if is_massive:
-            _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous)
+            _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous, safe_mode)
         else:
-            _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous)
+            _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous, safe_mode)
 
 
-def _recheck_unsafe_cases(unsafe, ignore_ambiguous):
+def _recheck_unsafe_cases(ast, unsafe, ignore_ambiguous, safe_mode=True, unwarped=False):
     if not unsafe:
         return
 
@@ -130,50 +131,59 @@ def _recheck_unsafe_cases(unsafe, ignore_ambiguous):
     slots = set()
     for info in unsafe:
         slots.add(str(info.slot) + "#" + str(info.slot_id))
-        for ref in info.references[1:]:
-            for node in reversed(ref.path):
-                if isinstance(node, nodes.Block):
-                    blocks.add(node)
-                    break
+        if not unwarped:
+            for ref in info.references[1:]:
+                for node in reversed(ref.path):
+                    if isinstance(node, nodes.Block):
+                        blocks.add(node)
+                        break
 
-    if len(blocks) > 0:
-        dirty_blocks = []
+    if not blocks and not unwarped:
+        return
 
-        def _ast_dirty_cb(ast):
-            new_simple, new_massive, new_tables, new_iterators, new_unsafe = [], [], [], [], []
+    def _node_dirty_cb(node):
+        if not unwarped and not isinstance(node, nodes.Block):
+            return
 
-            _cleanup_invalid_nodes(ast)
+        new_simple, new_massive, new_tables, new_iterators, new_unsafe = [], [], [], [], []
 
-            # Collect slots in the block, but only keep those that were deemed unsafe to eliminate before.
-            new_slots, _ = _collect_slots(ast)
+        _cleanup_invalid_nodes(node)
+
+        # Collect slots in the block, but only keep those that were deemed unsafe to eliminate before.
+        new_slots, _ = _collect_slots(node, unwarped=unwarped)
+        if safe_mode:
             for idx, info in enumerate(new_slots):
                 if (str(info.slot) + "#" + str(info.slot_id)) not in slots:
                     del new_slots[idx]
 
-            _sort_slots(new_slots)
+        _sort_slots(new_slots)
 
-            _fill_refs(new_slots, new_simple, new_massive, new_tables, new_iterators, new_unsafe)
-            _eliminate_simple_cases(new_simple)
+        _fill_refs(new_slots, new_simple, new_massive, new_tables, new_iterators, new_unsafe,
+                   ignore_ambiguous and safe_mode, safe_mode)
+        _eliminate_simple_cases(new_simple)
 
+    if unwarped:
+        simplify_ast(ast, dirty_callback=_node_dirty_cb)
+    else:
         for block in blocks:
-            simplify_ast(block, dirty_callback=_ast_dirty_cb)
-
-    return False
+            simplify_ast(block, dirty_callback=_node_dirty_cb)
 
 
-def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous):
+def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous, safe_mode=True):
     ref = info.references[1]
     holder = _get_holder(ref.path)
 
     src = info.assignment.expressions.contents[0]
 
-    def _remove_invalid_references(info):
+    def _remove_invalid_references():
+        if not safe_mode:
+            return
         # TODO need to check why these invalid references end up here and whether they're actually invalid
         while len(info.references) > 2:
-            ref = info.references[-1].identifier
-            if ref.id != -1:
+            current_ref = info.references[-1].identifier
+            if current_ref.id != -1:
                 break
-            possible_ids = getattr(ref, "_ids", [])
+            possible_ids = getattr(current_ref, "_ids", [])
             possible_ids.remove(info.slot_id)
             del info.references[-1]
 
@@ -181,7 +191,7 @@ def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguou
     if isinstance(holder, nodes.Assignment):
         dst = holder.destinations.contents[0]
 
-        _remove_invalid_references(info)
+        _remove_invalid_references()
         assert len(info.references) == 2
         orig = info.references[0].identifier
 
@@ -191,7 +201,7 @@ def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguou
 
         massive.append((orig, info, assignment, dst))
     elif isinstance(holder, nodes.IteratorWarp):
-        _remove_invalid_references(info)
+        _remove_invalid_references()
         assert len(info.references) == 2
         iterators.append((info, src, holder))
     elif isinstance(src, nodes.Primitive) and src.type == src.T_NIL:
@@ -205,7 +215,7 @@ def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguou
         simple.append((info, ref, src))
 
 
-def _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous):
+def _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous, safe_mode=True):
     src = info.assignment.expressions.contents[0]
 
     src_is_table = isinstance(src, nodes.TableConstructor)
@@ -293,9 +303,10 @@ def _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous):
     # answer is 55b2f5c, which introduced all_ctor_refs. Since the table is referenced before the
     # third use, it cannot be moved into the constructor (well, mutator will move it in, but it'll
     # be safe from being eliminated)
-    if len(new_simple) == 1:
+    nr_simple_cases = len(new_simple)
+    if nr_simple_cases == 1 or (not safe_mode and nr_simple_cases == 2):
         simple += new_simple
-    elif len(new_simple) > 1:
+    elif nr_simple_cases > 1:
         unsafe.append(info)
 
 
@@ -460,8 +471,8 @@ def _remove_unused(unused):
     pass
 
 
-def _collect_slots(ast, identify_slots=False):
-    collector = _SlotsCollector(identify_slots)
+def _collect_slots(ast, identify_slots=False, unwarped=False):
+    collector = _SlotsCollector(identify_slots, unwarped)
     traverse.traverse(collector, ast)
 
     return collector.slots, collector.unused
@@ -566,7 +577,7 @@ class _SlotsCollector(traverse.Visitor):
 
     # ##
 
-    def __init__(self, identify_slots=False):
+    def __init__(self, identify_slots=False, unwarped=False):
         super().__init__()
         self._states = []
         self._path = []
@@ -574,6 +585,8 @@ class _SlotsCollector(traverse.Visitor):
         self._skip = None
         self._next_slot_id = 0
         self._identify = identify_slots
+        self._unwarped = unwarped
+        self._level = 0
 
         self.slots = []
         self.unused = []
@@ -774,7 +787,18 @@ class _SlotsCollector(traverse.Visitor):
         self._push_state()
         self._state().function = node
 
+        self._level += 1
+
     def leave_function_definition(self, node):
+        self._level -= 1
+        if self._unwarped and self._level == 0:
+            state = self._state()
+            for info_states in state.known_slots.values():
+                for slot_id, info in info_states.items():
+                    # Commit slots only once, so ignore the extra references to the "most recent" slots.
+                    if slot_id == info.slot_id:
+                        self._commit_info(info)
+
         self._pop_state()
 
     def visit_block(self, node):
@@ -796,10 +820,10 @@ class _SlotsCollector(traverse.Visitor):
         elif isinstance(warp, nodes.IteratorWarp):
             refs = [warp.way_out]
 
-        if refs:
-            for ref in refs:
-                block_refs = state.block_refs.setdefault(ref, set())
-                block_refs.add(node)
+        for ref in refs or []:
+            if not ref: continue
+            block_refs = state.block_refs.setdefault(ref, set())
+            block_refs.add(node)
 
         for info_states in state.known_slots.values():
             for slot_id, info in info_states.items():
@@ -857,6 +881,23 @@ class _SimplifyVisitor(traverse.Visitor):
         super().__init__()
         self._dirty = False
         self._dirty_cb = dirty_callback
+        self._root = None
+
+    def _visit_node(self, handler, node):
+        if not self._root:
+            self._root = node
+
+        traverse.Visitor._visit_node(self, handler, node)
+
+    def _leave_node(self, handler, node):
+        if self._root == node:
+            self._root = None
+            if self._dirty:
+                if self._dirty_cb:
+                    self._dirty_cb(node)
+                self._dirty = False
+
+        traverse.Visitor._leave_node(self, handler, node)
 
     def leave_block(self, node):
         if self._dirty:
