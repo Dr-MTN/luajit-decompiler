@@ -482,9 +482,9 @@ class UnconditionalWarp:
         visitor._leave_node(visitor.leave_unconditional_warp, self)
 
     def __str__(self):
-        return "{UnconditionalWarp: {type: " + ["T_JUMP", "T_FLOW"][self.type] + ", target: " + str(
-            self.target) + ", is_uclo: " + \
-               str(self.is_uclo) + " }}"
+        return "{UnconditionalWarp: {type: " + ["T_JUMP", "T_FLOW"][self.type] \
+               + ", target: " + str("Block " + str(self.target.index) if self.target else None) \
+               + ", is_uclo: " + str(self.is_uclo) + " }}"
 
 
 class ConditionalWarp:
@@ -503,8 +503,10 @@ class ConditionalWarp:
         visitor._leave_node(visitor.leave_conditional_warp, self)
 
     def __str__(self):
-        return "{ConditionalWarp: { condition: " + str(self.condition) + ", true_target: " + str(self.true_target) + \
-               ", false_target: " + str(self.false_target) + "} }"
+        return "{ConditionalWarp: { condition: " + str(self.condition) \
+               + ", true_target: " + str("Block " + str(self.true_target.index) if self.true_target else None) \
+               + ", false_target: " + str("Block " + str(self.false_target.index) if self.false_target else None) \
+               + "} }"
 
 
 class IteratorWarp:
