@@ -102,9 +102,15 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
                 isinstance(block.contents[-1], nodes.Return):
             return
 
+        target_index = blocks.index(target)
+        target_prev = blocks[target_index - 1]
+        if isinstance(target_prev.warp, nodes.IteratorWarp):
+            statement = nodes.Break()
+        else:
+            target.contents = []
+
         block.contents.append(statement)
         statement._addr = block.last_address
-        target.contents = []
 
         warp.type = nodes.UnconditionalWarp.T_FLOW
         warp.target = blocks[i + 1]
