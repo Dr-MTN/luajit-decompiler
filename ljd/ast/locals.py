@@ -23,11 +23,11 @@ LIST_TYPES = (nodes.VariablesList,
 
 
 def _get_holder(path):
-    for node in reversed(path[:-1]):
+    for idx, node in enumerate(reversed(path[:-1])):
         if not isinstance(node, LIST_TYPES):
-            return node
+            return node, len(path) - 2 - idx
 
-    return None
+    return None, -1
 
 
 class _LocalsMarker(traverse.Visitor):
@@ -88,28 +88,34 @@ class _LocalsMarker(traverse.Visitor):
 
     # ##
 
+    def _get_addr(self, node):
+        addr = getattr(node, "_addr", None)
+
+        if not addr:
+            if isinstance(node, nodes.Assignment):
+                return self._get_addr(node.destinations.contents[0])
+            elif isinstance(node, nodes.If):
+                return self._get_addr(node.expression)
+            elif isinstance(node, nodes.UnaryOperator):
+                return self._get_addr(node.operand)
+            elif isinstance(node, nodes.BinaryOperator):
+                return self._get_addr(node.left) or self._get_addr(node.right)
+
+        return addr
+
+    # ##
+
     def visit_function_definition(self, node):
         self._push_state()
         self._state().debuginfo = node._debuginfo
 
     def leave_function_definition(self, node):
         addr = node._instructions_count
+        if self._alt_mode:
+            addr -= 1
         self._process_slots(addr)
 
         self._pop_state()
-
-    # ##
-
-    def leave_assignment(self, node):
-        if self._alt_mode:
-            for i, exp in enumerate(node.expressions.contents):
-                if isinstance(exp, nodes.TableConstructor):
-
-                    dst = node.destinations.contents[i]
-                    if not isinstance(dst, nodes.Identifier) or dst.type != nodes.Identifier.T_SLOT:
-                        continue
-
-                    self._process_slots(self._state().addr + 2)
 
     # ##
 
@@ -124,9 +130,19 @@ class _LocalsMarker(traverse.Visitor):
     def visit_numeric_loop_warp(self, node):
         self._reset_slot(node.index.slot)
 
-    def leave_statements_list(self, node):
+    def leave_iterator_for(self, node):
         if self._alt_mode:
-            self._process_slots(self._state().addr + 1)
+            addr = self._get_addr(node)
+            if addr:
+                self._process_slots(addr)
+
+    def leave_assignment(self, node):
+        if self._alt_mode:
+            for exp in node.destinations.contents:
+                self._process_slots(self._state().addr + 1)
+                self._process_slots(self._state().addr + 2)
+
+    # ##
 
     def visit_identifier(self, node):
         if node.type == nodes.Identifier.T_SLOT:
@@ -144,10 +160,8 @@ class _LocalsMarker(traverse.Visitor):
             # TODO This was an assertion, but it doesn't always hold up. Why was this required?
             if self._state().addr < addr:
                 self._state().addr = addr
-            if self._alt_mode:
-                # TODO do for loops separately and always make this +1
-                self._process_slots(addr+1)
-            self._process_slots(addr)
+            if not self._alt_mode:
+                self._process_slots(addr)
 
     # We need to process slots twice as it could be the last
     # statement in the function/block and it could be an assignment
@@ -258,15 +272,14 @@ class _LocalDefinitionsMarker(traverse.Visitor):
                 node.destinations.contents = node.destinations.contents[:slot_index + 1]
 
                 # Find node in the holder
-                holder = _get_holder(self._path)
-                if isinstance(holder, nodes.FunctionDefinition):
-                    holder = holder.statements.contents
+                _, idx = _get_holder(self._path)
+                contents = self._path[idx + 1].contents
 
-                for node_index, child_node in enumerate(holder):
+                for node_index, child_node in enumerate(contents):
                     if node != child_node:
                         continue
 
-                    holder.insert(node_index + 1, new_node)
+                    contents.insert(node_index + 1, new_node)
 
                 # Split off the bad parts, so what remains is good for a local declaration
                 break
