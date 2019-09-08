@@ -130,6 +130,12 @@ class _LocalsMarker(traverse.Visitor):
     def visit_numeric_loop_warp(self, node):
         self._reset_slot(node.index.slot)
 
+    def leave_numeric_for(self, node):
+        if self._alt_mode:
+            addr = self._get_addr(node)
+            if addr:
+                self._process_slots(addr)
+
     def leave_iterator_for(self, node):
         if self._alt_mode:
             addr = self._get_addr(node)
