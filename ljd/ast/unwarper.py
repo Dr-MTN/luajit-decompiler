@@ -1342,15 +1342,7 @@ def _get_last_assignment_source(block):
     if isinstance(assignment, nodes.Assignment):
         return assignment.expressions.contents[0]
     elif isinstance(assignment, nodes.FunctionCall):
-        # assert False  # TODO(yzg) ljd.ast.nodes.FunctionCall
-
-        # For some reason, one of the files I need to decompile has two identical jump
-        #  statements in a row, with nothing jumping to either of them, and for the life
-        #  of me I can't figure out why.
-        c = nodes.Constant()
-        c.type = nodes.Constant.T_STRING
-        c.value = "ljd_decompile_error_something_goes_here_fadklsdfajsdlkjf"
-        return c
+        assert False  # TODO(yzg) ljd.ast.nodes.FunctionCall
     elif isinstance(assignment, nodes.NoOp):
         return None
     elif isinstance(assignment, nodes.Return):
@@ -1608,6 +1600,7 @@ def _unwarp_if_statement(start, body, end, topmost_end):
         _set_end(else_body[-1])
         else_blocks = _unwarp_ifs(else_body, else_body[-1], topmost_end)
         node.else_block.contents = else_blocks
+
         if _get_target(then_warp_out, True) == _get_target(else_warp_out, True) \
                 and len(then_blocks) == 1 \
                 and len(then_blocks[0].contents) == 1 \
