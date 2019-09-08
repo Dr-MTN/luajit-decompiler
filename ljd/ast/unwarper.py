@@ -1341,7 +1341,7 @@ def _get_last_assignment_source(block):
     if isinstance(assignment, nodes.Assignment):
         return assignment.expressions.contents[0]
     elif isinstance(assignment, nodes.FunctionCall):
-        assert False  # TODO(yzg) ljd.ast.nodes.FunctionCall
+        return None
     elif isinstance(assignment, nodes.NoOp):
         return None
     elif isinstance(assignment, nodes.Return):
