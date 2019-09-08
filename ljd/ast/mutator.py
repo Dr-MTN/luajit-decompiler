@@ -5,6 +5,7 @@
 import copy
 
 from ljd.ast.helpers import *
+from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 
 
 class SimpleLoopWarpSwapper(traverse.Visitor):
@@ -31,13 +32,13 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
             if isinstance(warp, nodes.UnconditionalWarp) \
                     and warp.is_uclo:
                 assert block != node.contents[-1]
-                next_block = node.contents[i + 1]
-                self._fix_uclo_return(block, next_block)
+                self._fix_uclo_return(node.contents, i)
 
             if not isinstance(warp, nodes.ConditionalWarp):
                 continue
 
             if warp.true_target != warp.false_target:
+                self._simplify_unreachable_conditional_warps(blocks, i)
                 continue
 
             slot = getattr(warp, "_slot", -1)
@@ -84,7 +85,8 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
         return new_block
 
     @staticmethod
-    def _fix_uclo_return(block, next_block):
+    def _fix_uclo_return(blocks, i):
+        block = blocks[i]
         warp = block.warp
         target = warp.target
 
@@ -96,12 +98,16 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
         if not isinstance(statement, nodes.Return):
             return
 
+        if block.contents and \
+                isinstance(block.contents[-1], nodes.Return):
+            return
+
         block.contents.append(statement)
         statement._addr = block.last_address
         target.contents = []
 
         warp.type = nodes.UnconditionalWarp.T_FLOW
-        warp.target = next_block
+        warp.target = blocks[i + 1]
 
     @staticmethod
     def _swap_iterator_warps(blocks, end):
@@ -157,6 +163,63 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
         new_end_warp.type = nodes.UnconditionalWarp.T_JUMP
         new_end_warp.target = start
+
+    @staticmethod
+    def _simplify_unreachable_conditional_warps(blocks, i):
+        block = blocks[i]
+        target = block.warp.true_target
+
+        if not target:
+            return
+
+        node = target
+        while node:
+            warp = target.warp
+            if not isinstance(warp, nodes.UnconditionalWarp):
+                return
+
+            if warp.type == nodes.UnconditionalWarp.T_FLOW:
+                return
+
+            if target.contents:
+                if len(target.contents) > 1:
+                    return
+
+                if not isinstance(target.contents[0], nodes.NoOp):
+                    return
+
+            if node != target:
+                break
+
+            node = warp.target
+
+        if not isinstance(node.warp, nodes.UnconditionalWarp):
+            return
+
+        if node.warp.target != block.warp.false_target:
+            return
+
+        old_block_index = blocks.index(node)
+        next_block = blocks[old_block_index + 1]
+
+        next_block.warpins_count += 1
+        node.warp.target.warpins_count -= 1
+
+        del blocks[old_block_index]
+
+        # Change block to restore the false condition
+        new_warp = nodes.ConditionalWarp()
+        new_warp.true_target = next_block
+        new_warp.false_target = block.warp.false_target
+        false_cond = nodes.Identifier()
+        false_cond.slot = SLOT_FALSE
+        false_cond.type = false_cond.T_SLOT
+        new_warp.condition = false_cond
+        setattr(new_warp, "_slot", SLOT_FALSE)
+        setattr(new_warp, "_addr", getattr(block.warp, "_addr", None))
+        target.warp = new_warp
+        target.last_address += 1
+        del target.contents[0]  # remove noop
 
 
 class MutatorVisitor(traverse.Visitor):
