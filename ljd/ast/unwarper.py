@@ -1446,6 +1446,15 @@ def _invert(expression):
 
     new_type = _NEGATION_MAP[expression.type]
 
+    if new_type is None:
+        if expression.type == binop.T_LOGICAL_OR:
+            new_type = binop.T_LOGICAL_AND
+        elif expression.type == binop.T_LOGICAL_AND:
+            new_type = binop.T_LOGICAL_OR
+
+        expression.left = _invert(expression.left)
+        expression.right = _invert(expression.right)
+
     assert new_type is not None
 
     expression.type = new_type
@@ -1599,6 +1608,19 @@ def _unwarp_if_statement(start, body, end, topmost_end):
         _set_end(else_body[-1])
         else_blocks = _unwarp_ifs(else_body, else_body[-1], topmost_end)
         node.else_block.contents = else_blocks
+        if _get_target(then_warp_out, True) == _get_target(else_warp_out, True) \
+                and len(then_blocks) == 1 \
+                and len(then_blocks[0].contents) == 1 \
+                and isinstance(then_blocks[0].contents[0], nodes.NoOp):
+
+            # Good to merge, but we don't want to break up else-ifs
+            if len(else_blocks) != 1 or not isinstance(else_blocks[0].contents[-1], nodes.If):
+
+                # Invert condition and move else block to then
+                node.expression = _invert(expression)
+                node.then_block.contents = else_blocks
+                node.else_block.contents = []
+
     else:
         warp_out = body[-1].warp
 
