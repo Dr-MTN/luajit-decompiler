@@ -10,7 +10,9 @@ import ljd.ast.traverse as traverse
 import ljd
 from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 
-keep_slot_ids = False
+compact_table_constructors = False
+comment_empty_blocks = True
+show_slot_ids = False
 
 CMD_START_STATEMENT = 0
 CMD_END_STATEMENT = 1
@@ -39,6 +41,11 @@ STATEMENT_FUNCTION = 9
 
 VALID_IDENTIFIER = re.compile(r'^\w[\w\d]*$')
 
+LIST_TYPES = (nodes.VariablesList,
+              nodes.IdentifiersList,
+              nodes.ExpressionsList,
+              nodes.StatementsList)
+
 
 class _State:
     def __init__(self):
@@ -54,6 +61,7 @@ class Visitor(traverse.Visitor):
 
         self.print_queue = []
 
+        self._path = []
         self._visited_nodes = [set()]
         self._states = [_State()]
 
@@ -113,7 +121,7 @@ class Visitor(traverse.Visitor):
 
         name = "slot" + str(slot)
 
-        if keep_slot_ids:
+        if show_slot_ids:
             if slot_ids and slot_ids != -1:
                 name += "#"
                 if isinstance(slot_ids, list):
@@ -220,8 +228,7 @@ class Visitor(traverse.Visitor):
 
                 contents.insert(0, record)
 
-        if len(contents) == 1 and False:
-            # TODO enable as part of a TdlQ-emulation option
+        if compact_table_constructors and len(contents) == 1:
             self._visit(contents[0])
         elif len(contents) > 0:
             self._end_line()
@@ -516,10 +523,16 @@ class Visitor(traverse.Visitor):
 
         self._push_state()
 
-        # TODO enable only in 'TdlQ emulation mode'
-        if len(node.contents) == 1 and isinstance(node.contents[0], nodes.NoOp):
-            self._write("-- Nothing")
-            self._end_line()
+        if comment_empty_blocks and len(self._path) > 1:
+            add_comment = False
+            if len(node.contents) == 0:
+                add_comment = isinstance(self._path[-2], (nodes.IteratorFor, nodes.If, nodes.ElseIf))
+            elif len(node.contents) == 1:
+                add_comment = isinstance(node.contents[0], nodes.NoOp)
+
+            if add_comment:
+                self._write("-- Nothing")
+                self._end_line()
 
     def leave_statements_list(self, node):
         self._pop_state()
@@ -913,6 +926,16 @@ class Visitor(traverse.Visitor):
             self._write("true")
         else:
             self._write("nil")
+
+    def _visit_node(self, handler, node):
+        self._path.append(node)
+
+        traverse.Visitor._visit_node(self, handler, node)
+
+    def _leave_node(self, handler, node):
+        self._path.pop()
+
+        traverse.Visitor._leave_node(self, handler, node)
 
     def _skip(self, node):
         self._visited_nodes[-1].add(node)
