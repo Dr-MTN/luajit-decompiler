@@ -13,6 +13,7 @@ from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 compact_table_constructors = False
 comment_empty_blocks = True
 show_slot_ids = False
+show_line_info = False
 
 CMD_START_STATEMENT = 0
 CMD_END_STATEMENT = 1
@@ -144,6 +145,11 @@ class Visitor(traverse.Visitor):
 
         if is_statement:
             self._start_statement(STATEMENT_FUNCTION)
+
+            lineinfo = show_line_info and getattr(node, "_lineinfo", None)
+            if lineinfo:
+                self._write("-- Lines {0}-{1}".format(lineinfo[0], lineinfo[0] + lineinfo[1]))
+                self._end_line()
 
             if self._state().function_local:
                 self._write("local ")

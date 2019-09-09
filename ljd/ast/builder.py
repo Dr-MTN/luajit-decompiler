@@ -41,6 +41,9 @@ def _build_function_definition(prototype, header):
     node._debuginfo = prototype.debuginfo
     node._instructions_count = len(prototype.instructions)
 
+    if prototype.first_line_number:
+        setattr(node, "_lineinfo", (prototype.first_line_number, prototype.lines_count))
+
     node.arguments.contents = _build_function_arguments(state, prototype)
 
     if prototype.flags.is_variadic:
