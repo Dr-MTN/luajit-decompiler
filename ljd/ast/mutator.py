@@ -9,6 +9,47 @@ from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 
 
 class SimpleLoopWarpSwapper(traverse.Visitor):
+    class _State:
+        def __init__(self):
+            self.loops = []
+            self.jumps = []
+
+    def __init__(self):
+        self._states = []
+
+    def visit_function_definition(self, node):
+        self._states.append(self._State())
+
+    def leave_function_definition(self, node):
+        state = self._states.pop()
+        if not state:
+            return
+
+        # Process UCLO returns. Prefer breaks when possible.
+        for blocks, i in state.jumps:
+            use_break = False
+
+            block = blocks[i]
+            warp = block.warp
+            target = warp.target
+
+            for start, end in state.loops:
+                if end == target:
+                    use_break = blocks.index(start) < i
+                    break
+
+            if use_break:
+                statement = nodes.Break()
+            else:
+                statement = target.contents[0]
+                target.contents = []
+
+            block.contents.append(statement)
+            statement._addr = block.last_address
+
+            warp.type = nodes.UnconditionalWarp.T_FLOW
+            warp.target = blocks[i + 1]
+
     def visit_statements_list(self, node):
         blocks = node.contents
 
@@ -21,12 +62,16 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
             block.index += index_shift
 
+            is_loop_warp = True
             if isinstance(warp, nodes.IteratorWarp):
                 self._swap_iterator_warps(blocks, block)
-                continue
-
-            if isinstance(warp, nodes.NumericLoopWarp):
+            elif isinstance(warp, nodes.NumericLoopWarp):
                 self._swap_numeric_loop_warps(blocks, block)
+            else:
+                is_loop_warp = False
+
+            if is_loop_warp:
+                self._states[-1].loops.append((warp.body, warp.way_out))
                 continue
 
             if isinstance(warp, nodes.UnconditionalWarp) \
@@ -57,6 +102,25 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
         node.contents = fixed
 
+    def _fix_uclo_return(self, blocks, i):
+        block = blocks[i]
+        warp = block.warp
+        target = warp.target
+
+        if len(target.contents) != 1:
+            return
+
+        statement = target.contents[0]
+
+        if not isinstance(statement, nodes.Return):
+            return
+
+        if block.contents and \
+                isinstance(block.contents[-1], nodes.Return):
+            return
+
+        self._states[-1].jumps.append((blocks, i))
+
     @staticmethod
     def _create_dummy_block(block, slot):
         new_block = nodes.Block()
@@ -83,37 +147,6 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
         block.warp.true_target = new_block
 
         return new_block
-
-    @staticmethod
-    def _fix_uclo_return(blocks, i):
-        block = blocks[i]
-        warp = block.warp
-        target = warp.target
-
-        if len(target.contents) != 1:
-            return
-
-        statement = target.contents[0]
-
-        if not isinstance(statement, nodes.Return):
-            return
-
-        if block.contents and \
-                isinstance(block.contents[-1], nodes.Return):
-            return
-
-        target_index = blocks.index(target)
-        target_prev = blocks[target_index - 1]
-        if isinstance(target_prev.warp, nodes.IteratorWarp):
-            statement = nodes.Break()
-        else:
-            target.contents = []
-
-        block.contents.append(statement)
-        statement._addr = block.last_address
-
-        warp.type = nodes.UnconditionalWarp.T_FLOW
-        warp.target = blocks[i + 1]
 
     @staticmethod
     def _swap_iterator_warps(blocks, end):
