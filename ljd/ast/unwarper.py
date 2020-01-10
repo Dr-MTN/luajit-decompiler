@@ -8,7 +8,13 @@ from ljd.ast.helpers import *
 
 binop = nodes.BinaryOperator
 
+verbose = False
 catch_asserts = False
+
+
+def exp_debug(*args):
+    if verbose:
+        print(*args, file=sys.stdout)
 
 
 # ##
