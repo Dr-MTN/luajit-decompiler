@@ -758,7 +758,6 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
 
             body = extbody[current_i+1:be_index]
             subs, subs_unused = _find_expressions(block, body, branch_end, level + 1, known_blocks)
-            _ = 0
 
         if len(subs) != 0:
             endest_end = _find_endest_end(subs)
@@ -836,13 +835,16 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
                     continue
                 elif sure_expression is None:
                     sure_expression = True
-            else:
+            elif len(block.warp.true_target.contents) == 1:
+                skip = False
+
                 # Check for a special case 'x = y and z' that has a no-op condition in the true case
-                if len(block.warp.true_target.contents) == 1 \
-                        and isinstance(block.warp.true_target.contents[0], nodes.NoOp) \
+                if isinstance(block.warp.true_target.contents[0], nodes.NoOp) \
                         and isinstance(block.warp.true_target.warp, nodes.UnconditionalWarp):
-                    needs_validation = True
                     sure_expression = True
+                    needs_validation = True
+                    skip = True
+                if skip:
                     slot_ref = block
                     i += 1
                     continue
