@@ -870,7 +870,19 @@ class Visitor(traverse.Visitor):
         self._visit(node.variable)
         self._write(" = ")
 
-        self._visit(node.expressions)
+        # Manually visit the expressions so we have the option to skip the default increment
+        self._skip(node.expressions)
+
+        expressions = node.expressions.contents
+        assert len(expressions) == 3
+        if isinstance(expressions[2], nodes.Constant) and expressions[2].value == 1:
+            expressions = expressions[:-1]
+
+        for subnode in expressions[:-1]:
+            self._visit(subnode)
+            self._write(", ")
+
+        self._visit(expressions[-1])
 
         self._write(" do")
 
