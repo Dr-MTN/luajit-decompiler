@@ -343,14 +343,13 @@ class Main:
         try:
             ast = self.decompile(full_path)
 
-            if not self.options.folder_output:
+            if not self.options.output:
                 print("\n--; Decompile of {0}".format(full_path))
                 ljd.lua.writer.write(sys.stdout, ast)
                 self.lock.release()
                 return 0
 
-            new_path = os.path.join(self.options.folder_output,
-                                    os.path.relpath(full_path, self.options.folder_name))
+            new_path = os.path.join(self.options.output, os.path.relpath(full_path, self.options.folder_name))
             os.makedirs(os.path.dirname(new_path), exist_ok=True)
             if not file.endswith('.lua'):
                 new_path = new_path[:-1]
