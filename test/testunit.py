@@ -40,8 +40,7 @@ class Test:
     def test(self, config, tmpdir):
         # noinspection PyBroadException
         try:
-            self._test_unsafe(config, tmpdir)
-            return TestResult.PASS
+            return self._test_unsafe(config, tmpdir)
         except subprocess.CalledProcessError:
             return TestResult.FAIL
         except Exception:
@@ -65,7 +64,10 @@ class Test:
         with open(self.bc_out_recompiled, "rb") as fi:
             bc2 = fi.read()
 
-        assert bc1 == bc2
+        if bc1 != bc2:
+            return TestResult.FAIL
+
+        return TestResult.PASS
 
     def compile(self, config, symbols, tmpdir):
         self.bc_out = Path(tmpdir, self.name + ".bc")
