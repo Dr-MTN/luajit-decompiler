@@ -70,9 +70,9 @@ class Test:
         return TestResult.PASS
 
     def compile(self, config, symbols, tmpdir):
-        self.bc_out = Path(tmpdir, self.name + ".bc")
-        self.src_out = Path(tmpdir, self.name + ".lua")
-        self.bc_out_recompiled = Path(tmpdir, self.name + "-rc.bc")
+        self.bc_out = self._chkdir(tmpdir, ".bc")
+        self.src_out = self._chkdir(tmpdir, ".lua")
+        self.bc_out_recompiled = self._chkdir(tmpdir, "-rc.bc")
         config.log("Compiling " + self.name + " to " + str(self.bc_out))
         lj_compile(config, self.src, self.bc_out, symbols)
 
@@ -85,6 +85,11 @@ class Test:
         assert self.bc_out
         config.log("Recompiling " + self.name)
         lj_compile(config, self.src_out, self.bc_out_recompiled, False)
+
+    def _chkdir(self, tmpdir, ext):
+        file = Path(tmpdir, self.name + ext)
+        file.parent.mkdir(parents=True, exist_ok=True)
+        return file
 
 
 def lj_compile(config, input, output, symbols):
