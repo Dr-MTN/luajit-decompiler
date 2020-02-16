@@ -15,6 +15,10 @@ class FunctionDefinition:
         self._debuginfo = None
         self._instructions_count = 0
 
+        # If there was an exception parsing this function (eg, invalid bytecodes) and catch asserts is
+        # enabled, the parsing error will be stored here and the rest of the function will be left empty.
+        self.error = None
+
     def _accept(self, visitor):
         visitor._visit_node(visitor.visit_function_definition, self)
 

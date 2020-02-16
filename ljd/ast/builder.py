@@ -8,6 +8,7 @@ import ljd
 from ljd.bytecode.constants import T_FALSE, T_NIL, T_TRUE
 from ljd.bytecode.helpers import get_jump_destination
 
+handle_invalid_functions = False
 
 class _State:
     def __init__(self):
@@ -848,7 +849,14 @@ def _build_table_element(state, addr, instruction):
 def _build_function(state, slot):
     prototype = state.constants.complex_constants[slot]
 
-    return _build_function_definition(prototype, state.header)
+    try:
+        return _build_function_definition(prototype, state.header)
+    except Exception as err:
+        if not handle_invalid_functions:
+            raise err
+        fd = nodes.FunctionDefinition()
+        fd.error = err
+        return fd
 
 
 def _build_table_copy(state, slot):

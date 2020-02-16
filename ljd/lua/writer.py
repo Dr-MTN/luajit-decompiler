@@ -4,6 +4,7 @@
 
 import re
 import sys
+import traceback
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
@@ -143,6 +144,21 @@ class Visitor(traverse.Visitor):
         self._write(")")
 
         self._end_line()
+
+        # If there were unrecoverable errors in the function (namely invalid bytecodes), an error will
+        # be set for the entire function. Print it out as a comment, along with an error to crash the
+        # program should the generated source be recompiled.
+        if node.error:
+            self._start_block()
+            self._write('error("Decompilation failed")')
+            self._end_line()
+            self._write("-- Exception in function building!")
+            self._end_line()
+            for entry in traceback.format_exception(value=node.error, tb=node.error.__traceback__, etype=None):
+                for line in entry.strip().split("\n"):
+                    self._write("-- " + line)
+                    self._end_line()
+            self._end_block()
 
         # Syntactic Sugar: Cull empty returns at the ends of functions
         if len(node.statements.contents) > 1:

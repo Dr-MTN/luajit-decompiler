@@ -150,6 +150,7 @@ class Main:
             ljd.ast.unwarper.catch_asserts = True
             ljd.ast.slotworks.catch_asserts = True
             ljd.ast.validator.catch_asserts = True
+            ljd.ast.builder.handle_invalid_functions = True
 
         # Start logging if required
         if self.options.enable_logging:
