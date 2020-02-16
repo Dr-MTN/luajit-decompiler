@@ -30,17 +30,6 @@ def build(header, prototype):
 
 
 def _build_function_definition(prototype, header):
-    try:
-        return _build_function_definition_unhandled(prototype, header)
-    except Exception as err:
-        if not handle_invalid_functions:
-            raise err
-        fd = nodes.FunctionDefinition()
-        fd.error = err
-        return fd
-
-
-def _build_function_definition_unhandled(prototype, header):
     node = nodes.FunctionDefinition()
 
     state = _State()
@@ -859,7 +848,15 @@ def _build_table_element(state, addr, instruction):
 
 def _build_function(state, slot):
     prototype = state.constants.complex_constants[slot]
-    return _build_function_definition(prototype, state.header)
+
+    try:
+        return _build_function_definition(prototype, state.header)
+    except Exception as err:
+        if not handle_invalid_functions:
+            raise err
+        fd = nodes.FunctionDefinition()
+        fd.error = err
+        return fd
 
 
 def _build_table_copy(state, slot):
