@@ -1,4 +1,4 @@
-from test.test import Mode, Test
+from test.testunit import Mode, Test
 
 tests = [
     Test("simple", Mode.MATCHES),

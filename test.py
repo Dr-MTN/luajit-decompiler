@@ -4,7 +4,7 @@ import tempfile
 from argparse import ArgumentParser
 
 from test.config import Config
-from test.test import TestResult
+from test.testunit import TestResult
 from test.testlist import tests as all_tests
 from test.utils import Colour
 
