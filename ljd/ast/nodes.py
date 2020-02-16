@@ -325,16 +325,33 @@ class Identifier:
         self.name = None
         self.type = -1
         self.slot = -1
+        self.id = -1
         self._varinfo = None
 
     def _accept(self, visitor):
         visitor._visit_node(visitor.visit_identifier, self)
         visitor._leave_node(visitor.leave_identifier, self)
 
+    def _slot_name(self):
+        name = str(self.slot)
+        if self.id != -1:
+            name += ("#" + str(self.id))
+        else:
+            slot_ids = getattr(self, "_ids", None)
+            if slot_ids:
+                name += "#("
+                for i, slot_id in enumerate(slot_ids):
+                    if i > 0:
+                        name += "|"
+                    name += str(slot_id)
+                name += ")"
+        return name
+
+
     def __str__(self):
         return "{ Identifier: {name: " + str(self.name) + ", type: " + ["T_SLOT", "T_LOCAL", "T_UPVALUE", "T_BUILTIN"][
             self.type] + \
-               ", slot: " + str(self.slot) + "} }"
+               ", slot: " + self._slot_name() + "} }"
 
 
 # helper vararg/varreturn
@@ -469,9 +486,9 @@ class UnconditionalWarp:
         visitor._leave_node(visitor.leave_unconditional_warp, self)
 
     def __str__(self):
-        return "{UnconditionalWarp: {type: " + ["T_JUMP", "T_FLOW"][self.type] + ", target: " + str(
-            self.target) + ", is_uclo: " + \
-               str(self.is_uclo) + " }}"
+        return "{UnconditionalWarp: {type: " + ["T_JUMP", "T_FLOW"][self.type] \
+               + ", target: " + str("Block " + str(self.target.index) if self.target else None) \
+               + ", is_uclo: " + str(self.is_uclo) + " }}"
 
 
 class ConditionalWarp:
@@ -490,8 +507,10 @@ class ConditionalWarp:
         visitor._leave_node(visitor.leave_conditional_warp, self)
 
     def __str__(self):
-        return "{ConditionalWarp: { condition: " + str(self.condition) + ", true_target: " + str(self.true_target) + \
-               ", false_target: " + str(self.false_target) + "} }"
+        return "{ConditionalWarp: { condition: " + str(self.condition) \
+               + ", true_target: " + str("Block " + str(self.true_target.index) if self.true_target else None) \
+               + ", false_target: " + str("Block " + str(self.false_target.index) if self.false_target else None) \
+               + "} }"
 
 
 class IteratorWarp:

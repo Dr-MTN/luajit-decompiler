@@ -4,10 +4,17 @@ import sys
 import ljd.ast.nodes as nodes
 import ljd.ast.slotworks as slotworks
 import ljd.ast.traverse as traverse
+from ljd.ast.helpers import *
 
 binop = nodes.BinaryOperator
 
+verbose = False
 catch_asserts = False
+
+
+def exp_debug(*args):
+    if verbose:
+        print(*args, file=sys.stdout)
 
 
 # ##
@@ -38,7 +45,8 @@ class _FunctionsCollector(traverse.Visitor):
     def visit_function_definition(self, node):
         self.result.append(node)
 
-def unwarp(node):
+
+def unwarp(node, conservative=False):
     try:
         _run_step(_fix_loops, node, repeat_until=False)
         _run_step(_fix_loops, node, repeat_until=True)
@@ -49,6 +57,14 @@ def unwarp(node):
             raise
 
     try:
+        _run_step(_unwarp_expressions, node)
+
+        # Under some conditions the expressions unwarper causes new assignments to become expressions themselves.
+        # Instead of doing some difficult bookkeeping, we just unwarp expressions again.
+        #
+        # An example where this is needed is an expression like x = x or { a and b }
+        #
+        # There's probably a better (read: faster) way to do this, but it works for now.
         _run_step(_unwarp_expressions, node)
     except:
         if catch_asserts:
@@ -92,7 +108,7 @@ def unwarp(node):
             raise
 
     try:
-        _glue_flows(node)
+        _glue_flows(node, conservative)
     except:
         if catch_asserts:
             print("-- Decompilation Error: _glue_flows(node)\n", file=sys.stdout)
@@ -104,6 +120,14 @@ def unwarp(node):
     except:
         if catch_asserts:
             print("-- Decompilation Error: _trim_redundant_returns(node)\n", file=sys.stdout)
+        else:
+            raise
+
+    try:
+        slotworks.simplify_ast(node)
+    except:
+        if catch_asserts:
+            print("-- Decompilation Error: ljd.ast.slotworks.simplify_ast(self.ast)\n", file=sys.stdout)
         else:
             raise
 
@@ -126,7 +150,7 @@ def _gather_statements_lists(node):
     return collector.result
 
 
-def _glue_flows(node):
+def _glue_flows(node, conservative=False):
     error_pending = False
 
     for statements in _gather_statements_lists(node):
@@ -155,8 +179,11 @@ def _glue_flows(node):
             target.contents = block.contents + target.contents
             block.contents = []
 
-        if hasattr(blocks[-1], "contents"):  # TODO(yzg): 'Return' object has no attribute 'contents'
-            statements.contents = blocks[-1].contents
+        # Most visitors make assumptions on blocks being present. If we want to simplify the AST in multiple passes,
+        # these outer blocks cannot simply be eliminated.
+        if not conservative or not isinstance(node, nodes.FunctionDefinition):
+            if hasattr(blocks[-1], "contents"):  # TODO(yzg): 'Return' object has no attribute 'contents'
+                statements.contents = blocks[-1].contents
 
 
 # Delete returns on the last line of a function, when those returns don't have any arguments
@@ -199,32 +226,49 @@ def _unwarp_expressions(blocks):
             elif start_index > 0 and len(start.contents) > 0:
                 # Don't continue in the 'false and false' / 'true or true' cases
                 if start_index != end_index \
-                        or not (isinstance(start.contents[-1], nodes.Assignment)
-                                and len(start.contents[-1].expressions.contents) > 0
-                                and isinstance(start.contents[-1].expressions.contents[-1],
-                                nodes.Primitive)):
+                        or not isinstance(start.contents[-1], nodes.Assignment) \
+                        or len(start.contents[-1].expressions.contents) == 0 \
+                        or not isinstance(start.contents[-1].expressions.contents[-1], nodes.Primitive):
+
+                    # NOTE Don't skip the last statement (before the return), it may be an expression
                     if start_index == end_index:
                         end_index += 1
-                    start_index += 1
-                    continue
 
-        body, end, end_index = _extract_if_body(start_index,
-                                                blocks, None)
+                        if end_index < blocks[-1].index - 1:
+                            start_index += 1
+                        continue
+                    elif start_index <= end_index - 1:
+                        if start_index != end_index - 1 or end_index < blocks[-1].index - 1:
+                            start_index += 1
+                            continue
+
+        body, end, end_index = _extract_if_body(start_index, blocks, None)
 
         if body is None:
-            raise NotImplementedError("GOTO statements are not"
-                                      " supported")
+            raise NotImplementedError("GOTO statements are not supported")
+        elif start_index > 0 and len(body) == 1 and body[0].warpins_count == 0:
+            # Unreached true/false, don't include it. This should deal with some unwanted 'and true' expressions.
+            if isinstance(body[0].contents[-1], nodes.Assignment) \
+                    and len(body[0].contents[-1].expressions.contents) > 0 \
+                    and isinstance(body[0].contents[-1].expressions.contents[-1], nodes.Primitive) \
+                    and start_index + 1 < blocks[-1].index:
+                start_index += 1
+                continue
 
         try:
-            expressions = _find_expressions(start, body, end)
+            expressions, unused = _find_expressions(start, body, end)
         except AttributeError:
             if catch_asserts:
                 setattr(start, "_decompilation_error_here", True)
                 print("-- WARNING: Error occurred during decompilation.")
                 print("--   Code may be incomplete or incorrect.")
-                expressions = []
+                expressions, unused = [], []
             else:
                 raise
+
+        if len(expressions) == 0:
+            start_index += 1
+            continue
 
         assert pack_set.isdisjoint(expressions)
 
@@ -232,17 +276,33 @@ def _unwarp_expressions(blocks):
 
         assert len(expressions_set) == len(expressions)
 
-        if len(expressions) == 0:
-            start_index += 1
-            continue
-
-        pack += list(reversed(expressions))
-        pack_set |= expressions_set
-
         endest_end = _find_endest_end(expressions)
 
         if endest_end != end:
             end_index = blocks.index(endest_end)
+
+        if unused:
+            expression_start_index = blocks.index(expressions[0][1])
+            if expression_start_index > start_index + 1:
+                # Too big of a gap, there may be stuff we missed
+                # TODO Unsure if the check is still needed
+
+                missed = []
+                for i in range(0, len(unused)):
+                    sub_block = unused[i][0]
+                    for sub_index in range(start_index + 1, end_index - 1):
+                        if sub_block == blocks[sub_index]:
+                            missed.append(unused[i])
+
+                missed_set = set(missed)
+
+                assert len(missed_set) == len(missed)
+
+                pack += list(reversed(missed))
+                pack_set |= missed_set
+
+        pack += list(reversed(expressions))
+        pack_set |= expressions_set
 
         start_index = end_index
 
@@ -250,9 +310,9 @@ def _unwarp_expressions(blocks):
 
 
 def _find_endest_end(expressions):
-    endest_end = expressions[0][1]
+    endest_end = expressions[0][2]
 
-    for _start, exp_end, _slot, _slot_type in expressions[1:]:
+    for _, _, exp_end, *_ in expressions[1:]:
         if exp_end.index > endest_end.index:
             endest_end = exp_end
 
@@ -268,13 +328,39 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
         start = blocks[start_index]
         warp = start.warp
 
+        abort_loop = False
         if isinstance(warp, nodes.UnconditionalWarp):
             if warp.type == nodes.UnconditionalWarp.T_FLOW:
                 start_index += 1
                 continue
 
-        body, end, end_index = _extract_if_body(start_index,
-                                                blocks, topmost_end)
+            # Remove unreachable True assignments that are the result of expressions in assignments
+            while True:
+                if len(start.contents) != 1 \
+                        or not isinstance(start.contents[0], nodes.Assignment) \
+                        or len(start.contents[0].destinations.contents) != 1 \
+                        or start_index >= len(blocks) - 1:
+                    break
+
+                expression = start.contents[0].expressions.contents[0]
+                if not isinstance(expression, nodes.Primitive) or expression.type != nodes.Primitive.T_FALSE:
+                    break
+
+                next_block = blocks[start_index + 1]
+                if next_block.warpins_count != 0:
+                    break
+
+                if len(next_block.contents) != 1:
+                    break
+
+                expression = next_block.contents[0].expressions.contents[0]
+                if not isinstance(expression, nodes.Primitive) or expression.type != nodes.Primitive.T_TRUE:
+                    break
+
+                abort_loop = True
+                break
+
+        body, end, end_index = _extract_if_body(start_index, blocks, topmost_end)
 
         if body is None:
             if catch_asserts:
@@ -291,15 +377,21 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 
         is_end = isinstance(body[-1].warp, nodes.EndWarp)
 
-        try:
-            _unwarp_if_statement(start, body, end, end)
-        except (AssertionError, IndexError):
-            if catch_asserts:
-                setattr(start, "_decompilation_error_here", True)
-                print("-- WARNING: Error occurred during decompilation.")
-                print("--   Code may be incomplete or incorrect.")
-            else:
-                raise
+        # Check for empty else blocks and skip them
+        if is_end and len(body) == 1 and not body[0].contents \
+                and _get_target(start.warp, True) == _get_target(body[0].warp, True):
+            abort_loop = True
+
+        if not abort_loop:
+            try:
+                _unwarp_if_statement(start, body, end, end)
+            except (AssertionError, IndexError):
+                if catch_asserts:
+                    setattr(start, "_decompilation_error_here", True)
+                    print("-- WARNING: Error occurred during decompilation.")
+                    print("--   Code may be incomplete or incorrect.")
+                else:
+                    raise
 
         if is_end:
             _set_end(start)
@@ -314,7 +406,8 @@ def _unwarp_ifs(blocks, top_end=None, topmost_end=None):
 
 
 def _extract_if_body(start_index, blocks, topmost_end):
-    end = _find_branching_end(blocks[start_index:], topmost_end)
+    body = start_index > 0 and blocks[start_index:] or blocks
+    end = _find_branching_end(body, topmost_end)
 
     try:
         end_index = blocks.index(end)
@@ -332,13 +425,63 @@ def _extract_if_body(start_index, blocks, topmost_end):
 def _unwarp_expressions_pack(blocks, pack):
     replacements = {}
 
-    for start, end, slot, slot_type in reversed(pack):
+    for i, (block, start, end, slot, slot_type, slot_ref, needs_validation) in enumerate(reversed(pack)):
         end = replacements.get(end, end)
 
         start_index = blocks.index(start)
         end_index = blocks.index(end)
 
+        is_special = False
+        skip_expression = False
+        before = blocks[:start_index]
         body = blocks[start_index + 1:end_index]
+
+        if block == start and isinstance(block.warp, nodes.UnconditionalWarp):
+            skip_expression = True
+
+        if needs_validation:
+            # Count the number of assignments. We want to skip long chains.
+            num_assignments = 0
+            for b in body:
+                for c in b.contents:
+                    if not isinstance(c, nodes.Assignment):
+                        continue
+
+                    if len(c.destinations.contents) != 1:
+                        continue
+
+                    if len(c.expressions.contents) != 1:
+                        continue
+
+                    destination = c.destinations.contents[0]
+                    if is_equal(destination, slot_ref):
+                        num_assignments += 1
+
+            skip_expression = num_assignments > 2
+
+        if needs_validation and not skip_expression and isinstance(start.warp, nodes.ConditionalWarp):
+            # Make sure the special case should actually be an expression. These special cases have
+            # no operations in their true warp, but be conservative and skip nested expressions
+            for b in filter(lambda x: isinstance(x.warp, nodes.ConditionalWarp), [start] + body):
+                if len(b.warp.true_target.contents) == 1 \
+                        and isinstance(b.warp.true_target.contents[0], nodes.NoOp) \
+                        and isinstance(b.warp.true_target.warp, nodes.UnconditionalWarp):
+
+                    is_special = True
+                    if b != start or (i > 0 and any(w != blocks[i - 1].warp for w in _find_warps_to(before, b))):
+                        skip_expression = True
+                        break
+
+        if not skip_expression:
+            # Check if there's any other warpins to the expressions body. If so,
+            # then this subexpression will be taken care of later on
+            for body_block in body:
+                if _find_warps_to(before, body_block):
+                    skip_expression = True
+                    break
+
+        if skip_expression:
+            continue
 
         try:
             # Find the subexpression, and place it into the first block. After this
@@ -351,6 +494,39 @@ def _unwarp_expressions_pack(blocks, pack):
                 print("--   Code may be incomplete or incorrect.")
             else:
                 raise
+
+        # Make sure the expression is equivalent -- check special case, it has to end with the destination
+        if is_special:
+            expression = start.contents[-1]
+
+            skip_expression = True
+            while True:
+                if not isinstance(expression, nodes.Assignment):
+                    break
+
+                if len(expression.destinations.contents) != 1:
+                    break
+
+                if len(expression.expressions.contents) != 1:
+                    break
+
+                destination = expression.destinations.contents[0]
+                value = expression.expressions.contents[0]
+
+                if isinstance(value, nodes.BinaryOperator):
+                    value = value.right
+
+                if not is_equal(value, destination) and \
+                        (not isinstance(value, nodes.Primitive) or value.type == nodes.Primitive.T_FALSE):
+                    break
+
+                skip_expression = False
+                break
+
+            if skip_expression:
+                del start.contents[-1]
+                continue
+
 
         # Note that from here on, this function has basically been rewritten
         #  in order to support subexpressions in subexpressions - eg:
@@ -376,6 +552,23 @@ def _unwarp_expressions_pack(blocks, pack):
         #  would have ended up anyway.
         _set_flow_to(start, end)
 
+        # We no longer need the body, but there may still be some slots we need to eliminate before we lose
+        # the definitions. This works because the expressions we found earlier still have a reference to
+        # the nodes these body blocks. Create a temporary block to take care of this.
+        if end_index - start_index > 2:
+            # TODO: Avoid using a temporary block and process "unused" slots as well
+            tmp_block = nodes.Block()
+            first_block = blocks[start_index + 1]
+            last_block = blocks[end_index - 1]
+            tmp_block.first_address = first_block.first_address
+            tmp_block.last_address = last_block.last_address
+            tmp_block.index = first_block.index
+            tmp_block.warpins_count = first_block.warpins_count
+            tmp_block.warp = last_block.warp
+            for j in range(start_index + 1, end_index):
+                tmp_block.contents += blocks[j].contents
+            slotworks.eliminate_temporary(tmp_block, False)
+
         # Leave the starting block in for now, but delete the rest of
         #  the body since we need to do so anyway and not doing so now
         #  will result in it ending up in end_warps
@@ -397,7 +590,7 @@ def _unwarp_expressions_pack(blocks, pack):
         if start_index > 0:
             preceding_block = blocks[start_index - 1]
             if hasattr(preceding_block, "warp") \
-                     and isinstance(preceding_block.warp, nodes.UnconditionalWarp):
+                    and isinstance(preceding_block.warp, nodes.UnconditionalWarp):
                 target_index = blocks.index(_get_target(preceding_block.warp))
 
                 if target_index in range(start_index + 1, end_index - 1):
@@ -416,9 +609,11 @@ def _unwarp_expressions_pack(blocks, pack):
 
             replacements[start] = end
 
-            slotworks.eliminate_temporary(end)
+            slotworks.eliminate_temporary(end, False)
+            slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
         else:
-            slotworks.eliminate_temporary(start)
+            slotworks.eliminate_temporary(start, False)
+            slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
 
     return blocks
 
@@ -484,11 +679,31 @@ def _gather_slots(node):
     return collector.slots
 
 
-def _find_expressions(start, body, end):
-    # Explicitly allow the local a = x ~= "b" case
-    slot, slot_type = _get_simple_local_assignment_slot(start, body, end)
+def _find_expressions(start, body, end, level=0, known_blocks=None):
+    block = None
+    known_blocks = known_blocks or set()
+    known_blocks.add(start)
 
+    def _add_warps_to_known_blocks(node):
+        refs = None
+        warp = node.warp
+        if isinstance(warp, nodes.ConditionalWarp):
+            refs = [warp.true_target, warp.false_target]
+        elif isinstance(warp, nodes.UnconditionalWarp):
+            refs = [warp.target]
+
+        for ref in refs or []:
+            if not ref: continue
+            known_blocks.add(ref)
+
+    _add_warps_to_known_blocks(start)
+
+    # Explicitly allow the local a = x ~= "b" case
+    slot, slot_type, slot_ref = _get_simple_local_assignment_slot(start, body, end)
+
+    slot_assignments = []
     expressions = []
+    unused = []
 
     # We have something at the end, but not the true/false?
 
@@ -496,7 +711,8 @@ def _find_expressions(start, body, end):
     extbody = [start] + body
 
     is_local = False
-    sure_expression = False
+    sure_expression = None
+    needs_validation = False
 
     # Note the subexpression processing here has been rewritten from earlier versions - there
     #  used to be a problem where the following code:
@@ -533,17 +749,21 @@ def _find_expressions(start, body, end):
         i += 1
         block = extbody[current_i]
 
+        if block in known_blocks:
+            _add_warps_to_known_blocks(block)
+
         subs = []
+        subs_unused = []
 
         # Look for a self-contained conditional, and process that, then skip
         #  over it.
         branch_end = _find_branching_end(extbody[current_i:], None)
         if branch_end and branch_end in extbody:
             be_index = extbody.index(branch_end)
-            i = be_index
+            i = be_index  # NOTE This misses things, so re-check it later
 
             body = extbody[current_i+1:be_index]
-            subs = _find_expressions(block, body, branch_end)
+            subs, subs_unused = _find_expressions(block, body, branch_end, level + 1, known_blocks)
 
         if len(subs) != 0:
             endest_end = _find_endest_end(subs)
@@ -558,9 +778,9 @@ def _find_expressions(start, body, end):
 
             # If any of the subexpressions are put into local variables, then this
             #  must be an if block, rather than an expression.
-            for sub_start, sub_end, sub_slot, sub_slot_type in subs:
+            for _, sub_start, sub_end, sub_slot, sub_slot_type, *_ in subs:
                 if sub_slot_type == nodes.Identifier.T_LOCAL:
-                    return expressions
+                    return expressions, unused
 
                 # Search the body of the subexpression - if it contains anything other
                 # than assignments, then it must be an if..end rather than an expression
@@ -582,14 +802,21 @@ def _find_expressions(start, body, end):
                 sub_body = extbody[sub_start_i:sub_end_i]
 
                 # And check it
-                for block in sub_body:
-                    for item in block.contents:
+                for sub_block in sub_body:
+                    for item in sub_block.contents:
                         if not isinstance(item, nodes.Assignment):
-                            return expressions
+                            return expressions, subs
+
+            # TODO This can skip expressions in the current blocks body. Solved by a second call for now.
 
             expressions = subs + expressions
             i = new_i
             continue
+        elif subs_unused:
+            unused = subs_unused + unused
+        elif i > current_i + 1:
+            # We may not have checked all sub expressions
+            i = current_i + 1
 
         if isinstance(block.warp, nodes.ConditionalWarp):
             condition = block.warp.condition
@@ -600,24 +827,43 @@ def _find_expressions(start, body, end):
 
             if is_end:
                 if is_binop:
-                    return expressions
+                    return expressions, unused
                 elif slot < 0 <= block_slot:
                     slot = block_slot
                     slot_type = nodes.Identifier.T_SLOT
-                    sure_expression = True
+                    slot_ref = block
+
+                    if sure_expression is None:
+                        sure_expression = True
                 elif slot != block_slot:
-                    return expressions
-                else:
+                    # TODO: We need to check the rest, but it's too eager
+                    sure_expression = False
+                    continue
+                elif sure_expression is None:
                     sure_expression = True
+            elif len(block.warp.true_target.contents) == 1:
+                skip = False
+
+                # Check for a special case 'x = y and z' that has a no-op condition in the true case
+                if isinstance(block.warp.true_target.contents[0], nodes.NoOp) \
+                        and isinstance(block.warp.true_target.warp, nodes.UnconditionalWarp):
+                    sure_expression = True
+                    needs_validation = True
+                    skip = True
+                if skip:
+                    slot_ref = block
+                    i += 1
+                    continue
+
         elif isinstance(block.warp, nodes.UnconditionalWarp):
             if block == start and len(block.contents) == 0:
-                return []
+                return [], expressions
 
         if len(block.contents) == 0:
             continue
 
         if block != start and len(block.contents) > 1:
-            return expressions
+            return expressions, unused
 
         assignment = block.contents[-1]
 
@@ -625,7 +871,11 @@ def _find_expressions(start, body, end):
             if block == start:
                 continue
 
-            return expressions
+            if isinstance(assignment, nodes.NoOp):
+                if _get_target(block.warp, True) != end:
+                    continue
+
+            return expressions, unused
 
         destinations = assignment.destinations.contents
 
@@ -633,7 +883,10 @@ def _find_expressions(start, body, end):
             if block == start:
                 continue
 
-            return expressions
+            return expressions, unused
+
+        if block.warpins_count == 0 and level > 0:
+            return expressions, unused
 
         dst = destinations[0]
 
@@ -641,13 +894,16 @@ def _find_expressions(start, body, end):
             if block == start:
                 continue
 
-            return expressions
+            return expressions, unused
 
         if isinstance(block.warp, nodes.ConditionalWarp):
             if block == start:
                 continue
 
-            return expressions
+            return expressions, unused
+
+        if not sure_expression and sure_expression is not None:
+            return expressions, unused
 
         if slot < 0:
             # If all encounters are locals, which means
@@ -655,61 +911,104 @@ def _find_expressions(start, body, end):
             if dst.type == nodes.Identifier.T_LOCAL:
                 is_local = True
             elif dst.type == nodes.Identifier.T_UPVALUE:
-                return []
+                return [], expressions
+
+            slot_assignments.append(assignment)
 
             slot = dst.slot
             slot_type = dst.type
+            slot_ref = dst
         elif slot == dst.slot:
+            slot_assignments.append(assignment)
+
             slot_type = dst.type
+            slot_ref = dst
 
             if dst.type == nodes.Identifier.T_UPVALUE:
-                return []
+                return [], expressions
         else:
             assert block != start
 
-            return []
+            return [], expressions
 
     if slot < 0:
-        return []
+        return [], expressions
 
     true, _false, body = _get_terminators(body)
 
-    if true is not None:
-        sure_expression = True
+    if sure_expression is None:
+        if true is not None:
+            sure_expression = True
 
-    if len(expressions) > 0:
-        sure_expression = True
+        if len(expressions) > 0 and block in known_blocks:
+            matching_end_warp = False
+            for _, _, exp_end, *_ in expressions:
+                if exp_end.warp == block.warp:
+                    matching_end_warp = True
+                    break
+            if not matching_end_warp:
+                needs_validation = True  # may be better off as a regular if statement
+                sure_expression = True
 
     if not sure_expression and is_local:
-        return expressions
+        allow_through = False
 
-    return expressions + [(start, end, slot, slot_type)]
+        # allow constants
+        if len(slot_assignments) == 2 and (start.index == 0 or start.contents):
+            value = slot_assignments[-2].expressions.contents[0]
+            if isinstance(value, nodes.Constant) \
+                    or (isinstance(value, nodes.Primitive) and value.type == nodes.Primitive.T_TRUE):
+
+                allow_through = True
+                # Constant assignment, but don't make it an expression if the previous assignment assigns the same slot
+                if start.contents \
+                        and isinstance(start.contents[-1], nodes.Assignment) \
+                        and len(assignment.expressions.contents) == 1:
+                    assignment = start.contents[-1]
+                    expression = assignment.expressions.contents[0]
+                    if isinstance(expression, nodes.Primitive) and expression.type == nodes.Primitive.T_NIL:
+                        for dst in assignment.destinations.contents:
+                            if isinstance(dst, nodes.Identifier) and dst.slot == slot:
+                                allow_through = False
+                                break
+
+        if not allow_through:
+            return expressions, unused
+
+    # TODO Actually prevent bad blocks from being part of the body instead of trying to eliminate it here
+    if not sure_expression and block not in known_blocks and \
+            (isinstance(end, nodes.EndWarp) or extbody.index(block) < len(extbody) - 1):
+        return expressions, unused
+
+    return expressions + [(block, start, end, slot, slot_type, slot_ref, needs_validation)], unused
 
 
 def _get_simple_local_assignment_slot(start, body, end):
     if len(body) != 2:
-        return -1, None
+        return -1, None, None
 
     true, _false, body = _get_terminators(body)
 
     if true is None:
-        return -1, None
+        return -1, None, None
     else:
         slot = true.contents[0].destinations.contents[0]
         if not isinstance(slot, nodes.TableElement):
-            return slot.slot, slot.type
+            return slot.slot, slot.type, slot
+        elif isinstance(slot.table, nodes.Identifier):
+            return slot.table.slot, slot.table.type, slot.table
         else:
-            return slot.table.slot, slot.table.type
+            return -1, None, None
 
 
 def _find_expression_slot(body):
     slot = None
 
     for block in reversed(body):
-        if len(block.contents) != 1:
+        if len(block.contents) == 0: # TODO Why was this != 1? Does it always need to be just one?
             continue
 
-        slot = block.contents[0].destinations.contents[0]
+        slot = block.contents[-1].destinations.contents[0]
         break
 
     return slot
@@ -722,7 +1021,7 @@ def _unwarp_logical_expression(start, end, body):
 
     true, false, body = _get_terminators(body)
 
-    expression = _compile_expression([start] + body, end, true, false)
+    expression = _compile_expression([start] + (body or []), end, true, false)
 
     dst = copy.deepcopy(slot)
 
@@ -867,7 +1166,7 @@ def _unwarp_expression(body, end, true, false):
 
         terminator_index = end.index
 
-    terminators = {true, false, end}
+    terminators = [true, false, end]
 
     subexpression_start = 0
 
@@ -936,12 +1235,13 @@ def _unwarp_expression(body, end, true, false):
 
         operator = _get_operator(last_block, true, end)
 
-        subexpression = _compile_subexpression(subexpression, operator,
+        new_subexpression = _compile_subexpression(subexpression, operator,
                                                last_block, next_block,
                                                true, end)
 
-        parts.append(subexpression)
-        parts.append(operator)
+        if new_subexpression:
+            parts.append(new_subexpression)
+            parts.append(operator)
 
         i = last_block_index + 1
         subexpression_start = i
@@ -962,12 +1262,26 @@ def _unwarp_expression(body, end, true, false):
         src = _get_last_assignment_source(last)
 
         if src is None:
-            src = nodes.Primitive()
 
-            if last.warp.target == true:
-                src.type = nodes.Primitive.T_TRUE
+            special = None
+            if len(last.contents) == 1 and isinstance(last.contents[0], nodes.NoOp):
+                # Check for a special A = B and A case
+                if false.warpins_count == 0 and len(true.contents) == 1:
+                    special = false
+                elif true.warpins_count == 0 and len(false.contents) == 1:
+                    special = true
+
+            if special and special.contents:
+                # Special case: use destination
+                assignment = special.contents[-1]
+                src = assignment.destinations.contents[0]
             else:
-                src.type = nodes.Primitive.T_FALSE
+                src = nodes.Primitive()
+
+                if last.warp.target == true:
+                    src.type = nodes.Primitive.T_TRUE
+                else:
+                    src.type = nodes.Primitive.T_FALSE
 
         parts.append(src)
 
@@ -1035,15 +1349,7 @@ def _get_last_assignment_source(block):
     if isinstance(assignment, nodes.Assignment):
         return assignment.expressions.contents[0]
     elif isinstance(assignment, nodes.FunctionCall):
-        # assert False  # TODO(yzg) ljd.ast.nodes.FunctionCall
-
-        # For some reason, one of the files I need to decompile has two identical jump
-        #  statements in a row, with nothing jumping to either of them, and for the life
-        #  of me I can't figure out why.
-        c = nodes.Constant()
-        c.type = nodes.Constant.T_STRING
-        c.value = "ljd_decompile_error_something_goes_here_fadklsdfajsdlkjf"
-        return c
+        return None
     elif isinstance(assignment, nodes.NoOp):
         return None
     elif isinstance(assignment, nodes.Return):
@@ -1138,6 +1444,15 @@ def _invert(expression):
     expression = copy.deepcopy(expression)
 
     new_type = _NEGATION_MAP[expression.type]
+
+    if new_type is None:
+        if expression.type == binop.T_LOGICAL_OR:
+            new_type = binop.T_LOGICAL_AND
+        elif expression.type == binop.T_LOGICAL_AND:
+            new_type = binop.T_LOGICAL_OR
+
+        expression.left = _invert(expression.left)
+        expression.right = _invert(expression.right)
 
     assert new_type is not None
 
@@ -1292,6 +1607,20 @@ def _unwarp_if_statement(start, body, end, topmost_end):
         _set_end(else_body[-1])
         else_blocks = _unwarp_ifs(else_body, else_body[-1], topmost_end)
         node.else_block.contents = else_blocks
+
+        if _get_target(then_warp_out, True) == _get_target(else_warp_out, True) \
+                and len(then_blocks) == 1 \
+                and len(then_blocks[0].contents) == 1 \
+                and isinstance(then_blocks[0].contents[0], nodes.NoOp):
+
+            # Good to merge, but we don't want to break up else-ifs
+            if len(else_blocks) != 1 or not isinstance(else_blocks[0].contents[-1], nodes.If):
+
+                # Invert condition and move else block to then
+                node.expression = _invert(expression)
+                node.then_block.contents = else_blocks
+                node.else_block.contents = []
+
     else:
         warp_out = body[-1].warp
 
@@ -1440,7 +1769,10 @@ def _fix_loops(blocks, repeat_until):
 
     fixed = _cleanup_breaks_and_if_ends(loops, blocks)
 
+    replacements = {}
+
     for start, end in fixed:
+        end = replacements.get(end, end)
         start_index = blocks.index(start)
         end_index = blocks.index(end)
 
@@ -1490,7 +1822,19 @@ def _fix_loops(blocks, repeat_until):
         if body_start_index == start_index:
             blocks = blocks[:start_index + 1] + [block] + blocks[end_index:]
         else:
-            blocks = blocks[:body_start_index] + [block] + blocks[end_index:]
+            if isinstance(loop, nodes.While) and start_index < body_start_index - 1:
+                if any(len(node.contents) > 0 for node in blocks[start_index:body_start_index]):
+                    start_index = body_start_index
+
+                # TODO deal with mixed conditions and sub expressions
+                before = blocks[:start_index]
+                if before:
+                    old_start = blocks[start_index]
+                    _replace_targets(before, old_start, block)
+                    replacements[old_start] = block
+            else:
+                before = blocks[:body_start_index]
+            blocks = before + [block] + blocks[end_index:]
 
         for i, block in enumerate(body):
             warp = block.warp
@@ -1520,6 +1864,7 @@ def _fix_loops(blocks, repeat_until):
                 assert target in blocks
 
     return blocks
+
 
 def _handle_single_loop(start, end, blocks, repeat_until):
     start_index = blocks.index(start)
@@ -1693,16 +2038,26 @@ def _unwarp_loop(start, end, body, expr_body=None):
         loop._addr = body[0].first_address
         _set_flow_to(start, body[0])
 
-    # While (including "while true" and "repeat until false" which will be
-    # while true)
+    # While (including "while true" and "repeat until false")
     elif isinstance(last.warp, nodes.UnconditionalWarp):
         assert last.warp.target == start
 
-        # while true
+        # while true / repeat until false
         if _is_flow(start.warp):
-            loop = nodes.While()
-            loop.expression = nodes.Primitive()
-            loop.expression.type = nodes.Primitive.T_TRUE
+
+            prev_to_last = body[-2] if len(body) > 1 else None
+            if prev_to_last and isinstance(prev_to_last.warp, nodes.UnconditionalWarp) \
+                    and prev_to_last.warp.type == nodes.UnconditionalWarp.T_JUMP \
+                    and prev_to_last.warp.target == last \
+                    and (len(body) <= 2 or _is_flow(body[-3].warp)):  # not strictly needed, but better be safe
+                loop = nodes.RepeatUntil()
+                loop.expression = nodes.Primitive()
+                loop.expression.type = nodes.Primitive.T_FALSE
+                body.pop()  # Remove the jump block specific to this case
+            else:
+                loop = nodes.While()
+                loop.expression = nodes.Primitive()
+                loop.expression.type = nodes.Primitive.T_TRUE
 
             loop.statements.contents = body
         else:
@@ -2163,7 +2518,7 @@ def _cleanup_ast(blocks):
 
     # Now that everything is nicely packed together, the code to eliminate temporary variables that
     #  are used in the input part of a for..in loop should be able to get everything.
-    slotworks.eliminate_temporary(blocks[0])
+    slotworks.eliminate_temporary(blocks[0], False)
 
     return blocks
 

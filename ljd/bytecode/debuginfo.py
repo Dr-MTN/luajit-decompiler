@@ -26,11 +26,16 @@ class DebugInformation:
         except IndexError:
             return 0
 
-    def lookup_local_name(self, addr, slot):
-        for info in self.variable_info:
+    def lookup_local_name(self, addr, slot, alt_mode=False):
+        for i, info in enumerate(self.variable_info):
             if info.start_addr > addr:
                 break
             if info.end_addr <= addr:
+                if alt_mode and info.end_addr == addr:
+                    if slot == 0:
+                        return info
+                    else:
+                        slot -= 1
                 continue
             elif slot == 0:
                 return info

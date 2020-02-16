@@ -465,7 +465,7 @@ def _translate_return_many(writer, description, addr, line, instruction):
     count = instruction.CD - 2
 
     i = 0
-    while i < count:
+    while i <= count:
         returns.append(_translate(writer, addr, base + i, ins.T_VAR))
         i += 1
 

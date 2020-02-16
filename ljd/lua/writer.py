@@ -11,6 +11,11 @@ import ljd.ast.traverse as traverse
 import ljd
 from ljd.bytecode.instructions import SLOT_FALSE, SLOT_TRUE
 
+compact_table_constructors = False
+comment_empty_blocks = True
+show_slot_ids = False
+show_line_info = False
+
 CMD_START_STATEMENT = 0
 CMD_END_STATEMENT = 1
 CMD_END_LINE = 3
@@ -38,6 +43,11 @@ STATEMENT_FUNCTION = 9
 
 VALID_IDENTIFIER = re.compile(r'^\w[\w\d]*$')
 
+LIST_TYPES = (nodes.VariablesList,
+              nodes.IdentifiersList,
+              nodes.ExpressionsList,
+              nodes.StatementsList)
+
 
 class _State:
     def __init__(self):
@@ -53,6 +63,7 @@ class Visitor(traverse.Visitor):
 
         self.print_queue = []
 
+        self._path = []
         self._visited_nodes = [set()]
         self._states = [_State()]
 
@@ -93,12 +104,53 @@ class Visitor(traverse.Visitor):
 
     # ##
 
+    def _write_slot(self, node):
+        slot = None
+        slot_ids = None
+
+        if isinstance(node, nodes.Identifier):
+            slot = node.slot
+
+            if node.id != -1:
+                slot_ids = node.id
+            else:
+                slot_ids = getattr(node, "_ids", None)
+        else:
+            slot = getattr(node, "_slot", None)
+            slot_id = getattr(node, "_slot_id", None)
+
+        assert slot is not None
+
+        name = "slot" + str(slot)
+
+        if show_slot_ids:
+            if slot_ids and slot_ids != -1:
+                name += "#"
+                if isinstance(slot_ids, list):
+                    name += "{"
+                    for i, slot_id in enumerate(slot_ids):
+                        if i > 0:
+                            name += "|"
+                        name += str(slot_id)
+                    name += "}"
+                else:
+                    name += str(slot_ids)
+
+        self._write(name)
+
+    # ##
+
     def visit_function_definition(self, node):
         is_statement = self._state().function_name is not None
         is_method = self._state().function_method
 
         if is_statement:
             self._start_statement(STATEMENT_FUNCTION)
+
+            lineinfo = show_line_info and getattr(node, "_lineinfo", None)
+            if lineinfo:
+                self._write("-- Lines {0}-{1}".format(lineinfo[0], lineinfo[0] + lineinfo[1]))
+                self._end_line()
 
             if self._state().function_local:
                 self._write("local ")
@@ -198,8 +250,7 @@ class Visitor(traverse.Visitor):
 
                 contents.insert(0, record)
 
-        if len(contents) == 1 and False:
-            # TODO enable as part of a TdlQ-emulation option
+        if compact_table_constructors and len(contents) == 1:
             self._visit(contents[0])
         elif len(contents) > 0:
             self._end_line()
@@ -494,10 +545,16 @@ class Visitor(traverse.Visitor):
 
         self._push_state()
 
-        # TODO enable only in 'TdlQ emulation mode'
-        if len(node.contents) == 1 and isinstance(node.contents[0], nodes.NoOp):
-            self._write("-- Nothing")
-            self._end_line()
+        if comment_empty_blocks and len(self._path) > 1:
+            add_comment = False
+            if len(node.contents) == 0:
+                add_comment = isinstance(self._path[-2], (nodes.IteratorFor, nodes.If, nodes.ElseIf))
+            elif len(node.contents) == 1:
+                add_comment = isinstance(node.contents[0], nodes.NoOp)
+
+            if add_comment:
+                self._write("-- Nothing")
+                self._end_line()
 
     def leave_statements_list(self, node):
         self._pop_state()
@@ -537,15 +594,12 @@ class Visitor(traverse.Visitor):
 
     def visit_identifier(self, node):
         if node.type == nodes.Identifier.T_SLOT:
-            placeholder_identifier = "slot{0}"
-
-            # Fix placeholder slots before writing
             if node.slot == SLOT_FALSE:
-                placeholder_identifier = "false"
+                self._write("false")
             elif node.slot == SLOT_TRUE:
-                placeholder_identifier = "true"
-
-            self._write(placeholder_identifier, node.slot)
+                self._write("true")
+            else:
+                self._write_slot(node)
         elif not node.name and node.type == nodes.Identifier.T_UPVALUE:
             placeholder_identifier = "uv{0}"
             self._write(placeholder_identifier, node.slot)
@@ -571,27 +625,25 @@ class Visitor(traverse.Visitor):
 
             return
 
-        base_is_constructor = isinstance(base, nodes.TableConstructor)
+        base_is_constructor = isinstance(base, nodes.TableConstructor) \
+                              or isinstance(base, OPERATOR_TYPES) \
+                              or (isinstance(base, nodes.Constant) and base.type == nodes.Constant.T_STRING)
 
-        if not base_is_constructor and is_valid_name:
-            self._visit(base)
+        if base_is_constructor:
+            self._write("(")
+
+        self._visit(base)
+
+        if base_is_constructor:
+            self._write(")")
+
+        if is_valid_name:
             self._write(".")
-
             self._write(key.value)
             self._skip(key)
         else:
-            if base_is_constructor:
-                self._write("(")
-
-            self._visit(base)
-
-            if base_is_constructor:
-                self._write(")")
-
             self._write("[")
-
             self._visit(key)
-
             self._write("]")
 
     def visit_vararg(self, node):
@@ -603,14 +655,32 @@ class Visitor(traverse.Visitor):
         if is_statement:
             self._start_statement(STATEMENT_FUNCTION_CALL)
 
-        # We are going to modify this list so we can remove the first
-        # argument
+        func = node.function
+
+        # We are going to modify this list so we can remove the first argument
         args = node.arguments.contents
 
         if node.is_method:
-            self._visit(node.function.table)
+            func = node.function
+            base = func.table
+            base_is_constructor = isinstance(base, nodes.TableConstructor) \
+                                  or isinstance(base, OPERATOR_TYPES) \
+                                  or (isinstance(base, nodes.Constant) and base.type == nodes.Constant.T_STRING)
+
+            if base_is_constructor:
+                self._write("(")
+
+            self._visit(base)
+
+            if base_is_constructor:
+                self._write(")")
+
             self._write(":")
-            self._write(node.function.key.value)
+
+            assert self._is_valid_name(func.key)
+
+            self._write(func.key.value)
+            self._skip(func.key)
 
             self._skip(node.function)
 
@@ -704,7 +774,7 @@ class Visitor(traverse.Visitor):
 
     def visit_conditional_warp(self, node):
         if hasattr(node, "_slot"):
-            self._write("slot" + str(node._slot))
+            self._write_slot(node)
             self._write(" = ")
 
         self._write("if ")
@@ -816,7 +886,19 @@ class Visitor(traverse.Visitor):
         self._visit(node.variable)
         self._write(" = ")
 
-        self._visit(node.expressions)
+        # Manually visit the expressions so we have the option to skip the default increment
+        self._skip(node.expressions)
+
+        expressions = node.expressions.contents
+        assert len(expressions) == 3
+        if isinstance(expressions[2], nodes.Constant) and expressions[2].value == 1:
+            expressions = expressions[:-1]
+
+        for subnode in expressions[:-1]:
+            self._visit(subnode)
+            self._write(", ")
+
+        self._visit(expressions[-1])
 
         self._write(" do")
 
@@ -878,6 +960,16 @@ class Visitor(traverse.Visitor):
             self._write("true")
         else:
             self._write("nil")
+
+    def _visit_node(self, handler, node):
+        self._path.append(node)
+
+        traverse.Visitor._visit_node(self, handler, node)
+
+    def _leave_node(self, handler, node):
+        self._path.pop()
+
+        traverse.Visitor._leave_node(self, handler, node)
 
     def _skip(self, node):
         self._visited_nodes[-1].add(node)
