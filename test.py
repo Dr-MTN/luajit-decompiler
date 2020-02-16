@@ -14,6 +14,8 @@ def main():
 
     parser.add_argument("tests", metavar="test", type=str, nargs="+", help="Names of tests to be run, or 'all'")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print per-test information")
+    parser.add_argument("--wait", action="store_true", help="Once the tests are complete, wait for user input before "
+                                                            "deleting the artifacts")
 
     args = parser.parse_args()
 
@@ -44,6 +46,9 @@ def main():
             Colour.RED.write(" ERR  ")
 
         print(name)
+
+    if args.wait:
+        input("Press enter to continue, files at %s " % tempdir.name)
 
 
 if __name__ == "__main__":
