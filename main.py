@@ -368,7 +368,8 @@ class Main:
         return 1
 
     def write_file(self, ast, file_name, **kwargs):
-        self.logger.debug("Writing file {0}...".format(file_name))
+        if self.options.enable_logging:
+            self.logger.debug("Writing file {0}...".format(file_name))
         with open(file_name, "w", encoding="utf8") as out_file:
             return ljd.lua.writer.write(out_file, ast, **kwargs)
 
