@@ -41,7 +41,7 @@ STATEMENT_WHILE = 8
 
 STATEMENT_FUNCTION = 9
 
-VALID_IDENTIFIER = re.compile(r'^\w[\w\d]*$')
+VALID_IDENTIFIER = re.compile(r'^[a-zA-Z_][\w\d]*$')
 
 LIST_TYPES = (nodes.VariablesList,
               nodes.IdentifiersList,
