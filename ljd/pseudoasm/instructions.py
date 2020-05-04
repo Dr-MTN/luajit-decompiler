@@ -48,6 +48,9 @@ def write(writer, prototype):
 def _write_instruction(writer, addr, line, instruction):
     description = _translate_description(writer, addr, line, instruction)
 
+    byte_array = instruction.Bytecode.to_bytes(4, byteorder="little")
+    print("["+"".join(r'%02X ' % x for x in byte_array)[0:-1]+"]",end="")
+
     writer.stream.write_multiline(_FORMAT,
                                   addr=addr,
                                   line=line,
@@ -104,6 +107,8 @@ def _translate(writer, addr, value, attr_type):
             return "slot" + str(value)
     elif attr_type == ins.T_UV:
         name = prototype.debuginfo.lookup_upvalue_name(value)
+        if name is None:
+            name = "unknwon"
         return "uv" + str(value) + '"' + name + '"'
     elif attr_type == ins.T_PRI:
         if value is None or value == T_NIL:
@@ -199,6 +204,8 @@ def _lookup_variable_name_step(writer, addr, slot):
         if instruction.opcode == ins.UGET.opcode:
             uv = instruction.CD
             name = writer.prototype.debuginfo.lookup_upvalue_name(uv)
+            if name is None:
+                name = "unknown"
 
             return "uv" + str(uv) + '"' + name + '"'
 

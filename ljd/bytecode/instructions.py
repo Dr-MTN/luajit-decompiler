@@ -51,6 +51,7 @@ class _Instruction:
         for key, value in definition.__dict__.items():
             setattr(self, key, value)
 
+        self.Bytecode = 0
         if self.A_type is not None:
             self.A = 0
 

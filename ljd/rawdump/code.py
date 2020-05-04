@@ -22,10 +22,11 @@ def read(parser):
         instruction_class = instructions.UNKNW  # @UndefinedVariable
 
     instruction = instruction_class()
+    instruction.Bytecode = codeword
 
     if instruction_class.opcode != opcode:
         instruction.opcode = opcode
-
+    
     _set_instruction_operands(parser, codeword, instruction)
 
     return instruction
