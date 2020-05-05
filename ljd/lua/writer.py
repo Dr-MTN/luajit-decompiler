@@ -41,7 +41,31 @@ STATEMENT_WHILE = 8
 
 STATEMENT_FUNCTION = 9
 
-VALID_IDENTIFIER = re.compile(r'^[a-zA-Z_][\w\d]*$')
+VALID_IDENTIFIER = re.compile(r'^[a-zA-Z_][\w]*$')
+
+RESERVED_WORDS = [
+    "and",
+    "break",
+    "do",
+    "else",
+    "elseif",
+    "end",
+    "false",
+    "for",
+    "function",
+    "if",
+    "in",
+    "local",
+    "nil",
+    "not",
+    "or",
+    "repeat",
+    "return",
+    "then",
+    "true",
+    "until",
+    "while"
+]
 
 LIST_TYPES = (nodes.VariablesList,
               nodes.IdentifiersList,
@@ -410,7 +434,10 @@ class Visitor(traverse.Visitor):
         if not isinstance(key, nodes.Constant) or key.type != key.T_STRING:
             return False
 
-        return VALID_IDENTIFIER.match(key.value)
+        if not VALID_IDENTIFIER.match(key.value):
+            return False
+
+        return key.value not in RESERVED_WORDS
 
     # ##
 
