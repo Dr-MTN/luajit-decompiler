@@ -301,6 +301,9 @@ class VariablesList:
 
         visitor._leave_node(visitor.leave_variables_list, self)
 
+    def __str__(self):
+        return "VarList[" + ",".join([str(v) for v in self.contents]) + "]"
+
 
 class ExpressionsList:
     def __init__(self):
@@ -312,6 +315,9 @@ class ExpressionsList:
         visitor._visit_list(self.contents)
 
         visitor._leave_node(visitor.leave_expressions_list, self)
+
+    def __str__(self):
+        return "ExpList[" + ",".join([str(v) for v in self.contents]) + "]"
 
 
 # Called Name in the Lua 5.1 reference
@@ -347,8 +353,13 @@ class Identifier:
                 name += ")"
         return name
 
-
     def __str__(self):
+        if self.type == Identifier.T_SLOT:
+            return "IdentSlot[%s:%s]" % (self._slot_name(), self.name)
+
+        if self.type == Identifier.T_BUILTIN:
+            return "IdentBuiltin[%s]" % self.name
+
         return "{ Identifier: {name: " + str(self.name) + ", type: " + ["T_SLOT", "T_LOCAL", "T_UPVALUE", "T_BUILTIN"][
             self.type] + \
                ", slot: " + self._slot_name() + "} }"
