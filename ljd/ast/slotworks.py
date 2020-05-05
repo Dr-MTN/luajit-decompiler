@@ -7,6 +7,9 @@ import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
 from ljd.ast.helpers import insert_table_record
 
+from typing import List
+from dataclasses import dataclass
+
 catch_asserts = False
 debug_verify = "LJD_DEBUG" in os.environ
 
@@ -62,6 +65,16 @@ debug_verify = "LJD_DEBUG" in os.environ
 # sort them. This should solve this issue for good.
 
 
+@dataclass
+class RefsProcessData:
+    slots: List['_SlotInfo']
+    simple: List
+    massive: List
+    tables: List
+    iterators: List
+    unsafe: List
+
+
 def eliminate_temporary(ast, ignore_ambiguous=True, identify_slots=False, safe_mode=True, unwarped=False):
     _eliminate_multres(ast)
 
@@ -82,26 +95,20 @@ def simplify_ast(ast, dirty_callback=None):
 
 
 def _eliminate_temporary(ast, slots, ignore_ambiguous=True, safe_mode=True, unwarped=False):
-    simple = []
-    massive = []
-    tables = []
-    iterators = []
-    unsafe = []
+    data = RefsProcessData(slots, [], [], [], [], [])
 
-    _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous and safe_mode, True)
+    _fill_refs(data, ignore_ambiguous and safe_mode, True)
 
-    _eliminate_simple_cases(simple)
-    _recheck_unsafe_cases(ast, unsafe, ignore_ambiguous=False, safe_mode=safe_mode, unwarped=unwarped)
+    _eliminate_simple_cases(data.simple)
+    _recheck_unsafe_cases(ast, data.unsafe, ignore_ambiguous=False, safe_mode=safe_mode, unwarped=unwarped)
 
-    _eliminate_into_table_constructors(tables)
-    _eliminate_mass_assignments(massive)
-    _eliminate_iterators(iterators)
-
-    return simple, massive, tables, iterators, unsafe
+    _eliminate_into_table_constructors(data.tables)
+    _eliminate_mass_assignments(data.massive)
+    _eliminate_iterators(data.iterators)
 
 
-def _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguous=True, safe_mode=True):
-    for info in slots:
+def _fill_refs(data: RefsProcessData, ignore_ambiguous=True, safe_mode=True):
+    for info in data.slots:
         assignment = info.assignment
 
         if not isinstance(assignment, nodes.Assignment):
@@ -110,7 +117,7 @@ def _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguo
                                            nodes.FunctionDefinition))
 
             src = info.references[1].identifier
-            simple.append((info.references, src))
+            data.simple.append((info.references, src))
             continue
 
         assert len(assignment.expressions.contents) == 1
@@ -118,9 +125,9 @@ def _fill_refs(slots, simple, massive, tables, iterators, unsafe, ignore_ambiguo
         is_massive = len(assignment.destinations.contents) > 1
 
         if is_massive:
-            _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous, safe_mode)
+            _fill_massive_refs(info, data, ignore_ambiguous, safe_mode)
         else:
-            _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous, safe_mode)
+            _fill_simple_refs(info, data, ignore_ambiguous, safe_mode)
 
 
 def _recheck_unsafe_cases(ast, unsafe, ignore_ambiguous, safe_mode=True, unwarped=False):
@@ -145,8 +152,6 @@ def _recheck_unsafe_cases(ast, unsafe, ignore_ambiguous, safe_mode=True, unwarpe
         if not unwarped and not isinstance(node, nodes.Block):
             return
 
-        new_simple, new_massive, new_tables, new_iterators, new_unsafe = [], [], [], [], []
-
         _cleanup_invalid_nodes(node)
 
         # Collect slots in the block, but only keep those that were deemed unsafe to eliminate before.
@@ -158,9 +163,10 @@ def _recheck_unsafe_cases(ast, unsafe, ignore_ambiguous, safe_mode=True, unwarpe
 
         _sort_slots(new_slots)
 
-        _fill_refs(new_slots, new_simple, new_massive, new_tables, new_iterators, new_unsafe,
-                   ignore_ambiguous and safe_mode, safe_mode)
-        _eliminate_simple_cases(new_simple)
+        new_data = RefsProcessData(new_slots, [], [], [], [], [])
+
+        _fill_refs(new_data, ignore_ambiguous and safe_mode, safe_mode)
+        _eliminate_simple_cases(new_data.simple)
 
     if unwarped:
         simplify_ast(ast, dirty_callback=_node_dirty_cb)
@@ -169,7 +175,7 @@ def _recheck_unsafe_cases(ast, unsafe, ignore_ambiguous, safe_mode=True, unwarpe
             simplify_ast(block, dirty_callback=_node_dirty_cb)
 
 
-def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguous, safe_mode=True):
+def _fill_massive_refs(info, data: RefsProcessData, ignore_ambiguous, safe_mode=True):
     ref = info.references[1]
     holder = _get_holder(ref.path)
 
@@ -199,11 +205,11 @@ def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguou
 
         assert isinstance(assignment, nodes.Assignment)
 
-        massive.append((orig, info, assignment, dst))
+        data.massive.append((orig, info, assignment, dst))
     elif isinstance(holder, nodes.IteratorWarp):
         _remove_invalid_references()
         assert len(info.references) == 2
-        iterators.append((info, src, holder))
+        data.iterators.append((info, src, holder))
     elif isinstance(src, nodes.Primitive) and src.type == src.T_NIL:
         assert len(info.references) == 2
 
@@ -212,10 +218,10 @@ def _fill_massive_refs(info, simple, massive, iterators, unsafe, ignore_ambiguou
         src = nodes.Primitive()
         src.type = nodes.Primitive.T_NIL
 
-        simple.append((info, ref, src))
+        data.simple.append((info, ref, src))
 
 
-def _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous, safe_mode=True):
+def _fill_simple_refs(info, data: RefsProcessData, ignore_ambiguous, safe_mode=True):
     src = info.assignment.expressions.contents[0]
 
     src_is_table = isinstance(src, nodes.TableConstructor)
@@ -283,7 +289,7 @@ def _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous, safe_mode=
         # Could be more then one reference here
         if src_is_table and is_element and is_dst and all_ctor_refs:
             assert holder.table == ref.identifier
-            tables.append((info, ref))
+            data.tables.append((info, ref))
         else:
             new_simple.append((info, ref, None))
             all_ctor_refs = False
@@ -305,9 +311,9 @@ def _fill_simple_refs(info, simple, tables, unsafe, ignore_ambiguous, safe_mode=
     # be safe from being eliminated)
     nr_simple_cases = len(new_simple)
     if nr_simple_cases == 1 or (not safe_mode and nr_simple_cases == 2):
-        simple += new_simple
+        data.simple += new_simple
     elif nr_simple_cases > 1:
-        unsafe.append(info)
+        data.unsafe.append(info)
 
 
 LIST_TYPES = (nodes.VariablesList,
