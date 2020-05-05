@@ -5,6 +5,8 @@ from pathlib import Path
 
 from test.utils import Colour
 
+test_dir = Path(__file__).resolve().parent / "tests"
+
 
 class Mode(Enum):
     """The levels to which a test must pass"""
@@ -29,7 +31,7 @@ class Test:
     def __init__(self, name, level):
         self.name = name
         self.level = level
-        self.src = Path("tests/%s.lua" % name)
+        self.src = Path(test_dir, "%s.lua" % name)
 
         self.bc_out = None
         self.src_out = None
