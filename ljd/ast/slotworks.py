@@ -108,6 +108,21 @@ def _eliminate_temporary(ast, slots, ignore_ambiguous=True, safe_mode=True, unwa
 
 
 def _fill_refs(data: RefsProcessData, ignore_ambiguous=True, safe_mode=True):
+    # A SlotInfo represents a slot being used in a specific, limited context. There must be only
+    # one write into the slot, but there can by any number of reads from it.
+    # For example (slot1 being the slot in question, hence in caps):
+    #
+    # slot0 = f()
+    # SLOT1 = slot0
+    # my_gbl_1 = SLOT1
+    # my_gbl_2 = SLOT1
+    #
+    # This is a limited enough scope that we can - under some conditions - inline through that
+    # slot. See the comment at the top of the file for more context.
+    #
+    # A massive slot is when it's in a large assignment, such as:
+    # slot0, slot1 = f()
+
     for info in data.slots:
         assignment = info.assignment
 
@@ -181,6 +196,26 @@ def _fill_massive_refs(info, data: RefsProcessData, ignore_ambiguous, safe_mode=
 
     src = info.assignment.expressions.contents[0]
 
+    # When the compiler needs to null out multiple variables, it can use
+    # the KNIL instruction to do so. For example, the following:
+    #   local a = nil; local b = nil; local c = nil;
+    # Compiles down to a single KNIL instruction (assuming a-c are slots 0-2):
+    #   KNIL 0 2
+    # There's no point in treating it like the result of a function call or
+    # vararg, since (AFAIK) the point of massive refs for those is since they
+    # can't really be inlined around because they're all tied together. That's
+    # not an issue with KNIL (since all the values are independently nil), so
+    # we can just hand over to the simple ref filler, which will (or should, may
+    # need to look into it) inline it as usual.
+    #
+    # In particular, this solves the massive_nils test crashing since the results
+    # are referenced more than twice.
+    if isinstance(src, nodes.Primitive):
+        assert src.type == src.T_NIL
+
+        _fill_simple_refs(info, data, ignore_ambiguous, safe_mode)
+        return
+
     def _remove_invalid_references():
         if not safe_mode:
             return
@@ -193,7 +228,7 @@ def _fill_massive_refs(info, data: RefsProcessData, ignore_ambiguous, safe_mode=
             possible_ids.remove(info.slot_id)
             del info.references[-1]
 
-    assert isinstance(src, (nodes.FunctionCall, nodes.Vararg, nodes.Primitive))
+    assert isinstance(src, (nodes.FunctionCall, nodes.Vararg))
     if isinstance(holder, nodes.Assignment):
         dst = holder.destinations.contents[0]
 
@@ -210,15 +245,6 @@ def _fill_massive_refs(info, data: RefsProcessData, ignore_ambiguous, safe_mode=
         _remove_invalid_references()
         assert len(info.references) == 2
         data.iterators.append((info, src, holder))
-    elif isinstance(src, nodes.Primitive) and src.type == src.T_NIL:
-        assert len(info.references) == 2
-
-        # Create a new primitive, so it won't mess with the
-        # writer's ignore list
-        src = nodes.Primitive()
-        src.type = nodes.Primitive.T_NIL
-
-        data.simple.append((info, ref, src))
 
 
 def _fill_simple_refs(info, data: RefsProcessData, ignore_ambiguous, safe_mode=True):
@@ -554,6 +580,8 @@ class _SlotReference:
 
 
 class _SlotInfo:
+    references: List[_SlotReference]
+
     def __init__(self, id):
         self.slot = 0
 
