@@ -4,6 +4,7 @@ tests = [
     # Very trivial testcases, more for testing the test framework than the decompiler
     Test("simple", Mode.MATCHES),
     Test("loops", Mode.MATCHES),
+    Test("massive_nils", Mode.MATCHES),
 
     # The old (pre test framework) tests
     Test("old/breaks", Mode.MATCHES),
