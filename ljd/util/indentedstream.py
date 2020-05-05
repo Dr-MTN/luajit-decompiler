@@ -49,7 +49,7 @@ class IndentedStream:
         else:
             text = str(fmt)
 
-        assert "\n" not in text
+        #assert "\n" not in text
 
         self.fd.write(text)
 
