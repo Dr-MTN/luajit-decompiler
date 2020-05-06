@@ -24,8 +24,8 @@ debug_verify = "LJD_DEBUG" in os.environ
 #
 # There's a couple of ways this could be simplified. If slot0 is eliminated first, it will look like this:
 #
+# (slot0 = "mything" -- marked for deletion)
 # slot1 = "mything"
-# (slot1 = slot0 -- marked for deletion)
 # return slot1
 #
 # return "mything"
@@ -233,7 +233,13 @@ def _fill_massive_refs(info, data: RefsProcessData, ignore_ambiguous, safe_mode=
         dst = holder.destinations.contents[0]
 
         _remove_invalid_references()
-        assert len(info.references) == 2
+
+        # It's perfectly valid for there to be >2 references. This does mean we can't eliminate them as
+        # massive references. Instead, leave them as a local variable.
+        if len(info.references) != 2:
+            data.unsafe.append(info)
+            return
+
         orig = info.references[0].identifier
 
         assignment = ref.path[-3]
