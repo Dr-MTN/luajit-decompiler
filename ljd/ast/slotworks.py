@@ -449,6 +449,31 @@ def _eliminate_into_table_constructors(tables):
 
 def _eliminate_mass_assignments(massive):
     for identifier, info, base_assignment, globalvar in massive:
+        # If the assignment using the slot has already been invalidated, then skip it.
+        # For example, the following:
+        #
+        # local a, b = f()
+        # print(a)
+        #
+        # Would be (roughly) compiled to:
+        #
+        # 001 local slot1, slot2 = f()
+        # 002 local slot3 = slot1
+        # 003 print(slot3)
+        #
+        # Both the massives elimination and simples elimination would eliminate 002 (corresponding
+        # to the base_assignment variable in this method), moving slot3 into the massive assignment.
+        # The simple elimination would also eliminate slot3, substituting slot1 into the print directly.
+        # This would result in:
+        #
+        # local slot3, slot2 = f()
+        # print(slot1)
+        #
+        # Since this is run after the simple elimination, check to ensure our target hasn't been swept
+        # out from under us.
+        if _is_invalidated(base_assignment):
+            continue
+
         destinations = info.assignment.destinations.contents
         found = _replace_node_in_list(destinations, identifier, globalvar)
 
