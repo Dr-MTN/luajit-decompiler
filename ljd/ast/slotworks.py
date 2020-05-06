@@ -372,6 +372,20 @@ def _eliminate_simple_cases(simple):
         if src is None:
             src = info.assignment.expressions.contents[0]
 
+        # Set later on if we'd be simplifying something down to illegal Lua code. This is when we
+        # substitute a primitive to somewhere it's not allowed, such as:
+        #    local a=nil; a()  ---> nil()
+        # We're doing this here rather than in _fill_simple_refs, since that doesn't actually know what
+        # it's substituting - a primitive could work it's way down a bunch of slots and it'd only know about
+        # the primitive when eliminating the first slot.
+        # See the illegal_type_eliminations test for an example of this
+        if isinstance(src, nodes.Primitive) or isinstance(src, nodes.Constant):
+            is_str = isinstance(src, nodes.Constant) and src.type == nodes.Constant.T_STRING
+            if isinstance(holder, nodes.FunctionCall) and holder.function == ref.identifier:
+                continue
+            elif isinstance(holder, nodes.TableElement) and holder.table == ref.identifier and not is_str:
+                continue
+
         # if the assignment's src is FunctionDefinition and references 3 times(one time for assignment,and two
         # times for call),so marked the identifier to local type and set the name to tmp slot
         # TODO figure out *why* the functions are ending up here and fix it there
