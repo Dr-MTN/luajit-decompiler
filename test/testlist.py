@@ -6,6 +6,7 @@ tests = [
     Test("loops", Mode.MATCHES),
     Test("massive_nils", Mode.MATCHES),
     Test("massive_std", Mode.MATCHES),
+    Test("illegal_type_eliminations", Mode.MATCHES),
 
     # The old (pre test framework) tests
     Test("old/breaks", Mode.MATCHES),
