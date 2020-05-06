@@ -7,6 +7,7 @@ tests = [
     Test("massive_nils", Mode.MATCHES),
     Test("massive_std", Mode.MATCHES),
     Test("illegal_type_eliminations", Mode.MATCHES),
+    Test("slot_local_declarations", Mode.MATCHES),
     Test("slot_block_gathering", Mode.MATCHES),
 
     # The old (pre test framework) tests
