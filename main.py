@@ -37,6 +37,7 @@ import ljd.pseudoasm.writer
 import ljd.pseudoasm.instructions
 import ljd.ast.builder
 import ljd.ast.slotworks
+import ljd.ast.slotfinder
 import ljd.ast.validator
 import ljd.ast.locals
 import ljd.ast.unwarper
@@ -371,6 +372,8 @@ class Main:
         ljd.ast.validator.validate(ast, warped=True)
 
         ljd.ast.locals.mark_locals(ast)
+
+        ljd.ast.slotfinder.process(ast)
 
         if self.options.dump_ast:
             ljd.ast.printast.dump("AST [locals]", ast)
