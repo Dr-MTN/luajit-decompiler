@@ -110,7 +110,7 @@ def _print_const(obj: nodes.Constant, prefix, level):
 
 @_printer(nodes.Assignment)
 def _print_assn(obj: nodes.Assignment, prefix, level):
-    print(prefix + "Assignment[type=%s]" % ["T_LOCAL_DEFINITION", "T_NORMAL"][obj.type])
+    _header(prefix, obj, type=["T_LOCAL_DEFINITION", "T_NORMAL"][obj.type])
     dump("dest", obj.destinations, level + 1, omit_single=True)
     dump("expr", obj.expressions, level + 1, omit_single=True)
 
