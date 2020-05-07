@@ -123,6 +123,15 @@ class Main:
                           type="string", dest="line_map_output_file", default="",
                           help="line map output file for writing", metavar="FILE")
 
+        # There's now a new slot collector that should be able to find and collect references far
+        # more accurately. In particular, this lets slotworks operate properly across conditionals
+        # without breaking in the many ways it did previously. However it is a major change and
+        # will probably have some significant regressions, hence the killswitch.
+        # See #32 for more information: https://gitlab.com/znixian/luajit-decompiler/-/issues/32
+        parser.add_option("--use-classic-slot-collector",
+                          action="store_true", dest="classic_slots", default=False,
+                          help="use the older slot collector, rather than the new SlotFinder system")
+
         # Some previous luajit compilers produced some unexpected instructions that are not handled by the regular
         # process. If we bypass some of the safety checks, we may be able to deal with them correctly. This works
         # for PAYDAY 2 and RAID, but may have unexpected side effects for other projects. On by default.
@@ -193,6 +202,8 @@ class Main:
                 mod.catch_asserts = True
             if self.options.verbose:
                 mod.verbose = True
+            if self.options.classic_slots:
+                mod.classic_slots = True
 
         if self.options.include_line_numbers:
             ljd.lua.writer.show_line_info = True
@@ -373,7 +384,8 @@ class Main:
 
         ljd.ast.locals.mark_locals(ast)
 
-        ljd.ast.slotfinder.process(ast)
+        if not self.options.classic_slots:
+            ljd.ast.slotfinder.process(ast)
 
         if self.options.dump_ast:
             ljd.ast.printast.dump("AST [locals]", ast)

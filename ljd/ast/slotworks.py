@@ -11,6 +11,7 @@ from typing import List
 from dataclasses import dataclass
 
 catch_asserts = False
+classic_slots = False
 debug_verify = "LJD_DEBUG" in os.environ
 
 
@@ -549,6 +550,24 @@ def _remove_unused(unused):
 
 
 def _collect_slots(ast, identify_slots=False, unwarped=False):
+    if not classic_slots:
+        # Can't import globally as that would cause a dependency cycle
+        import ljd.ast.slotfinder as slotfinder
+        slots = slotfinder.collect_slots(ast)
+
+        # Filter the slots with either no assignments (as we're analysing them in
+        # too small a scope) or where there are multiple assignments, and we can't
+        # run the normal slotworks stuff on them which assumes a single assignment.
+        # TODO what if this is run in a particular scope where a substitution can be incorrectly made?
+        # Note we sort this later on, so convert it to a list
+        slots = list(filter(lambda s: len(s.assignments) == 1, slots))
+
+        # Make sure assignment is actually set
+        for slot in slots:
+            assert slot.assignment
+
+        return slots, None
+
     collector = _SlotsCollector(identify_slots, unwarped)
     traverse.traverse(collector, ast)
 
@@ -644,6 +663,8 @@ class SlotInfo:
         self.slot_id = id
 
 
+# Old slot collector. By default we now use the one in slotfinder, however this is left here and activated
+# with a command-line flag since there will probably be some major regressions.
 class _SlotsCollector(traverse.Visitor):
     class _State:
         def __init__(self):
@@ -764,7 +785,7 @@ class _SlotsCollector(traverse.Visitor):
             self.slots.append(info)
 
     def _commit_slot(self, slot, node):
-        info = self._get_slot(slot) # False
+        info = self._get_slot(slot)  # False
 
         if info is None:
             return

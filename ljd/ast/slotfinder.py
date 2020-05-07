@@ -315,3 +315,75 @@ class _SlotIdentifier(traverse.Visitor):
                 self._func = node
 
         traverse.Visitor._visit(self, node)
+
+
+# Slots finder
+# This isn't used by any of the above code, but it's put here since it's fairly heavily related - it
+# reads back the IDs assigned from the above system to form SlotInfo objects.
+
+def collect_slots(ast: nodes.FunctionDefinition) -> List[SlotInfo]:
+    visitor = _SlotCollector()
+    traverse.traverse(visitor, ast)
+    return list(visitor.slots.values()) + visitor.nested_func_slots
+
+
+class _SlotCollector(traverse.Visitor):
+    nested_func_slots: List[SlotInfo]
+    slots: Dict[int, SlotInfo]
+    _path: List
+    _func: nodes.FunctionDefinition = None
+    _next_slot_id: int = 0
+
+    def __init__(self):
+        super().__init__()
+        self.slots = dict()
+        self.nested_func_slots = []
+        self._path = []
+
+    def visit_identifier(self, node: nodes.Identifier):
+        # TODO handle locals, upvalues and builtins properly
+        if node.type != nodes.Identifier.T_SLOT:
+            return
+
+        assert node.slot != -1
+        assert node.id != -1
+
+        info = self.slots.get(node.id)
+        if not info:
+            info = SlotInfo(self._next_slot_id)
+            info.function = self._func
+            info.slot = node.slot
+            self._next_slot_id += 1
+            self.slots[node.id] = info
+
+        assn = self._path[-3]
+        if isinstance(assn, nodes.Assignment) and isinstance(self._path[-2], nodes.VariablesList):
+            # We're being directly set by an assignment
+            info.assignments.append(assn)
+
+            # Use the first assignment we find as the 'main' assignment
+            if not info.assignment:
+                info.assignment = assn
+
+        ref = SlotReference()
+        ref.identifier = node
+        ref.path = self._path[:]
+        info.references.append(ref)
+
+    def _visit_node(self, handler, node):
+        self._path.append(node)
+        traverse.Visitor._visit_node(self, handler, node)
+
+    def _leave_node(self, handler, node):
+        self._path.pop()
+        traverse.Visitor._leave_node(self, handler, node)
+
+    def _visit(self, node):
+        if not isinstance(node, nodes.FunctionDefinition):
+            return super()._visit(node)
+
+        if not self._func:
+            self._func = node
+            return super()._visit(node)
+
+        self.nested_func_slots += collect_slots(node)
