@@ -67,7 +67,7 @@ debug_verify = "LJD_DEBUG" in os.environ
 
 @dataclass
 class RefsProcessData:
-    slots: List['_SlotInfo']
+    slots: List['SlotInfo']
     simple: List
     massive: List
     tables: List
@@ -618,14 +618,14 @@ class _MultresEliminator(traverse.Visitor):
         self._process_multres_in_list(node.returns.contents)
 
 
-class _SlotReference:
+class SlotReference:
     def __init__(self):
         self.path = []
         self.identifier = None
 
 
-class _SlotInfo:
-    references: List[_SlotReference]
+class SlotInfo:
+    references: List[SlotReference]
 
     def __init__(self, id):
         self.slot = 0
@@ -784,7 +784,7 @@ class _SlotsCollector(traverse.Visitor):
             self._next_slot_id += 1
             slot.id = slot_id
 
-        info = _SlotInfo(slot_id)
+        info = SlotInfo(slot_id)
         info.slot = slot.slot
         info.assignment = node
         info.function = self._state().function
@@ -809,7 +809,7 @@ class _SlotsCollector(traverse.Visitor):
             self._commit_slot(slot, node)
 
     def _register_slot_reference(self, info, node, update_id=True):
-        reference = _SlotReference()
+        reference = SlotReference()
         reference.identifier = node
 
         # Make sure the identifier node stores the correct slot reference.
