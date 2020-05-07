@@ -173,7 +173,7 @@ class _SlotIdentifier(traverse.Visitor):
     _path: List
     _func: nodes.FunctionDefinition = None
 
-    _skip = False
+    _skip = None
     _block: Optional[nodes.Block] = None
 
     _current: _SlotDict
@@ -227,19 +227,22 @@ class _SlotIdentifier(traverse.Visitor):
         return net.get()
 
     def visit_assignment(self, node):
+        # When visiting an assignment, we have to do three things in order:
+        # 1. visit the expressions
+        # 2. update the slots to reflect the results of the assignment
+        # 3. visit the destinations to register references to the new SlotInfo objects from step 2
+
+        # Thus we have to do this manually to get it done before we update the slots
         self._visit(node.expressions)
-        self._skip = True
+
+        # Prevent the expressions from being re-visited
+        self._skip = node.expressions
 
         for slot in node.destinations.contents:
             self._slot_set(node, slot)
 
-            # Since we've sets the skip flag, the identifiers won't be visited. Make sure we visit
-            # each identifier to add a reference to it *after* we've set the slot, so this is a write
-            # against the new SlotInfo and not the old one.
-            self.visit_identifier(node)
-
     def leave_assignment(self, node):
-        self._skip = False
+        self._skip = None
 
     def visit_identifier(self, node: nodes.Identifier):
         # TODO handle locals, upvalues and builtins properly
@@ -299,7 +302,7 @@ class _SlotIdentifier(traverse.Visitor):
     def _visit(self, node):
         # Skip is set while we visit the contents of a assignment. Since we're not interested in
         # those references (they're added manually to get the order correct), we skip them.
-        if self._skip:
+        if self._skip == node:
             return
 
         # In order to avoid storing a state stack between the different functions, recursively call
