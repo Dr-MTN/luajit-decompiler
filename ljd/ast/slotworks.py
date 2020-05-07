@@ -559,14 +559,21 @@ def _collect_slots(ast, identify_slots=False, unwarped=False):
         # too small a scope) or where there are multiple assignments, and we can't
         # run the normal slotworks stuff on them which assumes a single assignment.
         # TODO what if this is run in a particular scope where a substitution can be incorrectly made?
-        # Note we sort this later on, so convert it to a list
-        slots = list(filter(lambda s: len(s.assignments) == 1, slots))
-
-        # Make sure assignment is actually set
+        # Also, split the slots into those which are read from and those which
+        # aren't. This is important for massive refs, where not splitting them
+        # out can cause crashes.
+        main = []
+        unused = []
         for slot in slots:
-            assert slot.assignment
+            if len(slot.assignments) != 1:
+                continue
 
-        return slots, None
+            if len(slot.references) == len(slot.assignments):
+                unused.append(slot)
+            else:
+                main.append(slot)
+
+        return main, unused
 
     collector = _SlotsCollector(identify_slots, unwarped)
     traverse.traverse(collector, ast)
