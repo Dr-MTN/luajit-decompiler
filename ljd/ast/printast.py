@@ -4,13 +4,14 @@ _printers = {}
 _indent_unit = '\t'
 
 
-def dump(name, obj, level=0, **kwargs):
+def dump(name, obj, level=0, prefix=None, **kwargs):
     indent = level * _indent_unit
 
-    if name is not None:
-        prefix = indent + name + " = "
-    else:
-        prefix = indent
+    if prefix is None:
+        if name is not None:
+            prefix = indent + str(name) + " = "
+        else:
+            prefix = indent
 
     if isinstance(obj, (int, float, str)):
         print(prefix + str(obj))
@@ -123,7 +124,7 @@ def _print_list(obj: nodes.VariablesList, prefix: str, level, omit_single=False)
             dump(name, obj.contents[0], level)
         else:
             print(prefix + type(obj).__name__ + "[single]: ", end='')
-            dump(None, obj.contents[0], 0)
+            dump(None, obj.contents[0], level, prefix="")
     else:
         print(prefix + type(obj).__name__ + "[")
         for value in obj.contents:
