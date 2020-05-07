@@ -355,7 +355,8 @@ class Identifier:
 
     def __str__(self):
         if self.type == Identifier.T_SLOT:
-            return "IdentSlot[%s:%s]" % (self._slot_name(), self.name)
+            name_ext = ":" + self.name if self.name else ""
+            return "IdentSlot[%s%s]" % (self._slot_name(), name_ext)
 
         if self.type == Identifier.T_BUILTIN:
             return "IdentBuiltin[%s]" % self.name
