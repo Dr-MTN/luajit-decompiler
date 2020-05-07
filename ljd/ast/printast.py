@@ -1,10 +1,11 @@
 import ljd.ast.nodes as nodes
+import ljd.ast.slotworks
 
 _printers = {}
 _indent_unit = '\t'
 
 
-def dump(name, obj, level=0, prefix=None, **kwargs):
+def dump(name, obj, level=0, prefix=None, exclude=None, **kwargs):
     indent = level * _indent_unit
 
     if prefix is None:
@@ -36,14 +37,17 @@ def dump(name, obj, level=0, prefix=None, **kwargs):
     elif type(obj) in _printers:
         _printers[type(obj)](obj, prefix, level, **kwargs)
     else:
-        _print_default(obj, prefix, level)
+        _print_default(obj, prefix, level, exclude=exclude)
 
 
-def _print_default(obj, prefix, level, exclude_blocks=False, extra_attrs=None):
+def _print_default(obj, prefix, level, exclude_blocks=False, exclude=None, extra_attrs=None):
     header_keys = _header(prefix, obj, attrs=extra_attrs)
 
     for key in dir(obj):
         if key.startswith("__") or key in header_keys:
+            continue
+
+        if exclude and key in exclude:
             continue
 
         val = getattr(obj, key)
@@ -151,3 +155,11 @@ def _print_warp(obj, prefix, level):
 @_printer(nodes.Block)
 def _print_block(obj, prefix, level):
     _print_default(obj, prefix, level, extra_attrs=["index", "first_address", "last_address"])
+
+
+@_printer(ljd.ast.slotworks.SlotInfo)
+def _print_slot_info(obj: ljd.ast.slotworks.SlotInfo, prefix, level):
+    _print_default(obj, prefix, level, exclude=["references", "function"])
+    # TODO print out addresses from the top of the path for each reference
+    refs = ", ".join([str(i.path[-1]) for i in obj.references])
+    print(_indent_unit * (level + 1) + "references = [%s]" % refs)
