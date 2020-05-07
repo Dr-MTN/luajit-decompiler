@@ -239,6 +239,11 @@ class _SlotIdentifier(traverse.Visitor):
         self._skip = node.expressions
 
         for slot in node.destinations.contents:
+            # If we're assigning to a global or table element, MULTRES or something like that, skip
+            # that since it doesn't affect the slots
+            if not isinstance(slot, nodes.Identifier):
+                continue
+
             self._slot_set(node, slot)
 
     def leave_assignment(self, node):
