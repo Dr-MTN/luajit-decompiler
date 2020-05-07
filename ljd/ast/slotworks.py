@@ -626,11 +626,13 @@ class SlotReference:
 
 class SlotInfo:
     references: List[SlotReference]
+    assignments: List[nodes.Assignment]
 
     def __init__(self, id):
         self.slot = 0
 
         self.assignment = None
+        self.assignments = []
         self.references = []
         self.termination = None
 
