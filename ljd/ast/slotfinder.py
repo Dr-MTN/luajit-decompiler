@@ -54,17 +54,8 @@ def _finalise(blocks: List[nodes.Block]):
     # Move the slot numbers to each Identifier, since that's the only thing that stays around
     # after cleanup, and also isn't broken by Identifiers being removed by Slotworks.
     for slot in slots:
-        # Build a list of all the identifiers relating to this SlotInfo - not just those that
-        # read from it (stored in slot.references), but also those writing to it.
+        # Build a list of all the identifiers relating to this SlotInfo.
         idents = [r.identifier for r in slot.references]
-
-        # Go through each assignment, and pick out only the identifier that works on this
-        # slot (required in the case of multiple returns and such, to make sure we don't
-        # include all the return values into this slot)
-        for assn in slot.assignments:
-            for ident in assn.destinations.contents:
-                if ident.slot == slot.slot:
-                    idents.append(ident)
 
         # And finally write the IDs out to the references
         for ref in idents:
@@ -241,6 +232,11 @@ class _SlotIdentifier(traverse.Visitor):
 
         for slot in node.destinations.contents:
             self._slot_set(node, slot)
+
+            # Since we've sets the skip flag, the identifiers won't be visited. Make sure we visit
+            # each identifier to add a reference to it *after* we've set the slot, so this is a write
+            # against the new SlotInfo and not the old one.
+            self.visit_identifier(node)
 
     def leave_assignment(self, node):
         self._skip = False

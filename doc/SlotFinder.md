@@ -115,8 +115,7 @@ will be eliminated later on, so it would be quite hard to keep them), we instead
 representing each `SlotInfo` into the `Identifier`s. These can later be scanned to easily and
 accurately recover what references are left to each slot.
 
-For each `SlotInfo`, the slot's references are combined with the relevant destinations of each 
-assignment, and their `id`s are then set.
+For each `SlotInfo`, the slot's references have their `id`s set.
 
 Finally, the metadata (stored in `_BlockMeta` instances referenced by each block) is removed
 from each `Block` since it's no longer needed.
