@@ -147,6 +147,9 @@ class _SlotNet:
     def __hash__(self):
         return hash(self._ctx)
 
+    def __str__(self):
+        return "Net[%d,%d]" % (self.get().slot, self.get().slot_id)
+
 
 # A mapping between the VM slot numbers and their associated SlotInfo, wrapped by SlotNet
 # Used quite a bit, hence the alias
