@@ -10,6 +10,7 @@ from ljd.bytecode.helpers import get_jump_destination
 
 handle_invalid_functions = False
 
+
 class _State:
     def __init__(self):
         self.constants = None
@@ -295,6 +296,13 @@ def _build_conditional_warp(state, last_addr, instructions):
                                              condition)
 
         setattr(warp, "_slot", condition.A)
+
+        # ISTC and ISFC have the side-effect of setting the specified split if
+        # they (ie, their jump) succeed. That's be really inconvenient here, so
+        # put it in this one special attribute (which hopefully noone else will
+        # start reading off all over the place and using for unrelated stuff) and
+        # mutator will clean up by inserting a block containing a single assignment.
+        setattr(warp, "_istfc_slot", condition.A)
     elif condition.opcode >= ins.IST.opcode:
         expression = _build_unary_expression(state,
                                              condition_addr,

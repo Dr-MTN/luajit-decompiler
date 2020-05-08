@@ -68,6 +68,10 @@ def _header(prefix, obj, attrs=None, suffix="", **values):
     if attrs is None:
         attrs = ["_addr", "_line"]
 
+    notes_name = "_dbg_notes"
+    if hasattr(obj, notes_name):
+        attrs.append(notes_name)
+
     for name in attrs:
         if not hasattr(obj, name):
             continue

@@ -53,6 +53,43 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
     def visit_statements_list(self, node):
         blocks = node.contents
 
+        # Fix up the slot assignments made by the ISTC and ISFC instructions.
+        # These instructions are similar to the IST and ISF instructions: they check
+        # if the specified 'D' slot is true or false, and the next instruction (which
+        # must be a JMP) is conditional on that.
+        # The difference with ISTC and ISFC is that they also assign the value from
+        # the 'D' slot to the 'A' slot, and only if the comparison/jump is successful.
+        #
+        # For example, take following code (with some made-up instructions for brevity):
+        #
+        # 1    IST 5
+        # 2    JMP => 6
+        # 3    PRINT "Slot 5 is false/nil, putting a backup value into slot 2"
+        # 4    MOV 2, "backup value"
+        # 5    JMP => 7
+        # 6 => MOV 2, 5 # Slot five is valid, move to slot 2
+        # 7 => PRINT "Value or backup value: $slot2"
+        #
+        # That's essentially one way you might implement the Lua 'or' operator; however
+        # it involves an extra jump for no good reason. Using ISTC you can simplify it as follows:
+        #
+        # 1    ISTC 2, 5
+        # 2    JMP => 5
+        # 3    PRINT "Slot 5 is false/nil, putting a backup value into slot 2"
+        # 4    MOV 2, "backup value"
+        # 5 => PRINT "Value or backup value: $slot2"
+        #
+        # For LuaJIT, this is an elegant optimisation when running on the interpreter (I think that's
+        # what it's for - it's two more X86 instructions on the interpreter for ISTC vs IST, and
+        # the logical operators are very very common so it makes sense) but for us it's a bit of a pain.
+        #
+        # To avoid this having knock-on effects through the rest of the decompiler, expand it to
+        # something more like the first example, by creating a block and assignment that doesn't
+        # match up to anything in the bytecode.
+        #
+        # When builder.py is building the conditional warps, it's not in a very easy position to
+        # make such a block. Doing it now is much easier.
+
         fixed = []
         index_shift = 0
 
@@ -84,17 +121,19 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
             if warp.true_target != warp.false_target:
                 self._simplify_unreachable_conditional_warps(blocks, i)
-                continue
 
-            slot = getattr(warp, "_slot", -1)
+            # Left here by builder._build_conditional_warp
+            slot = getattr(warp, "_istfc_slot", -1)
 
             if slot < 0:
                 continue
 
-            next_index = block.index - index_shift + 1
-            assert block.warp.false_target.index == next_index
+            condition = warp.condition
+            if isinstance(condition, nodes.UnaryOperator):
+                condition = condition.operand
+            assert isinstance(condition, nodes.Identifier)
 
-            new_block = self._create_dummy_block(block, slot)
+            new_block = self._create_dummy_block(block, condition.slot, slot)
 
             fixed.append(new_block)
 
@@ -121,8 +160,14 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
         self._states[-1].jumps.append((blocks, i))
 
+    # Create a new dummy block containing a single assignment between slots, and insert it
+    # before the real false_target of the specified block
+    # Used for recovering the assignments from ISTC and ISFC - see visit_statements_list
+    # (note that ISTC is negated and the jump targets switched, so false_target is called
+    #  if the slot is to be set - that is, if the value is false for ISFC or true for ISTC
+    #  then the false_target is followed)
     @staticmethod
-    def _create_dummy_block(block, slot):
+    def _create_dummy_block(block, src, dst):
         new_block = nodes.Block()
         new_block.first_address = block.last_address
         new_block.last_address = new_block.first_address
@@ -137,14 +182,19 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
         identifier = nodes.Identifier()
         identifier.type = nodes.Identifier.T_SLOT
-        identifier.slot = slot
+        identifier.slot = src
 
-        statement.destinations.contents.append(identifier)
         statement.expressions.contents.append(copy.copy(identifier))
+
+        identifier.slot = dst
+        statement.destinations.contents.append(identifier)
+
+        # Put this here for debugging, it'll be visible in the AST dumps and debuggers
+        setattr(statement, "_dbg_notes", "dummy block for slot %d->%d" % (src, dst))
 
         new_block.contents.append(statement)
 
-        block.warp.true_target = new_block
+        block.warp.false_target = new_block
 
         return new_block
 
@@ -210,6 +260,10 @@ class SimpleLoopWarpSwapper(traverse.Visitor):
 
         if not target:
             return
+
+        # TODO figure out the interactions between the "and false"d out branches and
+        #  inserting slots from ISTC/ISFC in visit_statement_list
+        return
 
         node = target
         while node:
