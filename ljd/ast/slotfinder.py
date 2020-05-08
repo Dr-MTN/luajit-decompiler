@@ -72,6 +72,12 @@ def _finalise(blocks: List[nodes.Block], visitor: '_SlotIdentifier'):
 def _flow_block(block: nodes.Block, mark_dirty):
     meta = _BlockMeta.get(block)
     for slot_num, slot in meta.inputs.items():
+        # If this is some weird orphan block (see the weird_bytecode_expression
+        # test), then skip it rather than crashing - it's something weird with
+        # the AST, not something wrong with us.
+        if len(meta.flow_in) == 0 and block.index != 0:
+            continue
+
         # If an import runs out the top of a function, that's a big issue
         assert len(meta.flow_in) > 0
 
