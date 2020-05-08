@@ -11,6 +11,7 @@ tests = [
     Test("slot_block_gathering", Mode.MATCHES),
     Test("arguments", Mode.MATCHES),
     Test("complex_expressions", Mode.MATCHES),
+    Test("upvalues", Mode.MATCHES),
 
     # The old (pre test framework) tests
     Test("old/breaks", Mode.MATCHES),
