@@ -172,11 +172,31 @@ class _BlockMeta:
         return block._block_slot_meta
 
 
+# Since for both _SlotIdentifier and _SlotCollector we have to identify which
+# slots are assignments (including those that don't look like it, such as the
+# numeric for loop) this abstract superclass is where this should be put.
+class _SlotMarkerBase(traverse.Visitor):
+    def _slot_set(self, setter, slot: nodes.Identifier) -> SlotInfo:
+        raise Exception("_slot_set not overridden!")
+
+    def _write_and_pin(self, setter, node: nodes.Identifier):
+        slot = self._slot_set(setter, node)
+        slot.is_pinned = True
+
+    # Note: for loops show up as warps before unwarping the AST, and as actual
+    # elements afterwards. Handle both.
+    def visit_numeric_loop_warp(self, node: nodes.NumericLoopWarp):
+        self._write_and_pin(node, node.index)
+
+    def visit_numeric_for(self, node: nodes.NumericFor):
+        self._write_and_pin(node, node.variable)
+
+
 # A visitor that scans through a the root function of the AST (calling process again to handle
 # any nested functions) which identifies:
 # The input, output and internal slots for each block
 # The warps between blocks
-class _SlotIdentifier(traverse.Visitor):
+class _SlotIdentifier(_SlotMarkerBase):
     func_arguments: _SlotDict
 
     _next_slot_id: int = 1000
@@ -210,7 +230,7 @@ class _SlotIdentifier(traverse.Visitor):
         return info, _SlotNet(info)
 
     # Called when a slot is assigned to, and shuffles around the output table and internals list appropriately
-    def _slot_set(self, setter, slot: nodes.Identifier):
+    def _slot_set(self, setter, slot: nodes.Identifier) -> SlotInfo:
         assert isinstance(slot, nodes.Identifier)
 
         # If we've already written to this slot, the previous value can't escape to later blocks.
@@ -224,6 +244,8 @@ class _SlotIdentifier(traverse.Visitor):
         info.assignments = [setter]
         self._current[slot.slot] = net
         self._written.add(slot.slot)
+
+        return info
 
     # Called to mark that a given VM slot number has been read. Returns the SlotInfo representing that VM slot.
     def _slot_get(self, slot: nodes.Identifier) -> SlotInfo:
@@ -356,7 +378,7 @@ def collect_slots(ast: nodes.FunctionDefinition) -> List[SlotInfo]:
     return list(visitor.slots.values()) + visitor.nested_func_slots
 
 
-class _SlotCollector(traverse.Visitor):
+class _SlotCollector(_SlotMarkerBase):
     nested_func_slots: List[SlotInfo]
     slots: Dict[int, SlotInfo]
     _path: List
@@ -369,11 +391,7 @@ class _SlotCollector(traverse.Visitor):
         self.nested_func_slots = []
         self._path = []
 
-    def visit_identifier(self, node: nodes.Identifier):
-        # TODO handle locals, upvalues and builtins properly
-        if node.type != nodes.Identifier.T_SLOT:
-            return
-
+    def _get_info(self, node: nodes.Identifier) -> SlotInfo:
         assert node.slot != -1
         assert node.id != -1
 
@@ -385,18 +403,33 @@ class _SlotCollector(traverse.Visitor):
             self._next_slot_id += 1
             self.slots[node.id] = info
 
+        return info
+
+    def _slot_set(self, setter, slot: nodes.Identifier) -> SlotInfo:
+        info = self._get_info(slot)
+        info.assignments.append(info)
+        return info
+
+    def visit_identifier(self, node: nodes.Identifier):
+        # TODO handle locals, upvalues and builtins properly
+        if node.type != nodes.Identifier.T_SLOT:
+            return
+
+        info = self._get_info(node)
+
         # If it's an argument, pin it so it can't be eliminated
         if self._func and node in self._func.arguments.contents:
             info.is_pinned = True
 
         assn = self._path[-3]
         if isinstance(assn, nodes.Assignment) and isinstance(self._path[-2], nodes.VariablesList):
+            # Use the first assignment we find as the 'main' assignment
+            # However, if there's already a non-Assignment write, leave that blank
+            if len(info.assignments) == 0:
+                info.assignment = assn
+
             # We're being directly set by an assignment
             info.assignments.append(assn)
-
-            # Use the first assignment we find as the 'main' assignment
-            if not info.assignment:
-                info.assignment = assn
 
         ref = SlotReference()
         ref.identifier = node
