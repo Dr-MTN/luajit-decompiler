@@ -12,6 +12,7 @@ tests = [
     Test("arguments", Mode.MATCHES),
     Test("complex_expressions", Mode.MATCHES),
     Test("upvalues", Mode.MATCHES),
+    Test("weird_bytecode_expression", Mode.MATCHES),  # It's probably okay to bump this down to DECOMPILES temporarily
 
     # The old (pre test framework) tests
     Test("old/breaks", Mode.MATCHES),
