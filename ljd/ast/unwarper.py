@@ -27,6 +27,11 @@ def exp_debug(*args):
 # ##
 
 
+# What will probably become a bag of random bits, to carry some context around statements.
+class _StatementBlockMeta:
+    statements: nodes.StatementsList
+
+
 class _StatementsCollector(traverse.Visitor):
     def __init__(self):
         super().__init__()
@@ -34,7 +39,9 @@ class _StatementsCollector(traverse.Visitor):
 
     def visit_statements_list(self, node):
         if len(node.contents) > 0 or hasattr(node, "_decompilation_error_here"):
-            self.result.append(node)
+            meta = _StatementBlockMeta()
+            meta.statements = node
+            self.result.append(meta)
 
 
 class _FunctionsCollector(traverse.Visitor):
@@ -57,7 +64,7 @@ def unwarp(node, conservative=False):
             raise
 
     try:
-        _run_step(_unwarp_expressions, node)
+        _run_step(_unwarp_expressions, node, with_meta=True)
 
         # Under some conditions the expressions unwarper causes new assignments to become expressions themselves.
         # Instead of doing some difficult bookkeeping, we just unwarp expressions again.
@@ -65,7 +72,7 @@ def unwarp(node, conservative=False):
         # An example where this is needed is an expression like x = x or { a and b }
         #
         # There's probably a better (read: faster) way to do this, but it works for now.
-        _run_step(_unwarp_expressions, node)
+        _run_step(_unwarp_expressions, node, with_meta=True)
     except:
         if catch_asserts:
             print("-- Decompilation Error: _run_step(_unwarp_expressions, node)\n", file=sys.stdout)
@@ -132,12 +139,14 @@ def unwarp(node, conservative=False):
             raise
 
 
-def _run_step(step, node, **kargs):
-    for statements in _gather_statements_lists(node):
+def _run_step(step, node, with_meta=False, **kargs):
+    for statements, meta in _gather_statements_lists(node):
+        if with_meta:
+            kargs["meta"] = meta
         statements.contents = step(statements.contents, **kargs)
 
     # Fix block indices in case anything was moved
-    for statements in _gather_statements_lists(node):
+    for statements, _ in _gather_statements_lists(node):
         for i, block in enumerate(statements.contents):
             if block.index != i:
                 block.former_index = block.index
@@ -147,13 +156,13 @@ def _run_step(step, node, **kargs):
 def _gather_statements_lists(node):
     collector = _StatementsCollector()
     traverse.traverse(collector, node)
-    return collector.result
+    return [(meta.statements, meta) for meta in collector.result]
 
 
 def _glue_flows(node, conservative=False):
     error_pending = False
 
-    for statements in _gather_statements_lists(node):
+    for statements, _ in _gather_statements_lists(node):
         blocks = statements.contents
 
         # TODO(yzg): 'Return' object has no attribute 'contents'
@@ -209,7 +218,7 @@ def _trim_redundant_returns(node):
 # ## IFs AND EXPRESSIONs PROCESSING
 # ##
 
-def _unwarp_expressions(blocks):
+def _unwarp_expressions(blocks, meta):
     pack = []
     pack_set = set()
 
