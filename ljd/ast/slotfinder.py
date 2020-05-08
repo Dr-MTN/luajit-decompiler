@@ -298,18 +298,20 @@ class _SlotIdentifier(traverse.Visitor):
         meta.internals = self._internals
 
         # Take note of the blocks that could come after this block. Used to track back the sources of slots.
+        # Derived from ljd.ast.unwarper._find_warps_to
         warp = node.warp
         if isinstance(warp, nodes.ConditionalWarp):
             refs = [warp.true_target, warp.false_target]
         elif isinstance(warp, nodes.UnconditionalWarp):
             refs = [warp.target]
-        elif isinstance(warp, nodes.NumericLoopWarp):
-            refs = [warp.way_out]
-        elif isinstance(warp, nodes.IteratorWarp):
-            refs = [warp.way_out]
-        else:
-            assert isinstance(warp, nodes.EndWarp)
+        elif isinstance(warp, nodes.EndWarp):
             refs = []
+        else:
+            refs = [warp.way_out, warp.body]
+
+        # Make sure there aren't any Nones hiding in there
+        for ref in refs:
+            assert ref
 
         meta.flow_in = []
         meta.flow_out = refs
