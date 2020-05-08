@@ -652,7 +652,10 @@ class SlotReference:
 
 class SlotInfo:
     references: List[SlotReference]
-    assignments: List[nodes.Assignment]
+
+    # Note that assignments isn't necessarily a list of actual assignments: it can include any
+    # other element that writes to a slot, such as numeric for loops.
+    assignments: List
 
     # Is this slot 'pinned' in some way, meaning it can't be eliminated?
     # Eg, it's a function argument, upvalue or something line that

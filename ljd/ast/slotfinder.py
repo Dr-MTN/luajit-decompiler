@@ -210,7 +210,7 @@ class _SlotIdentifier(traverse.Visitor):
         return info, _SlotNet(info)
 
     # Called when a slot is assigned to, and shuffles around the output table and internals list appropriately
-    def _slot_set(self, assign: nodes.Assignment, slot: nodes.Identifier):
+    def _slot_set(self, setter, slot: nodes.Identifier):
         assert isinstance(slot, nodes.Identifier)
 
         # If we've already written to this slot, the previous value can't escape to later blocks.
@@ -219,8 +219,9 @@ class _SlotIdentifier(traverse.Visitor):
             self._internals.append(self._current[slot.slot].get())
 
         info, net = self._new_slot(slot.slot)
-        info.assignment = assign
-        info.assignments = [assign]
+        if setter is nodes.Assignment:
+            info.assignment = setter
+        info.assignments = [setter]
         self._current[slot.slot] = net
         self._written.add(slot.slot)
 
