@@ -3,6 +3,7 @@ import sys
 
 import ljd.ast.nodes as nodes
 import ljd.ast.slotworks as slotworks
+import ljd.ast.slotfinder as slotfinder
 import ljd.ast.traverse as traverse
 from ljd.ast.helpers import *
 
@@ -28,20 +29,27 @@ def exp_debug(*args):
 
 
 # What will probably become a bag of random bits, to carry some context around statements.
+# For now it's used for holding SlotFinder-related information.
 class _StatementBlockMeta:
     statements: nodes.StatementsList
+    function: nodes.FunctionDefinition
 
 
 class _StatementsCollector(traverse.Visitor):
     def __init__(self):
         super().__init__()
         self.result = []
+        self.function = None
 
     def visit_statements_list(self, node):
         if len(node.contents) > 0 or hasattr(node, "_decompilation_error_here"):
             meta = _StatementBlockMeta()
             meta.statements = node
+            meta.function = self.function
             self.result.append(meta)
+
+    def visit_function_definition(self, node):
+        self.function = node
 
 
 class _FunctionsCollector(traverse.Visitor):
@@ -315,7 +323,7 @@ def _unwarp_expressions(blocks, meta):
 
         start_index = end_index
 
-    return _unwarp_expressions_pack(blocks, pack)
+    return _unwarp_expressions_pack(blocks, pack, meta)
 
 
 def _find_endest_end(expressions):
@@ -431,7 +439,7 @@ def _extract_if_body(start_index, blocks, topmost_end):
     return body, end, end_index
 
 
-def _unwarp_expressions_pack(blocks, pack):
+def _unwarp_expressions_pack(blocks, pack, meta: _StatementBlockMeta):
     replacements = {}
 
     for i, (block, start, end, slot, slot_type, slot_ref, needs_validation) in enumerate(reversed(pack)):
@@ -605,6 +613,9 @@ def _unwarp_expressions_pack(blocks, pack):
                 if target_index in range(start_index + 1, end_index - 1):
                     continue
 
+        # Grab this before we do any block merging and it becomes inconvenient to fish out
+        assignment = start.contents[-1]
+
         if len(end_warps) == 1:
             # Nothing (aside from the start block) is referring to the end block, thus it's safe
             #  to merge them.
@@ -618,11 +629,14 @@ def _unwarp_expressions_pack(blocks, pack):
 
             replacements[start] = end
 
-            slotworks.eliminate_temporary(end, False)
-            slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
-        else:
-            slotworks.eliminate_temporary(start, False)
-            slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
+        # Update the Identifier IDs, if processing this subexpression split what was
+        # previously one variable into two seperate ones. See the comment on check_slot_split.
+        # Note we do this last - while we should run slotworks after this, we have to
+        # be sure that any references to the old blocks are gone.
+        slotfinder.check_slot_split(meta.function, assignment, assignment.destinations.contents[0])
+
+        slotworks.eliminate_temporary(start, False)
+        slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
 
     return blocks
 

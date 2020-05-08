@@ -459,3 +459,98 @@ class _SlotCollector(_SlotMarkerBase):
             return super()._visit(node)
 
         self.nested_func_slots += collect_slots(node)
+
+
+# Slot splitter
+#
+# Imagine you have the following code:
+#
+#  slot0 = gbl_a
+#  if not slot0 then
+#    slot0 = gbl_b
+#  end
+#  print(slot0)
+#
+# And then, thanks to unwarper's expression unwarping, that's transformed down to:
+#
+#  slot0 = gbl_a
+#  slot0 = slot or gbl_b
+#  print(slot0)
+#
+# At this point, our method of searching for slot references has been too strong. The
+# slot now refers to two different values - a temporary for gbl_a and the result of
+# the 'or' expression. Thus we provide a function where unwarper can tell us they've
+# made a change, and we should check if the SlotInfo can be split in two.
+#
+# This takes an assignment and a slot, and checks if all subsequent reads from that
+# slot occur within the assignment's parent. If so then we clearly know who can only
+# observe the old value and who can only observe the new one, and thus we can safely
+# split the slot.
+
+def check_slot_split(func: nodes.FunctionDefinition, assn: nodes.Assignment, ident: nodes.Identifier):
+    assert isinstance(func, nodes.FunctionDefinition)
+    assert isinstance(assn, nodes.Assignment)
+    assert isinstance(ident, nodes.Identifier)
+
+    # TODO this will probably have a significant performance impact
+    # One possibility to speed this up would be storing in each SlotInfo the highest
+    # node that contains all the references, so we don't have to scan anything that
+    # certainly won't contain references to it (unless it was shifted around, so
+    # we'd need some way to invalidate it after that)
+    slots = collect_slots(func)
+
+    # Find the SlotInfo in question
+    slot: Optional[SlotInfo] = None
+    max_slot_id = 0
+    max_ref_id = 0
+    for s in slots:
+        ref_id = s.references[0].identifier.id
+        max_slot_id = max(max_slot_id, s.slot_id)
+        max_ref_id = max(max_ref_id, ref_id)
+        if ref_id == ident.id:
+            slot = s
+            break
+
+    assert slot
+
+    # Make sure we're not trying to eliminate the first assignment
+    # While it may seem weird (and usually shouldn't happen), it can
+    # happen: see the weird_bytecode_expression test for an example of this.
+    if assn == slot.assignments[0]:
+        return
+
+    # Find the path to the relevant identifier
+    reference: Optional[SlotReference] = None
+    for ref in slot.references:
+        if ref.identifier == ident:
+            reference = ref
+            break
+
+    assert reference
+    reference_idx = slot.references.index(reference)
+
+    # Make sure the caller isn't lying
+    assert assn == reference.path[-3]
+
+    # Check if there are any references on a scope outside that of the assignment.
+    # We only check for references to the old value, before assignment. This is because
+    # when a slot is eliminated it should be folded into an expression, so we
+    # shouldn't have anything complex above us.
+    scope = reference.path[-4]
+    for idx, ref in enumerate(slot.references[:reference_idx]):
+        if scope not in ref.path:
+            return
+
+    # Split the slot up
+    # Give it a new sequential ID - I'm not sure if that matters at this point?
+    new = SlotInfo(max_slot_id + 1)
+    ref_id = max_ref_id + 1
+
+    new.references = slot.references[reference_idx:]
+    del slot.references[reference_idx:]
+
+    new.assignments = slot.assignments[slot.assignments.index(assn):]
+    del slot.assignments[slot.assignments.index(assn):]
+
+    for ref in new.references:
+        ref.identifier.id = ref_id
