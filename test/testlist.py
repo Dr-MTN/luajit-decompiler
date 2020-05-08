@@ -10,6 +10,7 @@ tests = [
     Test("slot_local_declarations", Mode.MATCHES),
     Test("slot_block_gathering", Mode.MATCHES),
     Test("arguments", Mode.MATCHES),
+    Test("complex_expressions", Mode.MATCHES),
 
     # The old (pre test framework) tests
     Test("old/breaks", Mode.MATCHES),
