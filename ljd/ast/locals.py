@@ -337,12 +337,9 @@ def deduce_automatic_locals(ast: nodes.FunctionDefinition):
         # There are several ways to assign variables without an actual assignment. Add them here
         # as they are found, to avoid incorrect output.
 
-        # Being the iterator variable in a numeric for automatically declares it as a local
-        if isinstance(first_ref.path[-2], nodes.NumericFor):
-            continue
-
-        # Same for function arguments
-        if is_argument:
+        # Anything that's (currently) pinned is implicitly defined as a local - and that makes
+        # sense, why would a user-defined local be pinned?
+        if slot.is_pinned:
             continue
 
         slot.assignment.type = nodes.Assignment.T_LOCAL_DEFINITION
