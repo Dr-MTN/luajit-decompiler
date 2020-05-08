@@ -379,6 +379,10 @@ class _SlotCollector(traverse.Visitor):
             self._next_slot_id += 1
             self.slots[node.id] = info
 
+        # If it's an argument, pin it so it can't be eliminated
+        if self._func and node in self._func.arguments.contents:
+            info.is_pinned = True
+
         assn = self._path[-3]
         if isinstance(assn, nodes.Assignment) and isinstance(self._path[-2], nodes.VariablesList):
             # We're being directly set by an assignment

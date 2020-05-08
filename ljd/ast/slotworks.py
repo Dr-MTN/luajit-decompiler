@@ -565,7 +565,7 @@ def _collect_slots(ast, identify_slots=False, unwarped=False):
         main = []
         unused = []
         for slot in slots:
-            if len(slot.assignments) != 1:
+            if len(slot.assignments) != 1 or slot.is_pinned:
                 continue
 
             if len(slot.references) == len(slot.assignments):
@@ -653,6 +653,10 @@ class SlotReference:
 class SlotInfo:
     references: List[SlotReference]
     assignments: List[nodes.Assignment]
+
+    # Is this slot 'pinned' in some way, meaning it can't be eliminated?
+    # Eg, it's a function argument, upvalue or something line that
+    is_pinned: bool = False
 
     def __init__(self, id):
         self.slot = 0
