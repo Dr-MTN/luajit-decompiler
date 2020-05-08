@@ -12,9 +12,10 @@ from ljd.ast.slotworks import SlotInfo, SlotReference
 # is performed.
 # If a FunctionDefinition is found inside the AST, process will be called a second time from _InputOutputBuilder
 def process(ast: nodes.FunctionDefinition):
-    traverse.traverse(_SlotIdentifier(), ast)
+    visitor = _SlotIdentifier()
+    traverse.traverse(visitor, ast)
     _flow_function(ast.statements.contents)
-    _finalise(ast.statements.contents)
+    _finalise(ast.statements.contents, visitor)
 
 
 def _flow_function(blocks: List[nodes.Block]):
@@ -36,11 +37,12 @@ def _flow_function(blocks: List[nodes.Block]):
 
 
 # Finalisation: Collect all the slots and assign them IDs
-def _finalise(blocks: List[nodes.Block]):
+def _finalise(blocks: List[nodes.Block], visitor: '_SlotIdentifier'):
     # First build a set of all the SlotInfo instances, which should represent every slot in the function.
 
     # First build a set of all the SlotNets of the inputs and outputs
-    slot_nets: Set[_SlotNet] = set()
+    # Also include the function arguments, in case they aren't used elsewhere
+    slot_nets: Set[_SlotNet] = set(visitor.func_arguments.values())
     for blk in blocks:
         meta = _BlockMeta.get(blk)
         slot_nets |= set(meta.inputs.values())
@@ -70,6 +72,9 @@ def _finalise(blocks: List[nodes.Block]):
 def _flow_block(block: nodes.Block, mark_dirty):
     meta = _BlockMeta.get(block)
     for slot_num, slot in meta.inputs.items():
+        # If an import runs out the top of a function, that's a big issue
+        assert len(meta.flow_in) > 0
+
         for src in meta.flow_in:
             src_meta = _BlockMeta.get(src)
             if slot_num in src_meta.outputs:
@@ -169,6 +174,8 @@ class _BlockMeta:
 # The input, output and internal slots for each block
 # The warps between blocks
 class _SlotIdentifier(traverse.Visitor):
+    func_arguments: _SlotDict
+
     _next_slot_id: int = 1000
     _path: List
     _func: nodes.FunctionDefinition = None
@@ -189,6 +196,7 @@ class _SlotIdentifier(traverse.Visitor):
     def __init__(self):
         super().__init__()
         self._path = []
+        self.func_arguments = dict()
 
     # Create a new SlotInfo (and an associated SlotNet) for the given VM slot number
     def _new_slot(self, vm_slot_id) -> (SlotInfo, _SlotNet):
@@ -218,6 +226,12 @@ class _SlotIdentifier(traverse.Visitor):
         assert isinstance(slot, nodes.Identifier)
 
         num = slot.slot
+
+        if slot in self._func.arguments.contents:
+            info, net = self._new_slot(slot.slot)
+            self.func_arguments[num] = net
+            return info
+
         net = self._current.get(num)
         if not net:
             info, net = self._new_slot(slot.slot)
@@ -269,6 +283,10 @@ class _SlotIdentifier(traverse.Visitor):
         self._internals = []
         self._written = set()
         self._block = node
+
+        # The first block inherits all the function arguments
+        if self._block.index == 0:
+            self._current.update(self.func_arguments)
 
     def leave_block(self, node):
         meta = _BlockMeta()

@@ -321,17 +321,28 @@ class _LocalDefinitionsMarker(traverse.Visitor):
 def deduce_automatic_locals(ast: nodes.FunctionDefinition):
     slots = slotfinder.collect_slots(ast)
     for slot in slots:
+        first_ref = slot.references[0]
+        is_argument = first_ref.path[-3] == slot.function and first_ref.identifier in slot.function.arguments.contents
+
+        if is_argument:
+            name = "arg%d" % slot.slot
+        else:
+            name = "slot%d_a%d" % (slot.slot, slot.references[0].identifier.id)
+
         for ref in slot.references:
             ident: nodes.Identifier = ref.identifier
             ident.type = nodes.Identifier.T_LOCAL
-            ident.name = "slot%d_a%d" % (ident.slot, ident.id)
+            ident.name = name
 
         # There are several ways to assign variables without an actual assignment. Add them here
         # as they are found, to avoid incorrect output.
-        first = slot.references[0]
 
         # Being the iterator variable in a numeric for automatically declares it as a local
-        if isinstance(first.path[-2], nodes.NumericFor):
+        if isinstance(first_ref.path[-2], nodes.NumericFor):
+            continue
+
+        # Same for function arguments
+        if is_argument:
             continue
 
         slot.assignment.type = nodes.Assignment.T_LOCAL_DEFINITION
