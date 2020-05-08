@@ -6,6 +6,7 @@ import copy
 
 import ljd.ast.nodes as nodes
 import ljd.ast.traverse as traverse
+import ljd.ast.slotfinder as slotfinder
 
 
 def mark_locals(ast, alt_mode=False):
@@ -209,8 +210,8 @@ class _LocalDefinitionsMarker(traverse.Visitor):
         varinfo = state.known_locals[local.slot]
 
         state.known_locals[local.slot] = getattr(local,
-                                                         "_varinfo",
-                                                         None)
+                                                 "_varinfo",
+                                                 None)
 
         if varinfo is None:
             return False
@@ -315,3 +316,22 @@ class _LocalDefinitionsMarker(traverse.Visitor):
             self._state().addr = node_addr
 
         traverse.Visitor._visit(self, node)
+
+
+def deduce_automatic_locals(ast: nodes.FunctionDefinition):
+    slots = slotfinder.collect_slots(ast)
+    for slot in slots:
+        for ref in slot.references:
+            ident: nodes.Identifier = ref.identifier
+            ident.type = nodes.Identifier.T_LOCAL
+            ident.name = "slot%d_a%d" % (ident.slot, ident.id)
+
+        # There are several ways to assign variables without an actual assignment. Add them here
+        # as they are found, to avoid incorrect output.
+        first = slot.references[0]
+
+        # Being the iterator variable in a numeric for automatically declares it as a local
+        if isinstance(first.path[-2], nodes.NumericFor):
+            continue
+
+        slot.assignment.type = nodes.Assignment.T_LOCAL_DEFINITION
