@@ -56,7 +56,7 @@ class Test:
         self.decompile(config)
 
         if self.level != Mode.MATCHES:
-            return
+            return TestResult.PASS
 
         self.recompile(config)
 
