@@ -16,10 +16,13 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Print per-test information")
     parser.add_argument("--wait", action="store_true", help="Once the tests are complete, wait for user input before "
                                                             "deleting the artifacts")
+    parser.add_argument("--ljd-opt", action="append", type=str, dest="ljd_opt", default=[],
+                        help="Arguments to be passed to the decompiler, use multiple times for multiple arguments")
 
     args = parser.parse_args()
 
     config = Config()
+    config.ljd_args = args.ljd_opt
     config.verbose = args.verbose
 
     by_name = dict()

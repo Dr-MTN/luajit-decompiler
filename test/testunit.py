@@ -81,7 +81,7 @@ class Test:
     def decompile(self, config):
         assert self.bc_out
         config.log("Decompiling " + self.name)
-        lj_decompile(config, self.bc_out, self.src_out)
+        lj_decompile(config, self.bc_out, self.src_out, config.ljd_args)
 
     def recompile(self, config):
         assert self.bc_out
@@ -101,9 +101,9 @@ def lj_compile(config, input, output, symbols):
     cfg_run(config, args)
 
 
-def lj_decompile(config, input, output):
+def lj_decompile(config, input, output, extra_args):
     main_file = Path(sys.argv[0]).resolve().parent / "main.py"
-    args = ["python3", str(main_file), "-f", str(input), "-o", str(output)]
+    args = ["python3", str(main_file), "-f", str(input), "-o", str(output)] + extra_args
     cfg_run(config, args)
 
 
