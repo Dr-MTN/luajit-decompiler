@@ -43,6 +43,7 @@ import ljd.ast.locals
 import ljd.ast.unwarper
 import ljd.ast.mutator
 import ljd.ast.printast
+import ljd.ast.astgraph
 import ljd.lua.writer
 
 import ljd.ast.nodes as nodes
@@ -155,6 +156,10 @@ class Main:
         group.add_option("--asm", action="store_true", dest="output_pseudoasm", default=False, help="Print pseudo asm")
 
         group.add_option("--dump", action="store_true", dest="dump_ast", default=False, help="Dump AST")
+
+        # Print a graph of each function's blocks. Good if you want to get a quick overview of the control flow
+        group.add_option("--block-graph", action="store_true", dest="block_graph", default=False,
+                         help="Print a graph of all the blocks for each function")
 
         (self.options, args) = parser.parse_args()
 
@@ -389,6 +394,10 @@ class Main:
 
         if self.options.dump_ast:
             ljd.ast.printast.dump("AST [locals]", ast)
+            return
+
+        if self.options.block_graph:
+            ljd.ast.astgraph.print_graph(ast)
             return
 
         try:
