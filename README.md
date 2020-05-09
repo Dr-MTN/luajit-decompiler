@@ -17,7 +17,7 @@ decompile the decompiler — a great test too!
 Requirements:
 ---
 
-Python __3.0+__ from Python.org
+Python __3.7+__ from Python.org
 
 
 How To Use:
