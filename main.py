@@ -464,7 +464,8 @@ class Main:
 
         # Mark slots as locals based on the results of slotfinder. This *must* be done
         # last, as locals can't be eliminated so doing it earlier would stuff up slotworks.
-        ljd.ast.locals.deduce_automatic_locals(ast)
+        if not self.options.classic_slots:
+            ljd.ast.locals.deduce_automatic_locals(ast)
 
         return ast
 
