@@ -1,5 +1,7 @@
 import copy
 import sys
+from dataclasses import dataclass
+from typing import List
 
 import ljd.ast.nodes as nodes
 import ljd.ast.slotworks as slotworks
@@ -226,6 +228,21 @@ def _trim_redundant_returns(node):
 # ## IFs AND EXPRESSIONs PROCESSING
 # ##
 
+@dataclass(eq=True, frozen=True)
+class _ExpressionInfo:
+    block: nodes.Block
+    start: nodes.Block
+    end: nodes.Block
+    slot: int
+    slot_type: int  # Identifier.T_* values
+    slot_ref: nodes.Identifier
+    needs_validation: bool
+
+    # Unfortunately, dataclass.astuple performs a deep copy, so do this ourselves
+    def tuple(self) -> (nodes.Block, nodes.Block, nodes.Block, int, int, nodes.Identifier, bool):
+        return self.block, self.start, self.end, self.slot, self.slot_type, self.slot_ref, self.needs_validation
+
+
 def _unwarp_expressions(blocks, meta):
     pack = []
     pack_set = set()
@@ -327,7 +344,7 @@ def _unwarp_expressions(blocks, meta):
 
 
 def _find_endest_end(expressions):
-    endest_end = expressions[0][2]
+    endest_end = expressions[0].end
 
     for _, _, exp_end, *_ in expressions[1:]:
         if exp_end.index > endest_end.index:
@@ -439,10 +456,11 @@ def _extract_if_body(start_index, blocks, topmost_end):
     return body, end, end_index
 
 
-def _unwarp_expressions_pack(blocks, pack, meta: _StatementBlockMeta):
+def _unwarp_expressions_pack(blocks, pack: List[_ExpressionInfo], meta: _StatementBlockMeta):
     replacements = {}
 
-    for i, (block, start, end, slot, slot_type, slot_ref, needs_validation) in enumerate(reversed(pack)):
+    for i, expr in enumerate(reversed(pack)):
+        (block, start, end, slot, slot_type, slot_ref, needs_validation) = expr.tuple()
         end = replacements.get(end, end)
 
         start_index = blocks.index(start)
@@ -543,7 +561,6 @@ def _unwarp_expressions_pack(blocks, pack, meta: _StatementBlockMeta):
             if skip_expression:
                 del start.contents[-1]
                 continue
-
 
         # Note that from here on, this function has basically been rewritten
         #  in order to support subexpressions in subexpressions - eg:
@@ -785,7 +802,7 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
             be_index = extbody.index(branch_end)
             i = be_index  # NOTE This misses things, so re-check it later
 
-            body = extbody[current_i+1:be_index]
+            body = extbody[current_i + 1:be_index]
             subs, subs_unused = _find_expressions(block, body, branch_end, level + 1, known_blocks)
 
         if len(subs) != 0:
@@ -1003,7 +1020,7 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
             (isinstance(end, nodes.EndWarp) or extbody.index(block) < len(extbody) - 1):
         return expressions, unused
 
-    return expressions + [(block, start, end, slot, slot_type, slot_ref, needs_validation)], unused
+    return expressions + [_ExpressionInfo(block, start, end, slot, slot_type, slot_ref, needs_validation)], unused
 
 
 def _get_simple_local_assignment_slot(start, body, end):
@@ -1028,7 +1045,7 @@ def _find_expression_slot(body):
     slot = None
 
     for block in reversed(body):
-        if len(block.contents) == 0: # TODO Why was this != 1? Does it always need to be just one?
+        if len(block.contents) == 0:  # TODO Why was this != 1? Does it always need to be just one?
             continue
 
         slot = block.contents[-1].destinations.contents[0]
@@ -1259,8 +1276,8 @@ def _unwarp_expression(body, end, true, false):
         operator = _get_operator(last_block, true, end)
 
         new_subexpression = _compile_subexpression(subexpression, operator,
-                                               last_block, next_block,
-                                               true, end)
+                                                   last_block, next_block,
+                                                   true, end)
 
         if new_subexpression:
             parts.append(new_subexpression)
@@ -1638,7 +1655,6 @@ def _unwarp_if_statement(start, body, end, topmost_end):
 
             # Good to merge, but we don't want to break up else-ifs
             if len(else_blocks) != 1 or not isinstance(else_blocks[0].contents[-1], nodes.If):
-
                 # Invert condition and move else block to then
                 node.expression = _invert(expression)
                 node.then_block.contents = else_blocks
@@ -1837,7 +1853,8 @@ def _fix_loops(blocks, repeat_until):
         if body_start_index == start_index and not repeat_until:
             body_start_index += 1
 
-        loop = _unwarp_loop(start, end, expr_body=blocks[start_index:body_start_index], body=blocks[body_start_index:end_index])
+        loop = _unwarp_loop(start, end, expr_body=blocks[start_index:body_start_index],
+                            body=blocks[body_start_index:end_index])
         body = loop.statements.contents
 
         block = _loop_build_block(start, body, end, blocks, loop, body_start_index)
