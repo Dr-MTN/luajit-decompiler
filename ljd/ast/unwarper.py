@@ -866,6 +866,8 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
             # We may not have checked all sub expressions
             i = current_i + 1
 
+        # At this point, check if the block does something that makes this whole chain invalid as
+        # an expression. That's (AFAIK) what the rest of the loop does.
         if isinstance(block.warp, nodes.ConditionalWarp):
             condition = block.warp.condition
 
@@ -907,12 +909,20 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
             if block == start and len(block.contents) == 0:
                 return [], expressions
 
+        # If the block doesn't contain anything other than it's warp, then
+        # it's safe to be part of the expression.
         if len(block.contents) == 0:
             continue
 
+        # While the start may have extra stuff (doing other stuff before it starts
+        # evaluating the expression), subsequent blocks may not.
         if block != start and len(block.contents) > 1:
             return expressions, unused
 
+        # Check that the last (for the first block) / only (for all other blocks) statement
+        # is an assignment. Otherwise this isn't part of the expression.
+        # Note that stuff like inline function calls should by now have been moved to the
+        # right-hand side of an assignment, and shouldn't be free-standing.
         assignment = block.contents[-1]
 
         if not isinstance(assignment, nodes.Assignment):
@@ -925,6 +935,7 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
 
             return expressions, unused
 
+        # Make sure that this isn't a massive assignment
         destinations = assignment.destinations.contents
 
         if len(destinations) != 1:
@@ -936,6 +947,7 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
         if block.warpins_count == 0 and level > 0:
             return expressions, unused
 
+        # The one assignment can't be to a global, table element or anything.
         dst = destinations[0]
 
         if not isinstance(dst, nodes.Identifier):
@@ -946,6 +958,25 @@ def _find_expressions(start, body, end, level=0, known_blocks=None):
 
         if isinstance(block.warp, nodes.ConditionalWarp):
             if block == start:
+                continue
+
+            # Since slotfinder isn't as aggressive about slot elimination, we
+            # may end up it assigning into a slot then immediately reading it.
+            # This would have previously gone through slot elimination, despite the
+            # slot being referenced in other blocks.
+            # If you go up a bit, you'll find a check that continues the loop if the
+            # block's contents is empty. This emulates the behaviour of the old
+            # slot eliminator in this case.
+            # TODO should this be done when we actually apply the expression, not just when we find it?
+            cond = block.warp.condition
+            warp_ident = cond.operand if isinstance(cond, nodes.UnaryOperator) else cond
+            assert isinstance(warp_ident, nodes.Identifier)
+            assert dst.slot == slot
+            if warp_ident.type == dst.type and warp_ident.slot == dst.slot and warp_ident.name == dst.name:
+                if isinstance(cond, nodes.UnaryOperator):
+                    cond.operand = assignment.expressions.contents[0]
+                else:
+                    block.warp.condition = assignment.expressions.contents[0]
                 continue
 
             return expressions, unused
