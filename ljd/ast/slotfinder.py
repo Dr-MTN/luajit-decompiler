@@ -379,6 +379,11 @@ class _SlotIdentifier(_SlotMarkerBase):
 # reads back the IDs assigned from the above system to form SlotInfo objects.
 
 def collect_slots(ast: nodes.FunctionDefinition) -> List[SlotInfo]:
+    # Note that we can only safely work on full function definitions - while the old
+    # slot elimination system put up with incorrect eliminations from time to time, the
+    # whole point of slotfinder is to prevent that.
+    assert isinstance(ast, nodes.FunctionDefinition)
+
     visitor = _SlotCollector()
     traverse.traverse(visitor, ast)
     return list(visitor.slots.values()) + visitor.nested_func_slots

@@ -117,7 +117,7 @@ def unwarp(node, conservative=False):
             raise
 
     try:
-        _run_step(_cleanup_ast, node)
+        _run_step(_cleanup_ast, node, with_meta=True)
         pass
     except:
         if catch_asserts:
@@ -590,7 +590,9 @@ def _unwarp_expressions_pack(blocks, pack: List[_ExpressionInfo], meta: _Stateme
         # We no longer need the body, but there may still be some slots we need to eliminate before we lose
         # the definitions. This works because the expressions we found earlier still have a reference to
         # the nodes these body blocks. Create a temporary block to take care of this.
-        if end_index - start_index > 2:
+        # Same as several other places, we have to disable this for slotfinder, as it only works on full
+        # functions. Maybe at some point we can find a test case where this is needed.
+        if end_index - start_index > 2 and classic_slots:
             # TODO: Avoid using a temporary block and process "unused" slots as well
             tmp_block = nodes.Block()
             first_block = blocks[start_index + 1]
@@ -654,8 +656,12 @@ def _unwarp_expressions_pack(blocks, pack: List[_ExpressionInfo], meta: _Stateme
         if not classic_slots:
             slotfinder.check_slot_split(meta.function, assignment, assignment.destinations.contents[0])
 
-        slotworks.eliminate_temporary(start, False)
-        slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
+        # Old slotworks simplification code. We might need this in the future, but for now it's
+        # disabled with slotfinder since it's quite aggressive with eliminating stuff across
+        # blocks, which is fine but only when it can see the entire function.
+        if classic_slots:
+            slotworks.eliminate_temporary(start, False)
+            slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
 
     return blocks
 
@@ -2518,7 +2524,7 @@ def _get_previous_block(block, blocks):
 # Remove any unnecessary empty blocks (ie, those which are only flowed into once), and
 #  merge any two blocks where the first flows into the second, and only the first warps to
 #  the second.
-def _cleanup_ast(blocks):
+def _cleanup_ast(blocks, meta: _StatementBlockMeta):
     next_i = 0
     while next_i < len(blocks):
         i = next_i
@@ -2560,7 +2566,13 @@ def _cleanup_ast(blocks):
 
     # Now that everything is nicely packed together, the code to eliminate temporary variables that
     #  are used in the input part of a for..in loop should be able to get everything.
-    slotworks.eliminate_temporary(blocks[0], False)
+    # In the case of slotfinder, we unfortunately have to check the entire AST since it's unsafe
+    #  to check only one block - a slot used in three places may be eliminated if one is outside
+    #  the scope we run the eliminations on.
+    if classic_slots:
+        slotworks.eliminate_temporary(blocks[0], False)
+    else:
+        slotworks.eliminate_temporary(meta.function, False)
 
     return blocks
 
