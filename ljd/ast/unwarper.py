@@ -13,6 +13,7 @@ binop = nodes.BinaryOperator
 
 verbose = False
 catch_asserts = False
+classic_slots = False
 
 
 def exp_debug(*args):
@@ -650,7 +651,8 @@ def _unwarp_expressions_pack(blocks, pack: List[_ExpressionInfo], meta: _Stateme
         # previously one variable into two seperate ones. See the comment on check_slot_split.
         # Note we do this last - while we should run slotworks after this, we have to
         # be sure that any references to the old blocks are gone.
-        slotfinder.check_slot_split(meta.function, assignment, assignment.destinations.contents[0])
+        if not classic_slots:
+            slotfinder.check_slot_split(meta.function, assignment, assignment.destinations.contents[0])
 
         slotworks.eliminate_temporary(start, False)
         slotworks.simplify_ast(end, dirty_callback=slotworks.eliminate_temporary)
